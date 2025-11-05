@@ -128,21 +128,29 @@ try {
             } else {
                 // This is an existing punch - UPDATE
                 $punchId = intval($punchId);
-                
-                // Only update if this punch was confirmed (in edit mode, all are auto-confirmed)
-                // OR if it was explicitly in the confirm array
+
+                // In edit mode, all punches are auto-confirmed
+                // Otherwise, only update if explicitly in the confirm array
+                $editMode = isset($_POST['mode']) && $_POST['mode'] === 'edit';
                 $shouldUpdate = true;
-                if (isset($_POST['confirm']) && is_array($_POST['confirm'])) {
-                    $shouldUpdate = in_array($punchId, $_POST['confirm']);
+
+                if (!$editMode) {
+                    // Not in edit mode - require explicit confirmation
+                    if (isset($_POST['confirm']) && is_array($_POST['confirm'])) {
+                        $shouldUpdate = in_array($punchId, $_POST['confirm']);
+                    } else {
+                        $shouldUpdate = false; // No confirmation provided
+                    }
                 }
-                
+
                 if (!$shouldUpdate) {
+                    error_log("Skipping punch $punchId - not confirmed (editMode: " . ($editMode ? 'true' : 'false') . ")");
                     continue;
                 }
                 
-                // Check for existing entry
-                $checkStmt = $conn->prepare("SELECT * FROM timepunches WHERE id = ?");
-                $checkStmt->bind_param("i", $punchId);
+                // Check for existing entry (with EmployeeID validation for security)
+                $checkStmt = $conn->prepare("SELECT * FROM timepunches WHERE id = ? AND EmployeeID = ?");
+                $checkStmt->bind_param("ii", $punchId, $employeeID);
                 $checkStmt->execute();
                 $result = $checkStmt->get_result();
                 $existing = $result->fetch_assoc();
@@ -169,14 +177,17 @@ try {
                         }
                     }
 
-                    // Update
+                    // Update (with EmployeeID validation for security)
                     $updateStmt = $conn->prepare("
-                        UPDATE timepunches 
+                        UPDATE timepunches
                         SET TimeIN = ?, LunchStart = ?, LunchEnd = ?, TimeOut = ?, Note = ?, TotalHours = ?
-                        WHERE id = ?
+                        WHERE id = ? AND EmployeeID = ?
                     ");
-                    $updateStmt->bind_param("sssssdi", $clockIn, $lunchOut, $lunchIn, $clockOut, $reason, $totalHours, $punchId);
+                    $updateStmt->bind_param("sssssdii", $clockIn, $lunchOut, $lunchIn, $clockOut, $reason, $totalHours, $punchId, $employeeID);
                     $updateStmt->execute();
+                } else {
+                    // Punch not found - log for debugging
+                    error_log("Save failed: Punch ID $punchId not found for Employee $employeeID (or EmployeeID mismatch)");
                 }
             }
         }

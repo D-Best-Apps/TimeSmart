@@ -15,71 +15,11 @@ $from = $_GET['from'] ?? date('Y-m-d', strtotime('monday this week'));
 $to = $_GET['to'] ?? date('Y-m-d', strtotime('sunday this week'));
 $employeeID = $_GET['emp'] ?? '';
 $editMode = isset($_GET['mode']) && $_GET['mode'] === 'edit';
+$pageTitle = "Timesheet Report";
+$extraCSS = ["https://cdn.jsdelivr.net/npm/litepicker/dist/css/litepicker.css"];
+require_once 'header.php';
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>View Punches</title>
-    <link rel="icon" type="image/png" href="/images/D-Best.png">
-    <link rel="apple-touch-icon" href="/images/D-Best.png">
-    <link rel="manifest" href="/manifest.json">
-    <link rel="icon" type="image/png" href="../images/D-Best-favicon.png">
-    <link rel="apple-touch-icon" href="../images/D-Best-favicon.png">
-    <link rel="manifest" href="/manifest.json">
-    <link rel="icon" type="image/webp" href="../images/D-Best-favicon.webp">
-    <link rel="stylesheet" href="../css/timesheet.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/litepicker/dist/css/litepicker.css" />
-    <link rel="stylesheet" href="../css/view_punches.css">
-    <style>
-        .add-punch-btn {
-            background-color: #28a745;
-            color: white;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            margin: 10px 0;
-        }
-        .add-punch-btn:hover {
-            background-color: #218838;
-        }
-        .delete-btn {
-            background-color: #dc3545;
-            color: white;
-            padding: 5px 10px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-        }
-        .delete-btn:hover {
-            background-color: #c82333;
-        }
-        .date-input {
-            padding: 4px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-        }
-    </style>
-</head>
-<body>
 
-<header>
-    <img src="/images/D-Best.png" alt="D-Best Logo" class="logo">
-    <h1>Employee Punch Adjustments</h1>
-    <nav>
-        <a href="dashboard.php">Dashboard</a>
-        <a href="view_punches.php" class="active">Timesheets</a>
-        <a href="summary.php">Summary</a>
-        <a href="reports.php">Reports</a>
-        <a href="manage_users.php">Users</a>
-        <a href="attendance.php">Attendance</a>
-        <a href="manage_admins.php">Admins</a>
-        <a href="../logout.php">Logout</a>
-    </nav>
-</header>
 
 <div class="dashboard-container">
     <div class="container">
@@ -128,6 +68,9 @@ $editMode = isset($_GET['mode']) && $_GET['mode'] === 'edit';
             <input type="hidden" name="employeeID" value="<?= $employeeID ?>">
             <input type="hidden" name="from" value="<?= $from ?>">
             <input type="hidden" name="to" value="<?= $to ?>">
+            <?php if ($editMode): ?>
+            <input type="hidden" name="mode" value="edit">
+            <?php endif; ?>
 
             <table class="timesheet-table">
                 <thead>
@@ -248,5 +191,5 @@ $editMode = isset($_GET['mode']) && $_GET['mode'] === 'edit';
 <script src="../js/view_punches.js?v=1761329562"></script>
 <?php endif; ?>
 
-</body>
-</html>
+
+<?php require_once 'footer.php'; ?>
