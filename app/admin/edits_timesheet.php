@@ -6,6 +6,10 @@ date_default_timezone_set('America/Chicago');
 if (!isset($_SESSION['admin'])) {
     header("Location: login.php");
     exit;
+
+// Permission check
+require_once __DIR__ . '/../functions/check_permission.php';
+requirePermission('approve_edits');
 }
 
 // Fetch all pending edits with user info
@@ -46,31 +50,11 @@ while ($row = $result->fetch_assoc()) {
         }
     }
 }
+$pageTitle = "Pending Approvals";
+require_once 'header.php';
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Employee Punch Adjustments</title>
-    <link rel="icon" type="image/png" href="/images/D-Best.png">
-    <link rel="apple-touch-icon" href="/images/D-Best.png">
-    <link rel="manifest" href="/manifest.json">
-    <link rel="icon" type="image/png" href="../images/D-Best-favicon.png">
-    <link rel="apple-touch-icon" href="../images/D-Best-favicon.png">
-    <link rel="manifest" href="/manifest.json">
-  <title>Employee Punch Adjustments</title>
-    <link rel="icon" type="image/png" href="../images/D-Best-favicon.png">
-    <link rel="apple-touch-icon" href="../images/D-Best-favicon.png">
-    <link rel="manifest" href="/manifest.json">
-    <link rel="icon" type="image/webp" href="../images/D-Best-favicon.webp">
-    <link rel="stylesheet" href="../css/admin.css">
-    <link rel="stylesheet" href="../css/edits_timesheet.css">
-</head>
-<body>
-<header>
-    <img src="/images/D-Best.png" alt="Logo" class="logo">
-    <h1>Employee Punch Adjustments</h1>
-</header>
+<link rel="stylesheet" href="../css/edits.css" />
+
 
 <nav>
     <a href="dashboard.php">Dashboard</a>
@@ -123,5 +107,5 @@ while ($row = $result->fetch_assoc()) {
         </form>
     <?php endif; ?>
 </div>
-</body>
-</html>
+
+<?php require_once 'footer.php'; ?>

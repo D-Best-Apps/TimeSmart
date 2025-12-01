@@ -84,7 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = "Please enter both username and password.";
         } else {
             // Lookup user
-            $stmt = $conn->prepare("SELECT username, password, TwoFAEnabled FROM admins WHERE username = ?");
+            $stmt = $conn->prepare("SELECT username, password, role, TwoFAEnabled FROM admins WHERE username = ?");
             if ($stmt === false) {
                 // do not leak DB errors to user
                 $error = "Something went wrong. Please try again.";
@@ -124,12 +124,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (!empty($admin['TwoFAEnabled'])) {
                         // 2FA flow
                         $_SESSION['2fa_admin_username'] = $admin['username'];
+                        $_SESSION['2fa_admin_role'] = $admin['role'];
                         $_SESSION['2fa_pending'] = true;
                         header("Location: verify_2fa.php");
                         exit;
                     } else {
                         // Normal login
                         $_SESSION['admin'] = $admin['username'];
+                        $_SESSION['admin_role'] = $admin['role'];
                         header("Location: dashboard.php");
                         exit;
                     }

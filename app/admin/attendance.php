@@ -6,6 +6,10 @@ require_once './tcpdf/tcpdf.php';
 if (!isset($_SESSION['admin'])) {
     header("Location: login.php");
     exit;
+
+// Permission check
+require_once __DIR__ . '/../functions/check_permission.php';
+requirePermission('view_attendance');
 }
 
 date_default_timezone_set('America/Chicago');
@@ -122,38 +126,11 @@ if ($exportPDF) {
     $pdf->Output('attendance_report.pdf', 'D');
     exit;
 }
+$pageTitle = "Attendance Report";
+$extraCSS = ["https://cdn.jsdelivr.net/npm/litepicker/dist/css/litepicker.css", "../css/attendance.css"];
+require_once 'header.php';
 ?>
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Attendance Report</title>
-    <link rel="icon" type="image/png" href="/images/D-Best.png">
-    <link rel="apple-touch-icon" href="/images/D-Best.png">
-    <link rel="manifest" href="/manifest.json">
-    <link rel="icon" type="image/png" href="../images/D-Best-favicon.png">
-    <link rel="apple-touch-icon" href="../images/D-Best-favicon.png">
-    <link rel="manifest" href="/manifest.json">
-    <link rel="icon" type="image/webp" href="../images/D-Best-favicon.webp">
-    <link rel="stylesheet" href="../css/attendance.css">
-</head>
-<body>
 
-<header>
-    <img src="/images/D-Best.png" alt="TimeClock Logo" class="logo">
-    <h1>Attendance Report</h1>
-    <nav>
-        <a href="dashboard.php">Dashboard</a>
-        <a href="view_punches.php">Timesheets</a>
-        <a href="summary.php">Summary</a>
-        <a href="reports.php">Reports</a>
-        <a href="manage_users.php">Users</a>
-        <a href="manage_offices.php">Offices</a>
-        <a href="attendance.php" class="active">Attendance</a>
-        <a href="manage_admins.php">Admins</a>
-        <a href="settings.php">Settings</a>
-        <a href="../logout.php">Logout</a>
-    </nav>
-</header>
 
 <div class="container">
 
@@ -231,5 +208,5 @@ if ($exportPDF) {
 
 <footer>&copy; <?= date('Y') ?> TimeClock System. All rights reserved.</footer>
 
-</body>
-</html>
+
+<?php require_once 'footer.php'; ?>

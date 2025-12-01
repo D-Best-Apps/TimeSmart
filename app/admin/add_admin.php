@@ -7,6 +7,10 @@ if (!isset($_SESSION['admin'])) {
     exit;
 }
 
+// Permission check
+require_once __DIR__ . '/../functions/check_permission.php';
+requirePermission('manage_admins');
+
 $error = "";
 $success = "";
 
@@ -14,6 +18,12 @@ $success = "";
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = trim($_POST['username']);
     $password = $_POST['password'];
+    $role = $_POST['role'] ?? 'super_admin';
+
+    // Validate role
+    if (!in_array($role, ['super_admin', 'reports_only'])) {
+        $role = 'super_admin';
+    }
 
     if (empty($username) || empty($password)) {
         $error = "Username and password are required.";
@@ -28,8 +38,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = "Username already exists.";
         } else {
             $hashed = password_hash($password, PASSWORD_DEFAULT);
-            $insert = $conn->prepare("INSERT INTO admins (username, password) VALUES (?, ?)");
-            $insert->bind_param("ss", $username, $hashed);
+            $insert = $conn->prepare("INSERT INTO admins (username, password, role) VALUES (?, ?, ?)");
+            $insert->bind_param("sss", $username, $hashed, $role);
             $insert->execute();
 
             $success = "Admin added successfully.";
@@ -86,6 +96,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="field">
                     <label for="password">Password</label>
                     <input type="text" name="password" id="password" required>
+                </div>
+
+                <div class="field">
+                    <label for="role">Role</label>
+                    <select name="role" id="role" required>
+                        <option value="super_admin">Super Admin (Full Access)</option>
+                        <option value="reports_only">Reports Only (View & Export Reports)</option>
+                    </select>
                 </div>
             </div>
 

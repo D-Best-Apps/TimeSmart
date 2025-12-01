@@ -7,6 +7,10 @@ if (!isset($_SESSION['admin'])) {
     exit;
 }
 
+// Permission check
+require_once __DIR__ . '/../functions/check_permission.php';
+requirePermission('manage_admins');
+
 $id = $_GET['id'] ?? null;
 if (!$id || !is_numeric($id)) {
     header("Location: manage_admins.php");
@@ -31,17 +35,23 @@ if (!$admin) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $admin) {
     $username = trim($_POST['username']);
     $password = $_POST['password'];
+    $role = $_POST['role'] ?? 'super_admin';
+
+    // Validate role
+    if (!in_array($role, ['super_admin', 'reports_only'])) {
+        $role = 'super_admin';
+    }
 
     if (empty($username)) {
         $error = "Username cannot be empty.";
     } else {
         if (!empty($password)) {
             $hashed = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
-            $update = $conn->prepare("UPDATE admins SET username = ?, password = ? WHERE id = ?");
-            $update->bind_param("ssi", $username, $hashed, $id);
+            $update = $conn->prepare("UPDATE admins SET username = ?, password = ?, role = ? WHERE id = ?");
+            $update->bind_param("sssi", $username, $hashed, $role, $id);
         } else {
-            $update = $conn->prepare("UPDATE admins SET username = ? WHERE id = ?");
-            $update->bind_param("si", $username, $id);
+            $update = $conn->prepare("UPDATE admins SET username = ?, role = ? WHERE id = ?");
+            $update->bind_param("ssi", $username, $role, $id);
         }
 
         if ($update->execute()) {
@@ -57,38 +67,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $admin) {
         }
     }
 }
+$pageTitle = "Edit Admin";
+require_once 'header.php';
 ?>
+<link rel="stylesheet" href="../css/edit_admin.css" />
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Edit Admin</title>
-    <link rel="icon" type="image/png" href="/images/D-Best.png">
-    <link rel="apple-touch-icon" href="/images/D-Best.png">
-    <link rel="manifest" href="/manifest.json">
-    <link rel="icon" type="image/png" href="../images/D-Best-favicon.png">
-    <link rel="apple-touch-icon" href="../images/D-Best-favicon.png">
-    <link rel="manifest" href="/manifest.json">
-    <link rel="icon" type="image/webp" href="../images/D-Best-favicon.webp">
-    <link rel="stylesheet" href="../css/admin.css">
-</head>
-<body>
-    <header>
-        <img src="/images/D-Best.png" alt="Logo" class="logo">
-        <h1>Edit Admin</h1>
-        <nav>
-        <a href="dashboard.php">Dashboard</a>
-        <a href="view_punches.php">Timesheets</a>
-        <a href="summary.php">Summary</a>
-        <a href="reports.php" class="active">Reports</a>
-        <a href="manage_users.php">Users</a>
-        <a href="manage_offices.php">Offices</a>
-        <a href="attendance.php">Attendance</a>
-        <a href="manage_admins.php">Admins</a>
-        <a href="../logout.php">Logout</a>
-    </nav>
-    </header>
 
     <div class="container">
         <?php if ($error): ?>
@@ -109,6 +92,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $admin) {
                         <label for="password">New Password <span style="font-weight: normal; color: #999;">(leave blank to keep current)</span></label>
                         <input type="text" name="password" id="password">
                     </div>
+
+                    <div class="field">
+                        <label for="role">Role</label>
+                        <select name="role" id="role" required>
+                            <option value="super_admin" <?= $admin['role'] === 'super_admin' ? 'selected' : '' ?>>Super Admin (Full Access)</option>
+                            <option value="reports_only" <?= $admin['role'] === 'reports_only' ? 'selected' : '' ?>>Reports Only (View & Export Reports)</option>
+                        </select>
+                    </div>
                 </div>
 
                 <div class="buttons">
@@ -118,5 +109,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $admin) {
             </form>
         <?php endif; ?>
     </div>
-</body>
-</html>
+
+<?php require_once 'footer.php'; ?>

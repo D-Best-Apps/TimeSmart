@@ -75,7 +75,11 @@ function login_admin_and_finish(string $username): void {
     // On success, end the 2FA flow securely
     session_regenerate_id(true);
     $_SESSION['admin'] = $username;
-    unset($_SESSION['2fa_admin_username'], $_SESSION['2fa_pending'], $_SESSION['2fa_attempts'], $_SESSION['twofa_lock_until']);
+    // Transfer role from temporary 2FA session to main session
+    if (isset($_SESSION['2fa_admin_role'])) {
+        $_SESSION['admin_role'] = $_SESSION['2fa_admin_role'];
+    }
+    unset($_SESSION['2fa_admin_username'], $_SESSION['2fa_admin_role'], $_SESSION['2fa_pending'], $_SESSION['2fa_attempts'], $_SESSION['twofa_lock_until']);
     header("Location: dashboard.php");
     exit;
 }

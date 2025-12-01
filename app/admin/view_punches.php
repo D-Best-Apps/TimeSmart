@@ -7,6 +7,10 @@ if (!isset($_SESSION['admin'])) {
     exit;
 }
 
+// Permission check: only super admins can edit timesheets
+require_once __DIR__ . '/../functions/check_permission.php';
+requirePermission('edit_timesheets');
+
 date_default_timezone_set('America/Chicago');
 
 $employeeList = $conn->query("SELECT ID, FirstName, LastName FROM users ORDER BY LastName");

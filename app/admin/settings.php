@@ -9,6 +9,10 @@ use PHPMailer\PHPMailer\Exception;
 if (!isset($_SESSION['admin'])) {
     header("Location: login.php");
     exit;
+
+// Permission check
+require_once __DIR__ . '/../functions/check_permission.php';
+requirePermission('manage_settings');
 }
 
 // --- Encryption/Decryption Functions ---
@@ -119,119 +123,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+$pageTitle = "Settings";
+require_once 'header.php';
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Application Settings</title>
-    <link rel="stylesheet" href="../css/admin.css">
-<style>
-.settings-form {
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-}
+<link rel="stylesheet" href="../css/settings.css" />
 
-.settings-form h2 {
-    color: var(--primary-color);
-    margin-bottom: 1rem;
-    border-bottom: 2px solid #eee;
-    padding-bottom: 0.5rem;
-}
-
-.settings-form .field label {
-    font-weight: 600;
-    margin-bottom: 0.5rem;
-    display: block;
-    color: #444;
-}
-
-.settings-form .field input[type="text"],
-.settings-form .field input[type="number"],
-.settings-form .field input[type="password"],
-.settings-form .field input[type="email"],
-.settings-form .field select {
-    width: 100%;
-    padding: 0.75rem;
-    font-size: 1rem;
-    border: 1px solid #ccc;
-    border-radius: 6px;
-    box-sizing: border-box; /* Ensure padding doesn't add to width */
-}
-
-.settings-form .buttons {
-    display: flex;
-    gap: 1rem;
-    margin-top: 1.5rem;
-}
-
-.settings-form .buttons button {
-    padding: 0.75rem 1.5rem;
-    font-size: 1rem;
-    font-weight: bold;
-    border-radius: 6px;
-    border: none;
-    cursor: pointer;
-    transition: background-color 0.2s ease;
-}
-
-.settings-form .buttons button[type="submit"]:not([name="test_email"]) {
-    background-color: var(--primary-color);
-    color: white;
-}
-
-.settings-form .buttons button[type="submit"]:not([name="test_email"]):hover {
-    background-color: var(--primary-hover);
-}
-
-.settings-form .buttons button[name="test_email"] {
-    background-color: #28a745; /* Green for test email */
-    color: white;
-}
-
-.settings-form .buttons button[name="test_email"]:hover {
-    background-color: #218838;
-}
-
-.alert {
-    padding: 15px;
-    margin-bottom: 20px;
-    border: 1px solid transparent;
-    border-radius: 4px;
-}
-
-.alert-success {
-    color: #155724;
-    background-color: #d4edda;
-    border-color: #c3e6cb;
-}
-
-.alert-danger {
-    color: #721c24;
-    background-color: #f8d7da;
-    border-color: #f5c6cb;
-}
-</style>
-</head>
-<body>
-
-<header>
-    <img src="/images/D-Best.png" alt="D-Best Logo" class="logo">
-    <h1>Application Settings</h1>
-    <nav>
-        <a href="dashboard.php">Dashboard</a>
-        <a href="view_punches.php">Timesheets</a>
-        <a href="summary.php">Summary</a>
-        <a href="reports.php">Reports</a>
-        <a href="manage_users.php">Users</a>
-        <a href="manage_offices.php">Offices</a>
-        <a href="attendance.php">Attendance</a>
-        <a href="manage_admins.php">Admins</a>
-        <a href="settings.php" class="active">Settings</a>
-        <a href="../logout.php">Logout</a>
-    </nav>
-</header>
 
 <div class="dashboard-container">
     <div class="container">
@@ -281,5 +177,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
 </div>
 
-</body>
-</html>
+
+<?php require_once 'footer.php'; ?>

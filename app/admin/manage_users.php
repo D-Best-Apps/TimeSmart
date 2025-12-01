@@ -6,6 +6,10 @@ session_start();
 if (!isset($_SESSION['admin'])) {
     header("Location: login.php");
     exit;
+
+// Permission check
+require_once __DIR__ . '/../functions/check_permission.php';
+requirePermission('manage_users');
 }
 
 /*
@@ -46,39 +50,11 @@ $offices_data = [];
 while ($row = $offices_result->fetch_assoc()) {
     $offices_data[] = $row;
 }
+$pageTitle = "Manage Users";
+$extraCSS = ["../css/manage_users.css"];
+require_once 'header.php';
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Manage Users - D-Best TimeClock</title>
-    <link rel="icon" type="image/png" href="/images/D-Best.png">
-    <link rel="apple-touch-icon" href="/images/D-Best.png">
-    <link rel="manifest" href="/manifest.json">
-    <link rel="icon" type="image/png" href="../images/D-Best-favicon.png">
-    <link rel="apple-touch-icon" href="../images/D-Best-favicon.png">
-    <link rel="manifest" href="/manifest.json">
-    <link rel="icon" type="image/webp" href="../images/D-Best-favicon.webp">
-    <link rel="stylesheet" href="../css/uman.css">
-    <link rel="stylesheet" href="../css/manage_users.css">
-</head>
-<body>
-<header class="banner">
-    <img src="/images/D-Best.png" alt="D-Best Logo" class="logo">
-    <h1>User Management</h1>
-    <nav>
-        <a href="dashboard.php">Dashboard</a>
-        <a href="view_punches.php">Timesheets</a>
-        <a href="summary.php">Summary</a>
-        <a href="reports.php">Reports</a>
-        <a href="manage_users.php" class="active">Users</a>
-        <a href="manage_offices.php">Offices</a>
-        <a href="attendance.php">Attendance</a>
-        <a href="manage_admins.php">Admins</a>
-        <a href="settings.php">Settings</a>
-        <a href="../logout.php">Logout</a>
-    </nav>
-</header>
+
 
 <div class="uman-container">
     <div style="text-align: center; margin-bottom: 1rem;">
@@ -262,5 +238,5 @@ while ($row = $offices_result->fetch_assoc()) {
         </div>
     </div>
 </div>
-</body>
-</html>
+
+<?php require_once 'footer.php'; ?>

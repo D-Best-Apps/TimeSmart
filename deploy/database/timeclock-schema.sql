@@ -45,6 +45,7 @@ CREATE TABLE `admins` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `username` varchar(50) NOT NULL,
   `password` varchar(255) NOT NULL,
+  `role` varchar(20) NOT NULL DEFAULT 'super_admin',
   `TwoFASecret` varchar(255) DEFAULT NULL,
   `TwoFAEnabled` tinyint(1) NOT NULL DEFAULT 0,
   `TwoFARecoveryCode` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`TwoFARecoveryCode`)),

@@ -6,6 +6,10 @@ session_start();
 if (!isset($_SESSION['admin'])) {
     header("Location: login.php");
     exit;
+
+// Permission check
+require_once __DIR__ . '/../functions/check_permission.php';
+requirePermission('manage_users');
 }
 
 $archived_users_result = $conn->query("SELECT ID, FirstName, LastName, Email, ArchivedAt FROM `user-archive` ORDER BY ArchivedAt DESC");
@@ -13,32 +17,10 @@ $archived_users_data = [];
 while ($row = $archived_users_result->fetch_assoc()) {
     $archived_users_data[] = $row;
 }
+$pageTitle = "Archived Users";
+require_once 'header.php';
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Archived Users - D-Best TimeClock</title>
-    <link rel="icon" type="image/webp" href="../images/D-Best-favicon.webp">
-    <link rel="stylesheet" href="../css/uman.css">
-    <link rel="stylesheet" href="../css/manage_users.css">
-</head>
-<body>
-<header class="banner">
-    <img src="/images/D-Best.png" alt="D-Best Logo" class="logo">
-    <h1>Archived Users</h1>
-    <nav>
-        <a href="dashboard.php">Dashboard</a>
-        <a href="view_punches.php">Timesheets</a>
-        <a href="summary.php">Summary</a>
-        <a href="reports.php">Reports</a>
-        <a href="manage_users.php">Users</a>
-        <a href="manage_offices.php">Offices</a>
-        <a href="attendance.php">Attendance</a>
-        <a href="manage_admins.php">Admins</a>
-        <a href="../logout.php">Logout</a>
-    </nav>
-</header>
+
 
 <div class="uman-container">
     <div class="uman-header">
@@ -76,5 +58,5 @@ while ($row = $archived_users_result->fetch_assoc()) {
     </table>
 </div>
 
-</body>
-</html>
+
+<?php require_once 'footer.php'; ?>
