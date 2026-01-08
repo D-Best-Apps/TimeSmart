@@ -284,7 +284,7 @@ Contributions are welcome! Please:
 
 ## 📝 License
 
-This project is proprietary software owned by D-BEST App.
+This project is proprietary software owned by D-Best Technologies.
 
 ---
 
