@@ -1,49 +1,10 @@
 <?php
-session_start();
-require_once '../auth/db.php';
-
-if (!isset($_SESSION['admin'])) {
-    header("Location: login.php");
-    exit;
-}
+$pageTitle = "Reports Dashboard";
+$extraCSS = ["../css/reports.css"];
+require_once 'header.php';
 ?>
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Reports Dashboard</title>
-    <link rel="icon" type="image/png" href="/images/D-Best.png">
-    <link rel="apple-touch-icon" href="/images/D-Best.png">
-    <link rel="manifest" href="/manifest.json">
-    <link rel="icon" type="image/png" href="../images/D-Best-favicon.png">
-    <link rel="apple-touch-icon" href="../images/D-Best-favicon.png">
-    <link rel="manifest" href="/manifest.json">
-    <link rel="icon" type="image/webp" href="../images/D-Best-favicon.webp">
-    <link rel="stylesheet" href="../css/admin.css">
-    <link rel="stylesheet" href="../css/reports.css">
-</head>
-<body>
 
-<header>
-    <img src="/images/D-Best.png" alt="D-Best Logo" class="logo">
-    <h1>Reports Dashboard</h1>
-    <nav>
-        <a href="dashboard.php">Dashboard</a>
-        <a href="view_punches.php">Timesheets</a>
-        <a href="summary.php">Summary</a>
-        <a href="reports.php" class="active">Reports</a>
-        <a href="manage_users.php">Users</a>
-        <a href="manage_offices.php">Offices</a>
-        <a href="attendance.php">Attendance</a>
-        <a href="manage_admins.php">Admins</a>
-        <a href="settings.php">Settings</a>
-        <a href="../logout.php">Logout</a>
-    </nav>
-</header>
-
-<div class="dashboard-container">
-    <div class="container">
         <h2>Available Reports</h2>
         <div class="reports-container">
             <div class="report-card">
@@ -53,9 +14,27 @@ if (!isset($_SESSION['admin'])) {
             </div>
 
             <div class="report-card">
-                <h3>Timesheet Report</h3>
+                <h3>Timesheet Editor</h3>
                 <p>View and edit detailed punch logs including lunch and break periods per employee.</p>
-                <a href="view_punches.php">Open Timesheets</a>
+                <a href="view_punches.php">Open Timesheet Editor</a>
+            </div>
+
+            <div class="report-card">
+                <h3>Missed Days Report</h3>
+                <p>Track missed work days by pay period (Wednesday-Tuesday) with hours converted to days worked.</p>
+                <a href="missed_days.php">Open Missed Days</a>
+            </div>
+
+            <div class="report-card">
+                <h3>Attendance Report</h3>
+                <p>View employee attendance calendar with present, incomplete, and absent status per day.</p>
+                <a href="attendance.php">Open Attendance</a>
+            </div>
+
+            <div class="report-card">
+                <h3>Tardies Report</h3>
+                <p>Track late arrivals by pay period with scheduled start times. Separates tardies under and over 5 minutes.</p>
+                <a href="tardies.php">Open Tardies</a>
             </div>
 
             <div class="report-card">
@@ -65,13 +44,10 @@ if (!isset($_SESSION['admin'])) {
             </div>
 
             <div class="report-card">
-                <h3>Custom Date Reports <em>(Coming Soon)</em></h3>
-                <p>Generate custom reports by selecting exact dates, users, and format preferences.</p>
-                <a href="#">Not Available</a>
+                <h3>Timesheet Report</h3>
+                <p>View detailed punch times including clock in/out and lunch periods for all employees.</p>
+                <a href="timesheet_report.php">Open Timesheet Report</a>
             </div>
         </div>
-    </div>
-</div>
 
-</body>
-</html>
+<?php require_once 'footer.php'; ?>
