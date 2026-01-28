@@ -14,7 +14,7 @@ date_default_timezone_set('America/Chicago');
 
 // Configuration
 define('AUTO_CLOCKIN_TIME', '08:00:00');
-define('AUTO_CLOCKIN_NOTE', 'Auto-clocked in at 8:00 AM');
+define('AUTO_CLOCKIN_NOTE', '*');
 define('EMPLOYEE_FIRST_NAME', 'Gareth');
 define('EMPLOYEE_LAST_NAME', 'Pereira');
 
