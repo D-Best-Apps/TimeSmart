@@ -1,38 +1,38 @@
-# 🕒 D-BEST TimeSmart
+# D-BEST TimeSmart
 
 **D-BEST TimeSmart** is a modern, web-based time clock application built for small businesses, schools, and organizations needing efficient time tracking and user management. It supports employees clocking in/out and offers powerful tools for administrators to manage users, view reports, and export data — all in a secure and user-friendly interface.
 
 ---
 
-## ✅ Key Features
+## Key Features
 
-- **🕘 Employee Time Tracking**  
+- **Employee Time Tracking**  
   Clock In, Lunch, Break, and Clock Out with GPS and device logging.
   
-- **👥 User Management**  
+- **User Management**  
   Add, update, or remove employee accounts and manage permissions.
   
-- **📊 Admin Dashboard**  
+- **Admin Dashboard**  
   Get real-time overviews of employee activity and time logs.
   
-- **📁 Reports & Exports**  
+- **Reports & Exports**  
   Generate and export attendance data (PDF, Excel, summary reports).
   
-- **🔐 Two-Factor Authentication (2FA)**  
+- **Two-Factor Authentication (2FA)**  
   Built-in support for TOTP 2FA (Google Authenticator, Authy).
   
-- **📱 Kiosk Mode**  
+- **Kiosk Mode**  
   Badge/NFC scanning for PIN-less time clock stations.
 
-- **📄 Legal Pages**  
+- **Legal Pages**  
   Includes Privacy Policy and Terms of Use pages.
 
-- **🔄 Volume-Mounted Development**  
+- **Volume-Mounted Development**  
   Edit code on host, changes appear instantly in container.
 
 ---
 
-## 🧰 Prerequisites
+## Prerequisites
 
 Ensure the following are installed:
 
@@ -50,7 +50,7 @@ Ensure the following are installed:
 
 ---
 
-## 🚀 Quick Installation
+## Quick Installation
 
 Run the official installation script to deploy a new instance:
 
@@ -58,7 +58,7 @@ Run the official installation script to deploy a new instance:
 bash <(curl -s https://raw.githubusercontent.com/D-Best-App/Timesmart/main/deploy/scripts/install.sh)
 ```
 
-### 🧩 What the script does:
+### What the script does:
 
 - Checks prerequisites (Docker, Git, MySQL client)
 - Prompts for **Company Name** (sets container/database name)
@@ -69,13 +69,11 @@ bash <(curl -s https://raw.githubusercontent.com/D-Best-App/Timesmart/main/deplo
 - Starts Docker container with volume mounts
 - Shows container IP and access information
 
-**Installation takes ~2 minutes.**
-
 See [docs/INSTALLATION.md](docs/INSTALLATION.md) for detailed installation instructions.
 
 ---
 
-## 🌐 Accessing the App
+## Accessing the App
 
 After installation, the script displays the container IP address:
 
@@ -94,20 +92,20 @@ For permanent access, configure a reverse proxy (Nginx/Traefik) or use Cloudflar
 
 ---
 
-## 👨‍💼 Admin Access
+## Admin Access
 
 - **URL**: `http://<container_ip>/admin/`
 - **Default Credentials:**
   - Username: `admin`
   - Password: `password`
 
-**⚠️ CRITICAL:** Change the default password immediately after first login!
+**CRITICAL:** Change the default password immediately after first login!
 
 It's highly recommended to enable Two-Factor Authentication (2FA) for all admin accounts.
 
 ---
 
-## 👷 Employee Access
+## Employee Access
 
 - **URL**: `http://<container_ip>/user/`
 - Employee credentials must be created by an administrator
@@ -115,7 +113,7 @@ It's highly recommended to enable Two-Factor Authentication (2FA) for all admin 
 
 ---
 
-## 📚 Documentation
+## Documentation
 
 Comprehensive documentation for all users:
 
@@ -141,15 +139,20 @@ Comprehensive documentation for all users:
   - Database optimization
   - Security settings
 
-- **[CLAUDE.md](CLAUDE.md)** - Developer documentation
-  - Project architecture
-  - Database schema
-  - Security patterns
-  - Development workflow
+- **[DEVELOPMENT.md](docs/DEVELOPMENT.md)** - Developer documentation
+  - Code architecture and database schema
+  - Security patterns for implementation
+  - Authentication flows and key workflows
+  - Code conventions
+
+- **[CLAUDE.md](CLAUDE.md)** - Operations documentation
+  - Server management commands
+  - Scripts reference
+  - Configuration management
 
 ---
 
-## 🔄 Updating TimeSmart
+## Updating TimeSmart
 
 Updating is easy with the included update script:
 
@@ -169,7 +172,7 @@ The script will:
 
 ---
 
-## 🛡️ Backup & Restore
+## Backup & Restore
 
 ### Automated Backups
 
@@ -201,7 +204,7 @@ See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for restore procedures.
 
 ---
 
-## 🏗️ Project Structure
+## Project Structure
 
 ```
 Timeclock-<CompanyName>/
@@ -214,20 +217,21 @@ Timeclock-<CompanyName>/
 │   └── vendor/              # Composer dependencies
 ├── deploy/                  # Deployment configuration
 │   ├── docker/              # Dockerfile, nginx.conf, www.conf
-│   ├── database/            # schema.sql
+│   ├── database/            # timeclock-schema.sql
 │   └── scripts/             # install.sh, update.sh, backup.sh
 ├── docs/                    # Documentation
 │   ├── INSTALLATION.md
 │   ├── DEPLOYMENT.md
-│   └── CONFIGURATION.md
+│   ├── CONFIGURATION.md
+│   └── DEVELOPMENT.md
 ├── docker-compose.yml       # Container orchestration
-├── CLAUDE.md                # Developer documentation
+├── CLAUDE.md                # Operations documentation
 └── README.md                # This file
 ```
 
 ---
 
-## 🔧 Development
+## Development
 
 TimeSmart uses **volume mounts** for easy development:
 
@@ -248,11 +252,11 @@ nano app/admin/dashboard.php
 # No rebuilds, no docker cp, no hassle.
 ```
 
-See [CLAUDE.md](CLAUDE.md) for developer documentation.
+See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for code architecture and development patterns.
 
 ---
 
-## 🛠️ Troubleshooting
+## Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
@@ -270,7 +274,7 @@ For more troubleshooting, see:
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please:
 
@@ -282,28 +286,30 @@ Contributions are welcome! Please:
 
 ---
 
-## 📝 License
+## License
 
 This project is proprietary software owned by D-Best Technologies.
 
 ---
 
-## 🆘 Support
+## Support
 
 - **GitHub Issues**: https://github.com/D-Best-App/Timesmart/issues
 - **Documentation**: [docs/](docs/)
-- **Developer Docs**: [CLAUDE.md](CLAUDE.md)
+- **Developer Docs**: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
+- **Operations Docs**: [CLAUDE.md](CLAUDE.md)
 
 ---
 
-## 🎯 Quick Links
+## Quick Links
 
 - [Installation Guide](docs/INSTALLATION.md)
 - [Deployment Guide](docs/DEPLOYMENT.md)
 - [Configuration Reference](docs/CONFIGURATION.md)
-- [Developer Documentation](CLAUDE.md)
+- [Developer Documentation](docs/DEVELOPMENT.md)
+- [Operations Documentation](CLAUDE.md)
 - [Changelog](CHANGELOG.md)
 
 ---
 
-**Made with ❤️ by D-BEST App**
+**Made with care by D-BEST App**

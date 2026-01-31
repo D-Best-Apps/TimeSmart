@@ -524,4 +524,5 @@ docker inspect Timeclock-YourCompany | grep IPAddress
 
 - Read [INSTALLATION.md](INSTALLATION.md) for initial setup
 - Read [CONFIGURATION.md](CONFIGURATION.md) for advanced settings
-- Read [CLAUDE.md](../CLAUDE.md) for developer documentation
+- Read [DEVELOPMENT.md](DEVELOPMENT.md) for code architecture
+- Read [CLAUDE.md](../CLAUDE.md) for operations documentation

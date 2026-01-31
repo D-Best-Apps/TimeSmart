@@ -550,4 +550,5 @@ GRANT ALL ON `timeclock-%`.* TO 'timeclock'@'172.17.%';
 
 - Read [INSTALLATION.md](INSTALLATION.md) for setup instructions
 - Read [DEPLOYMENT.md](DEPLOYMENT.md) for maintenance
-- Read [CLAUDE.md](../CLAUDE.md) for development
+- Read [DEVELOPMENT.md](DEVELOPMENT.md) for code architecture
+- Read [CLAUDE.md](../CLAUDE.md) for operations

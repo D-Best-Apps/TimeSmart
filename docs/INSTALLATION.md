@@ -102,7 +102,7 @@ CREATE DATABASE `timeclock-yourcompany` CHARACTER SET utf8mb4 COLLATE utf8mb4_un
 EXIT;
 
 # Import schema
-mysql -h <db_host> -u <db_user> -p timeclock-yourcompany < deploy/database/schema.sql
+mysql -h <db_host> -u <db_user> -p timeclock-yourcompany < deploy/database/timeclock-schema.sql
 ```
 
 The schema includes:
@@ -308,7 +308,7 @@ If you prefer not to use Docker:
 
 5. **Create database**
    ```bash
-   mysql -u root -p < deploy/database/schema.sql
+   mysql -u root -p < deploy/database/timeclock-schema.sql
    ```
 
 6. **Set permissions**
@@ -384,7 +384,8 @@ docker exec Timeclock-YourCompany chown -R www-data:www-data /var/www/html
 
 - Read [DEPLOYMENT.md](DEPLOYMENT.md) for update procedures
 - Read [CONFIGURATION.md](CONFIGURATION.md) for advanced settings
-- Read [CLAUDE.md](../CLAUDE.md) for developer documentation
+- Read [DEVELOPMENT.md](DEVELOPMENT.md) for code architecture
+- Read [CLAUDE.md](../CLAUDE.md) for operations documentation
 
 ## Getting Help
 
