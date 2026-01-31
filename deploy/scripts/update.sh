@@ -97,12 +97,9 @@ git log -1 --oneline
 if git diff HEAD@{1} --name-only | grep -q "composer.json\|composer.lock"; then
     echo -e "\n${YELLOW}📦 Composer dependencies changed, updating...${NC}"
     
-    if [ -f "app/composer.json" ]; then
-        cd app
-        composer install --no-dev --optimize-autoloader
-        cd ..
-        echo -e "${GREEN}✓ Composer dependencies updated${NC}"
-    fi
+    docker exec "$CONTAINER_NAME" composer install --no-dev --optimize-autoloader -d /var/www/html
+    docker exec "$CONTAINER_NAME" chown -R www-data:www-data /var/www/html/vendor
+    echo -e "${GREEN}✓ Composer dependencies updated${NC}"
 fi
 
 # Volume mounts mean changes are immediately reflected!

@@ -177,6 +177,12 @@ if [ "$start_container" = "y" ]; then
         # Wait for container to be ready
         sleep 3
         
+        # Install PHP dependencies
+        echo -e "${YELLOW}📦 Installing PHP dependencies...${NC}"
+        docker exec "$CONTAINER_NAME" composer install --no-dev --optimize-autoloader -d /var/www/html
+        docker exec "$CONTAINER_NAME" chown -R www-data:www-data /var/www/html/vendor
+        echo -e "${GREEN}✓ Dependencies installed${NC}"
+        
         # Get container IP
         CONTAINER_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$CONTAINER_NAME")
         
