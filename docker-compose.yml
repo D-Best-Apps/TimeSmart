@@ -1,50 +1,35 @@
 # D-BEST TimeSmart Docker Compose Configuration
-# This file is a template - install.sh will replace placeholders with actual values
+# Timeclock-D-Best instance
 
 services:
   app:
     image: dbest25/timesmart:latest
-    container_name: COMPANY_NAME_PLACEHOLDER
+    container_name: Timeclock-D-Best
     restart: unless-stopped
-    
+
+    # Map host.docker.internal to the Docker host for DB access
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
     # Volume mounts for development
     # Application code is mounted from host for live updates
     volumes:
       - ./app:/var/www/html:rw
       - ./deploy/docker/nginx.conf:/etc/nginx/sites-available/default:ro
       - ./deploy/docker/www.conf:/usr/local/etc/php-fpm.d/www.conf:ro
-    
+
     # Environment variables for database connection
     environment:
-      DB_HOST: DB_HOST_PLACEHOLDER
-      DB_NAME: DB_NAME_PLACEHOLDER
-      DB_USER: DB_USER_PLACEHOLDER
-      DB_PASS: DB_PASS_PLACEHOLDER
+      DB_HOST: host.docker.internal
+      DB_NAME: timeclock-D-Best
+      DB_USER: timeclock
+      DB_PASS: SecureNet25!
       DB_TIMEZONE: America/Chicago
-    
-    # Network configuration
-    # Bridge mode allows access via container IP without exposing ports
-    network_mode: bridge
-    
-    # Uncomment to expose on host port (e.g., for local development)
-    # ports:
-    #   - "8080:80"
 
-# Optional: MariaDB database container
-# Uncomment if you want to run the database in Docker instead of external MySQL
-# db:
-#   image: mariadb:latest
-#   container_name: timeclock_db
-#   restart: unless-stopped
-#   environment:
-#     MYSQL_ROOT_PASSWORD: DB_PASS_PLACEHOLDER
-#     MYSQL_DATABASE: DB_NAME_PLACEHOLDER
-#     MYSQL_USER: DB_USER_PLACEHOLDER
-#     MYSQL_PASSWORD: DB_PASS_PLACEHOLDER
-#   volumes:
-#     - db_data:/var/lib/mysql
-#     - ./deploy/database/schema.sql:/docker-entrypoint-initdb.d/init.sql:ro
-#   network_mode: bridge
+    # Shared network allows NPM to reach this container by name
+    networks:
+      - timesmart-net
 
-# volumes:
-#   db_data:
+networks:
+  timesmart-net:
+    external: true
