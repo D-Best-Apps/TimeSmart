@@ -46,13 +46,7 @@ $gpsQuery->close();
     <span class="nav-date"><?= date('F j, Y') ?></span>
     <a href="index.php">🏠 Home</a>
     <a href="./user/login.php">🔐 User Login</a>
-    <div class="dropdown">
-      <button class="dropbtn">⏱ Settings ▾</button>
-      <div class="dropdown-content">
-        <a href="./admin/login.php">Admin Login</a>
-        <a href="./admin/reports.php">Timeclock Reports</a>
-      </div>
-    </div>
+    <a href="./admin/login.php">🔑 Admin Login</a>
   </div>
 </header>
 
@@ -62,22 +56,12 @@ $gpsQuery->close();
   <span class="nav-title">D-BEST TimeSmart</span>
 </div>
 
-<!-- 📱 Mobile Menu Trigger -->
+<!-- 📱 Mobile Menu -->
 <nav class="mobile-nav mobile-only">
   <a href="index.php">🏠 Home</a>
   <a href="./user/login.php">🔐 User Login</a>
-  <button class="menu-toggle" id="menuBtn">☰</button>
+  <a href="./admin/login.php">🔑 Admin Login</a>
 </nav>
-
-<!-- 📱 Modal Mobile Menu -->
-<div class="mobile-menu-overlay" id="mobileMenuOverlay">
-  <div class="mobile-menu-content">
-    <button class="close-mobile-menu" id="closeMenu">&times;</button>
-    <a href="./admin/admin.php">🛠️ Administration</a>
-    <a href="reports.php">📊 Reports</a>
-    <a href="clock.php">⏱️ Export Hours</a>
-  </div>
-</div>
 
 
 

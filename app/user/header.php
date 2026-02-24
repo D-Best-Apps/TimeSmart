@@ -57,19 +57,19 @@ foreach ($extensions as $ext) {
         <span class="profile-name"><?= htmlspecialchars($name) ?></span>
       </div>
       <div id="profileMenu" class="dropdown-menu hidden">
-        <a href="settings.php">👤 Settings</a>
-        <a href="timesheet.php">📄 My Timesheet</a>
-        <a href="dashboard.php">🏠 Dashboard</a>
-        <a href="../logout.php">🚪 Logout</a>
+        <a href="dashboard.php">🏠 User Home</a>
+        <a href="settings.php">⚙️ User Settings</a>
+        <a href="timesheet.php">✏️ Edit Timesheet</a>
+        <a href="../index.php">↩️ Back to Dashboard</a>
       </div>
     </div>
   </div>
 </header>
 
 <nav class="mobile-nav mobile-only">
-  <a href="timesheet.php">📄 Sheet</a>
   <a href="dashboard.php">🏠 Home</a>
-  <a href="../logout.php">🚪 Logout</a>
+  <a href="timesheet.php">📄 Sheet</a>
+  <a href="../index.php">↩️ Back</a>
   <a href="settings.php">⚙️</a>
 </nav>
 

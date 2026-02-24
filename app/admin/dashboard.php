@@ -70,7 +70,7 @@ if ($statsResult && $statsRow = $statsResult->fetch_assoc()) {
     <nav>
         <a href="dashboard.php" class="active">Dashboard</a>
         <a href="view_punches.php">Timesheets</a>
-        <a href="summary.php">Summary</a>
+        <a href="edits_timesheet.php">Pending Approvals<?php if ($pendingCount > 0): ?> (<?= $pendingCount ?>)<?php endif; ?></a>
         <a href="reports.php">Reports</a>
         <a href="manage_users.php">Users</a>
         <a href="manage_offices.php">Offices</a>
@@ -107,44 +107,44 @@ if ($statsResult && $statsRow = $statsResult->fetch_assoc()) {
 <div class="dashboard-container">
     <div class="dashboard">
         <div class="card">
-            <h2>View Time Punches</h2>
-            <p>Review and manage employee punches.</p>
+            <h2>Timesheets</h2>
+            <p>Review and manage employee time punches.</p>
             <a href="view_punches.php">Open</a>
         </div>
         <div class="card">
-            <h2>Manage Users</h2>
-            <p>Add, edit, or remove employee accounts.</p>
-            <a href="manage_users.php">Open</a>
-        </div>
-        <div class="card">
-            <h2>Manage Offices</h2>
-            <p>Add, edit, or remove office locations.</p>
-            <a href="manage_offices.php">Open</a>
-        </div>
-        <div class="card">
-            <h2>Manage Admins</h2>
-            <p>Create, edit, or remove admin accounts.</p>
-            <a href="manage_admins.php">Open</a>
-        </div>
-        <div class="card">
-            <h2>Summary Reports</h2>
-            <p>View hours worked by day, week, or user.</p>
-            <a href="summary.php">Open</a>
-        </div>
-        <div class="card">
-            <h2>Attendance Reports</h2>
-            <p>View employee attendance</p>
-            <a href="attendance.php">Open</a>
-        </div>
-        <div class="card">
             <h2>Pending Approvals</h2>
-            <p><?= $pendingCount ?> time edits need review.</p>
+            <p><?= $pendingCount ?> timesheet edits need review.</p>
             <a href="edits_timesheet.php">Review</a>
         </div>
         <div class="card">
             <h2>Reports</h2>
-            <p>Browse through reports.</p>
+            <p>View all available reports (summary, missed days, tardies, etc.).</p>
             <a href="reports.php">Open</a>
+        </div>
+        <div class="card">
+            <h2>Users</h2>
+            <p>Add, edit, or remove employee accounts.</p>
+            <a href="manage_users.php">Open</a>
+        </div>
+        <div class="card">
+            <h2>Offices</h2>
+            <p>Add, edit, or remove office locations.</p>
+            <a href="manage_offices.php">Open</a>
+        </div>
+        <div class="card">
+            <h2>Attendance</h2>
+            <p>View employee attendance calendar.</p>
+            <a href="attendance.php">Open</a>
+        </div>
+        <div class="card">
+            <h2>Admins</h2>
+            <p>Create, edit, or remove admin accounts.</p>
+            <a href="manage_admins.php">Open</a>
+        </div>
+        <div class="card">
+            <h2>Settings</h2>
+            <p>Configure system settings and preferences.</p>
+            <a href="settings.php">Open</a>
         </div>
         <?php if (!$is2FAEnabled): ?>
         <div class="card">

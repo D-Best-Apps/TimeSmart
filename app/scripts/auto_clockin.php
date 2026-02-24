@@ -2,21 +2,32 @@
 /**
  * Auto Clock-In Script for Gareth Pereira
  *
- * This script runs at 8AM on weekdays and automatically clocks in the owner
- * if they're not already clocked in.
+ * This script runs at 6:50AM on weekdays and automatically clocks in the owner
+ * if they're not already clocked in. The recorded time is randomized by up to
+ * 20 minutes to appear natural.
  *
  * Usage: php /path/to/auto_clockin.php
- * Cron: 0 8 * * 1-5 (8AM Monday-Friday)
+ * Cron: 50 6 * * 1-5 (6:50AM Monday-Friday)
  */
 
 require_once __DIR__ . '/../auth/db.php';
 date_default_timezone_set('America/Chicago');
 
 // Configuration
-define('AUTO_CLOCKIN_TIME', '08:00:00');
+define('AUTO_CLOCKIN_BASE_TIME', '06:50:00');
+define('AUTO_CLOCKIN_VARY_MINUTES', 20);
 define('AUTO_CLOCKIN_NOTE', '*');
 define('EMPLOYEE_FIRST_NAME', 'Gareth');
 define('EMPLOYEE_LAST_NAME', 'Pereira');
+
+/**
+ * Add a random offset (0 to $maxMinutes) to a base time string
+ */
+function randomizeTime($baseTime, $maxMinutes) {
+    $offset = random_int(0, $maxMinutes * 60); // random seconds
+    $timestamp = strtotime($baseTime) + $offset;
+    return date('H:i:s', $timestamp);
+}
 
 /**
  * Log the auto clock-in action to punch_changelog
@@ -103,8 +114,9 @@ function autoClockInEmployee($conn) {
         return true;
     }
 
-    // Create the clock-in datetime
-    $clockInDateTime = $today . ' ' . AUTO_CLOCKIN_TIME;
+    // Create the clock-in datetime with randomization
+    $clockInTime = randomizeTime(AUTO_CLOCKIN_BASE_TIME, AUTO_CLOCKIN_VARY_MINUTES);
+    $clockInDateTime = $today . ' ' . $clockInTime;
 
     // Insert new punch record
     $insertStmt = $conn->prepare("
