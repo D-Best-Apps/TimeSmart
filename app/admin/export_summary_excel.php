@@ -29,6 +29,13 @@ function hmsToDecimal($hms, $rounding = 0) {
     return round($minutes / 60, 2);
 }
 
+function decimalToHM($decimalHours) {
+    $totalMinutes = (int) round($decimalHours * 60);
+    $h = intdiv($totalMinutes, 60);
+    $m = $totalMinutes % 60;
+    return sprintf('%d:%02d', $h, $m);
+}
+
 function getPunches($conn, $start, $end, $emp = '') {
     $sql = "
         SELECT u.FirstName, u.LastName, tp.EmployeeID, tp.Date, tp.TimeIN, tp.TimeOUT, tp.LunchStart, tp.LunchEnd,
@@ -80,16 +87,16 @@ while ($row = $result->fetch_assoc()) {
         $sheetsCreated++;
 
         // Headers
-        $headers = ['Employee', 'Date', 'Time In', 'Time Out', 'Lunch Start', 'Lunch End', 'Rounded Hours'];
+        $headers = ['Employee', 'Date', 'Time In', 'Time Out', 'Lunch Start', 'Lunch End', 'Rounded Hours', 'Hours (H:MM)'];
         $sheet->fromArray($headers, null, 'A1');
 
-        $sheet->getStyle('A1:G1')->applyFromArray([
+        $sheet->getStyle('A1:H1')->applyFromArray([
             'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '0078D7']],
             'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER]
         ]);
 
-        foreach (range('A', 'G') as $col) {
+        foreach (range('A', 'H') as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
 
@@ -123,6 +130,7 @@ while ($row = $result->fetch_assoc()) {
     $sheet->setCellValue("E{$rowNum}", $row['LunchStart']);
     $sheet->setCellValue("F{$rowNum}", $row['LunchEnd']);
     $sheet->setCellValue("G{$rowNum}", $roundedHours);
+    $sheet->setCellValueExplicit("H{$rowNum}", decimalToHM($roundedHours), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
     $rowNum++;
 }
 
@@ -135,7 +143,8 @@ if ($separatePages && $sheetsCreated > 0) {
 if ($sheet) {
     $sheet->setCellValue("F{$rowNum}", 'Total Hours');
     $sheet->setCellValue("G{$rowNum}", number_format($totalHours, 2));
-    $sheet->getStyle("F{$rowNum}:G{$rowNum}")->getFont()->setBold(true);
+    $sheet->setCellValueExplicit("H{$rowNum}", decimalToHM($totalHours), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+    $sheet->getStyle("F{$rowNum}:H{$rowNum}")->getFont()->setBold(true);
 }
 
 // Set active sheet to first

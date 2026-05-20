@@ -14,6 +14,12 @@ require_once 'header.php';
             </div>
 
             <div class="report-card">
+                <h3>Overtime Report</h3>
+                <p>Per-employee overtime by week (Friday week endings) for the selected period. Defaults to last month.</p>
+                <a href="overtime.php">Open Overtime</a>
+            </div>
+
+            <div class="report-card">
                 <h3>Timesheet Editor</h3>
                 <p>View and edit detailed punch logs including lunch and break periods per employee.</p>
                 <a href="view_punches.php">Open Timesheet Editor</a>

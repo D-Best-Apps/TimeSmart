@@ -27,6 +27,13 @@ function hmsToDecimal($time, $rounding = 0) {
     return round($minutes / 60, 2);
 }
 
+function decimalToHM($decimalHours) {
+    $totalMinutes = (int) round($decimalHours * 60);
+    $h = intdiv($totalMinutes, 60);
+    $m = $totalMinutes % 60;
+    return sprintf('%d:%02d', $h, $m);
+}
+
 // Fetch punches
 $sql = "
     SELECT u.FirstName, u.LastName, tp.EmployeeID, tp.Date,
@@ -74,14 +81,60 @@ $pdf->SetTitle('Payroll Summary Report');
 $pdf->SetMargins(15, 15, 15);
 $pdf->SetFont('helvetica', '', 11);
 
+// Per-employee total section (only when "All" employees was selected)
+$showSummary = empty($emp) && count($grouped) > 0;
+if ($showSummary) {
+    $pdf->AddPage();
+
+    $summaryList = [];
+    foreach ($grouped as $empId => $data) {
+        $summaryList[] = ['name' => $data['name'], 'total' => $totals[$empId]];
+    }
+    usort($summaryList, fn($a, $b) => strcasecmp($a['name'], $b['name']));
+    $grandTotal = array_sum($totals);
+
+    $summaryHtml = '<h2 style="text-align:center; color:#0078D7;">Payroll Summary Report</h2>';
+    $summaryHtml .= "<p style='text-align:center;'><strong>Date Range:</strong> "
+                  . date("m/d/Y", strtotime($start)) . " to " . date("m/d/Y", strtotime($end)) . "</p>";
+    $summaryHtml .= '<h3>Per Employee Total</h3>';
+    $summaryHtml .= '<table border="1" cellpadding="6" cellspacing="0" style="width: 100%; border-collapse: collapse;">
+                        <thead style="background-color: #e6f0ff;">
+                            <tr>
+                                <th><b>Employee</b></th>
+                                <th><b>Total Hours</b></th>
+                                <th><b>Hours (H:MM)</b></th>
+                            </tr>
+                        </thead>
+                        <tbody>';
+    foreach ($summaryList as $item) {
+        $summaryHtml .= "<tr>
+                            <td>" . htmlspecialchars($item['name']) . "</td>
+                            <td style='text-align:right;'>" . number_format($item['total'], 2) . "</td>
+                            <td style='text-align:right;'>" . decimalToHM($item['total']) . "</td>
+                         </tr>";
+    }
+    $summaryHtml .= "<tr style='font-weight:bold; background-color:#f1f1f1;'>
+                        <td>Grand Total</td>
+                        <td style='text-align:right;'>" . number_format($grandTotal, 2) . "</td>
+                        <td style='text-align:right;'>" . decimalToHM($grandTotal) . "</td>
+                     </tr>";
+    $summaryHtml .= '</tbody></table>';
+
+    $pdf->writeHTML($summaryHtml, true, false, true, false, '');
+}
+
 // Page for each user if requested
 $first = true;
 foreach ($grouped as $empId => $data) {
-    if (!$first && $separatePages) {
-        $pdf->AddPage();
-    } else if ($first) {
-        $pdf->AddPage();
+    if ($first) {
+        // If we already added a summary page and pages are NOT separated, continue on it.
+        // Otherwise (no summary, or separatePages on), add a fresh page.
+        if (!$showSummary || $separatePages) {
+            $pdf->AddPage();
+        }
         $first = false;
+    } elseif ($separatePages) {
+        $pdf->AddPage();
     }
 
     $pdf->SetFont('helvetica', '', 11);
@@ -99,6 +152,7 @@ foreach ($grouped as $empId => $data) {
                         <th><b>Lunch Start</b></th>
                         <th><b>Lunch End</b></th>
                         <th><b>Rounded Hours</b></th>
+                        <th><b>Hours (H:MM)</b></th>
                     </tr>
                 </thead>
                 <tbody>';
@@ -112,12 +166,14 @@ foreach ($grouped as $empId => $data) {
                     <td>{$r['LunchStart']}</td>
                     <td>{$r['LunchEnd']}</td>
                     <td style='text-align:right;'>" . number_format($r['RoundedHours'], 2) . "</td>
+                    <td style='text-align:right;'>" . decimalToHM($r['RoundedHours']) . "</td>
                   </tr>";
     }
 
     $html .= "<tr style='font-weight:bold; background-color:#f1f1f1;'>
                 <td colspan='5'>Total Hours</td>
                 <td style='text-align:right;'>" . number_format($totals[$empId], 2) . "</td>
+                <td style='text-align:right;'>" . decimalToHM($totals[$empId]) . "</td>
               </tr>";
 
     $html .= '</tbody></table>';

@@ -73,6 +73,12 @@ function roundToNearestMinutes($decimalHours, $interval = 0) {
     $roundedMinutes = round($totalMinutes / $interval) * $interval;
     return round($roundedMinutes / 60, 2);
 }
+function decimalToHM($decimalHours) {
+    $totalMinutes = (int) round($decimalHours * 60);
+    $h = intdiv($totalMinutes, 60);
+    $m = $totalMinutes % 60;
+    return sprintf('%d:%02d', $h, $m);
+}
 
 $rows = [];
 while ($row = $result->fetch_assoc()) {
@@ -183,6 +189,7 @@ require_once 'header.php';
                 <th>Employee</th>
                 <th>Date</th>
                 <th>Total Hours (Decimal)</th>
+                <th>Total Hours (H:MM)</th>
             </tr>
             <?php if (count($rows)): ?>
                 <?php foreach ($rows as $row): ?>
@@ -190,22 +197,26 @@ require_once 'header.php';
                         <td><?= htmlspecialchars($row['FirstName'] . ' ' . $row['LastName']) ?></td>
                         <td><?= htmlspecialchars(date('m/d/Y', strtotime($row['Date']))) ?></td>
                         <td><?= number_format($row['DecimalHours'], 2) ?></td>
+                        <td><?= decimalToHM($row['DecimalHours']) ?></td>
                     </tr>
                 <?php endforeach; ?>
             <?php else: ?>
-                <tr><td colspan="3">No time punches found for the selected filters.</td></tr>
+                <tr><td colspan="4">No time punches found for the selected filters.</td></tr>
             <?php endif; ?>
             <tr class="summary-total">
                 <td colspan="2">Total Hours</td>
                 <td><?= number_format($totalHoursDecimal, 2) ?></td>
+                <td><?= decimalToHM($totalHoursDecimal) ?></td>
             </tr>
             <tr class="summary-regular">
                 <td colspan="2">Regular Hours (≤ 40/week)</td>
                 <td><?= number_format($totalRegular, 2) ?></td>
+                <td><?= decimalToHM($totalRegular) ?></td>
             </tr>
             <tr class="summary-overtime">
                 <td colspan="2">Overtime Hours (> 40/week)</td>
                 <td><?= number_format($totalOvertime, 2) ?></td>
+                <td><?= decimalToHM($totalOvertime) ?></td>
             </tr>
         </table>
 
@@ -214,7 +225,7 @@ require_once 'header.php';
                 <h3>Per Employee Total</h3>
                 <ul>
                     <?php foreach ($totalsPerEmployee as $name => $total): ?>
-                        <li><strong><?= htmlspecialchars($name) ?></strong>: <?= number_format($total, 2) ?> hrs</li>
+                        <li><strong><?= htmlspecialchars($name) ?></strong>: <?= number_format($total, 2) ?> hrs (<?= decimalToHM($total) ?>)</li>
                     <?php endforeach; ?>
                 </ul>
             </div>
