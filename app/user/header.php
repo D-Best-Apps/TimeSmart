@@ -60,6 +60,7 @@ foreach ($extensions as $ext) {
         <a href="dashboard.php">🏠 User Home</a>
         <a href="settings.php">⚙️ User Settings</a>
         <a href="timesheet.php">✏️ Edit Timesheet</a>
+        <a href="time_off.php">🏖️ Request Time Off</a>
         <a href="../index.php">↩️ Back to Dashboard</a>
       </div>
     </div>
@@ -69,6 +70,7 @@ foreach ($extensions as $ext) {
 <nav class="mobile-nav mobile-only">
   <a href="dashboard.php">🏠 Home</a>
   <a href="timesheet.php">📄 Sheet</a>
+  <a href="time_off.php">🏖️ Time Off</a>
   <a href="../index.php">↩️ Back</a>
   <a href="settings.php">⚙️</a>
 </nav>

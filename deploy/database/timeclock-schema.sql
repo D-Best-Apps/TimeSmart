@@ -76,6 +76,27 @@ CREATE TABLE `pending_edits` (
   PRIMARY KEY (`ID`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+CREATE TABLE `time_off_requests` (
+  `ID` int(11) NOT NULL AUTO_INCREMENT,
+  `EmployeeID` int(11) NOT NULL,
+  `Category` enum('Sick','PTO') NOT NULL,
+  `StartDate` date NOT NULL,
+  `EndDate` date NOT NULL,
+  `StartTime` time DEFAULT NULL,
+  `EndTime` time DEFAULT NULL,
+  `Notes` varchar(500) DEFAULT NULL,
+  `Status` enum('Pending','Approved','Rejected','Withdrawn') NOT NULL DEFAULT 'Pending',
+  `SubmittedAt` datetime NOT NULL,
+  `ReviewedAt` datetime DEFAULT NULL,
+  `ReviewedBy` varchar(100) DEFAULT NULL,
+  `ReviewNote` varchar(500) DEFAULT NULL,
+  PRIMARY KEY (`ID`),
+  KEY `idx_tor_status` (`Status`),
+  KEY `idx_tor_emp_status` (`EmployeeID`, `Status`),
+  KEY `idx_tor_dates` (`StartDate`, `EndDate`),
+  CONSTRAINT `fk_tor_employee` FOREIGN KEY (`EmployeeID`) REFERENCES `users` (`ID`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 CREATE TABLE `punch_changelog` (
   `ID` int(11) NOT NULL AUTO_INCREMENT,
   `EmployeeID` int(11) NOT NULL,

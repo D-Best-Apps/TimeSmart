@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../auth/db.php';
+require_once __DIR__ . '/../functions/time_off_hours.php';
 
 if (!isset($_SESSION['admin'])) {
     header("Location: login.php");
@@ -105,26 +106,68 @@ foreach ($rows as $row) {
     $employeeWeeklyHours[$empID][$weekStart] += $row['DecimalHours'];
 }
 
-// Accurate total regular/overtime
+// Accurate total regular/overtime (grand totals) + per-employee clocked/OT
 $totalRegular = 0;
 $totalOvertime = 0;
+$perEmpClocked = [];
+$perEmpOT = [];
 
-foreach ($employeeWeeklyHours as $weeks) {
+foreach ($employeeWeeklyHours as $empID2 => $weeks) {
     foreach ($weeks as $hours) {
-        $totalRegular += min($hours, 40);
+        $totalRegular  += min($hours, 40);
         $totalOvertime += max($hours - 40, 0);
+        $perEmpClocked[$empID2] = ($perEmpClocked[$empID2] ?? 0) + $hours;
+        $perEmpOT[$empID2]      = ($perEmpOT[$empID2]      ?? 0) + max($hours - 40, 0);
     }
 }
 $totalHoursDecimal = $totalRegular + $totalOvertime;
 
-// Per-employee totals
-$totalsPerEmployee = [];
-if (empty($employeeID)) {
-    foreach ($rows as $row) {
-        $name = $row['FirstName'] . ' ' . $row['LastName'];
-        $totalsPerEmployee[$name] = ($totalsPerEmployee[$name] ?? 0) + $row['DecimalHours'];
+// Approved Sick/PTO totals per employee within the period
+$timeOffByEmp = timeOffTotalsByEmployee(
+    $conn,
+    $startDate,
+    $endDate,
+    $employeeID !== '' ? (int) $employeeID : null
+);
+
+// Build a unified per-employee total set: any employee with clocked hours OR approved time-off in the period
+$perEmpNames = [];
+foreach ($rows as $row) {
+    $perEmpNames[$row['EmployeeID']] = $row['FirstName'] . ' ' . $row['LastName'];
+}
+foreach ($timeOffByEmp as $eid => $_) {
+    if (!isset($perEmpNames[$eid])) {
+        $nameStmt = $conn->prepare("SELECT FirstName, LastName FROM users WHERE ID = ?");
+        $nameStmt->bind_param("i", $eid);
+        $nameStmt->execute();
+        if ($u = $nameStmt->get_result()->fetch_assoc()) {
+            $perEmpNames[$eid] = $u['FirstName'] . ' ' . $u['LastName'];
+        }
     }
 }
+
+$perEmpRows = [];
+foreach ($perEmpNames as $eid => $name) {
+    $clocked  = $perEmpClocked[$eid] ?? 0;
+    $ot       = $perEmpOT[$eid]      ?? 0;
+    $sick     = $timeOffByEmp[$eid]['Sick'] ?? 0;
+    $vacation = $timeOffByEmp[$eid]['PTO']  ?? 0;
+    $perEmpRows[] = [
+        'Name'     => $name,
+        'Clocked'  => $clocked,
+        'OT'       => $ot,
+        'Sick'     => $sick,
+        'Vacation' => $vacation,
+        'Grand'    => $clocked + $sick + $vacation,
+    ];
+}
+usort($perEmpRows, fn($a, $b) => strcasecmp($a['Name'], $b['Name']));
+
+$grandClocked  = array_sum(array_column($perEmpRows, 'Clocked'));
+$grandOT       = array_sum(array_column($perEmpRows, 'OT'));
+$grandSick     = array_sum(array_column($perEmpRows, 'Sick'));
+$grandVacation = array_sum(array_column($perEmpRows, 'Vacation'));
+$grandTotal    = array_sum(array_column($perEmpRows, 'Grand'));
 $pageTitle = "Summary Reports";
 $extraCSS = ["https://cdn.jsdelivr.net/npm/litepicker/dist/css/litepicker.css", "../css/summary.css"];
 require_once 'header.php';
@@ -220,15 +263,40 @@ require_once 'header.php';
             </tr>
         </table>
 
-        <?php if (empty($employeeID) && count($totalsPerEmployee)): ?>
-            <div class="per-employee-summary">
-                <h3>Per Employee Total</h3>
-                <ul>
-                    <?php foreach ($totalsPerEmployee as $name => $total): ?>
-                        <li><strong><?= htmlspecialchars($name) ?></strong>: <?= number_format($total, 2) ?> hrs (<?= decimalToHM($total) ?>)</li>
+        <?php if (count($perEmpRows)): ?>
+            <h3 style="margin-top:1.5rem;">Per Employee Total</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Employee</th>
+                        <th>Clocked</th>
+                        <th>OT</th>
+                        <th>Sick</th>
+                        <th>Vacation</th>
+                        <th>Grand Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($perEmpRows as $r): ?>
+                        <tr>
+                            <td><?= htmlspecialchars($r['Name']) ?></td>
+                            <td><?= decimalToHM($r['Clocked']) ?></td>
+                            <td><?= decimalToHM($r['OT']) ?></td>
+                            <td><?= decimalToHM($r['Sick']) ?></td>
+                            <td><?= decimalToHM($r['Vacation']) ?></td>
+                            <td><strong><?= decimalToHM($r['Grand']) ?></strong></td>
+                        </tr>
                     <?php endforeach; ?>
-                </ul>
-            </div>
+                    <tr class="summary-total">
+                        <td>Total</td>
+                        <td><?= decimalToHM($grandClocked) ?></td>
+                        <td><?= decimalToHM($grandOT) ?></td>
+                        <td><?= decimalToHM($grandSick) ?></td>
+                        <td><?= decimalToHM($grandVacation) ?></td>
+                        <td><strong><?= decimalToHM($grandTotal) ?></strong></td>
+                    </tr>
+                </tbody>
+            </table>
         <?php endif; ?>
 
         <div class="summary-controls">

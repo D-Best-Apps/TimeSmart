@@ -5,6 +5,7 @@ error_reporting(E_ALL);
 
 require_once '../auth/db.php';
 require_once __DIR__ . '/tcpdf/tcpdf.php';
+require_once __DIR__ . '/../functions/time_off_hours.php';
 
 $start = $_POST['start'] ?? '';
 $end = $_POST['end'] ?? '';
@@ -17,7 +18,6 @@ if (!$start || !$end) {
     exit;
 }
 
-// Helper to convert HH:MM:SS to decimal and round
 function hmsToDecimal($time, $rounding = 0) {
     list($h, $m, $s) = explode(':', $time);
     $minutes = $h * 60 + $m + ($s / 60);
@@ -32,6 +32,11 @@ function decimalToHM($decimalHours) {
     $h = intdiv($totalMinutes, 60);
     $m = $totalMinutes % 60;
     return sprintf('%d:%02d', $h, $m);
+}
+
+function fmtTime($t) {
+    if (!$t || $t === '00:00:00') return '&mdash;';
+    return date('g:i a', strtotime($t));
 }
 
 // Fetch punches
@@ -60,75 +65,161 @@ $stmt->bind_param($types, ...$params);
 $stmt->execute();
 $result = $stmt->get_result();
 
-// Organize rows
+// Organize rows by employee
 $grouped = [];
-$totals = [];
-
 while ($row = $result->fetch_assoc()) {
-    $employeeKey = $row['EmployeeID'];
-    $rounded = hmsToDecimal($row['TotalHours'], $rounding);
-    $row['RoundedHours'] = $rounded;
-    $grouped[$employeeKey]['name'] = $row['FirstName'] . ' ' . $row['LastName'];
-    $grouped[$employeeKey]['rows'][] = $row;
-    $totals[$employeeKey] = ($totals[$employeeKey] ?? 0) + $rounded;
+    $eid = (int) $row['EmployeeID'];
+    $row['RoundedHours'] = hmsToDecimal($row['TotalHours'], $rounding);
+    if (!isset($grouped[$eid])) {
+        $grouped[$eid] = ['name' => $row['FirstName'] . ' ' . $row['LastName'], 'rows' => []];
+    }
+    $grouped[$eid]['rows'][] = $row;
 }
 
-// PDF Setup
+// Per-employee weekly OT + clocked
+$perEmpClocked = [];
+$perEmpOT = [];
+foreach ($grouped as $eid => $data) {
+    $weekTotals = [];
+    foreach ($data['rows'] as $r) {
+        $d = new DateTime($r['Date']);
+        $weekStart = (clone $d)->modify('monday this week')->format('Y-m-d');
+        $weekTotals[$weekStart] = ($weekTotals[$weekStart] ?? 0) + $r['RoundedHours'];
+    }
+    $clocked = 0; $ot = 0;
+    foreach ($weekTotals as $hrs) {
+        $clocked += $hrs;
+        $ot      += max(0, $hrs - 40);
+    }
+    $perEmpClocked[$eid] = $clocked;
+    $perEmpOT[$eid]      = $ot;
+}
+
+// Approved time-off in the period
+$timeOffTotals    = timeOffTotalsByEmployee($conn, $start, $end, !empty($emp) ? (int)$emp : null);
+$timeOffRequests  = fetchApprovedTimeOff   ($conn, $start, $end, !empty($emp) ? (int)$emp : null);
+$timeOffByEmpFull = [];
+foreach ($timeOffRequests as $req) {
+    $timeOffByEmpFull[(int)$req['EmployeeID']][] = $req;
+}
+
+// Ensure time-off-only employees appear in $grouped
+foreach (array_keys($timeOffTotals) as $eid) {
+    if (!isset($grouped[$eid])) {
+        $nameStmt = $conn->prepare("SELECT FirstName, LastName FROM users WHERE ID = ?");
+        $nameStmt->bind_param("i", $eid);
+        $nameStmt->execute();
+        if ($u = $nameStmt->get_result()->fetch_assoc()) {
+            $grouped[$eid] = ['name' => $u['FirstName'] . ' ' . $u['LastName'], 'rows' => []];
+        }
+    }
+}
+
+// PDF setup
 $pdf = new TCPDF();
 $pdf->SetCreator('TimeClock System');
 $pdf->SetAuthor('D-Best Technologies');
 $pdf->SetTitle('Payroll Summary Report');
 $pdf->SetMargins(15, 15, 15);
-$pdf->SetFont('helvetica', '', 11);
+$pdf->SetFont('helvetica', '', 10);
 
-// Per-employee total section (only when "All" employees was selected)
+// Cover page: per-employee summary (only when "All" was selected)
 $showSummary = empty($emp) && count($grouped) > 0;
 if ($showSummary) {
     $pdf->AddPage();
 
     $summaryList = [];
-    foreach ($grouped as $empId => $data) {
-        $summaryList[] = ['name' => $data['name'], 'total' => $totals[$empId]];
+    foreach ($grouped as $eid => $data) {
+        $clocked  = $perEmpClocked[$eid] ?? 0;
+        $ot       = $perEmpOT[$eid]      ?? 0;
+        $sick     = $timeOffTotals[$eid]['Sick'] ?? 0;
+        $vacation = $timeOffTotals[$eid]['PTO']  ?? 0;
+        $summaryList[] = [
+            'name'     => $data['name'],
+            'clocked'  => $clocked,
+            'ot'       => $ot,
+            'sick'     => $sick,
+            'vacation' => $vacation,
+            'grand'    => $clocked + $sick + $vacation,
+        ];
     }
     usort($summaryList, fn($a, $b) => strcasecmp($a['name'], $b['name']));
-    $grandTotal = array_sum($totals);
 
-    $summaryHtml = '<h2 style="text-align:center; color:#0078D7;">Payroll Summary Report</h2>';
+    $gClocked  = array_sum(array_column($summaryList, 'clocked'));
+    $gOT       = array_sum(array_column($summaryList, 'ot'));
+    $gSick     = array_sum(array_column($summaryList, 'sick'));
+    $gVacation = array_sum(array_column($summaryList, 'vacation'));
+    $gGrand    = array_sum(array_column($summaryList, 'grand'));
+
+    $summaryHtml  = '<h2 style="text-align:center; color:#0078D7;">Payroll Summary Report</h2>';
     $summaryHtml .= "<p style='text-align:center;'><strong>Date Range:</strong> "
                   . date("m/d/Y", strtotime($start)) . " to " . date("m/d/Y", strtotime($end)) . "</p>";
     $summaryHtml .= '<h3>Per Employee Total</h3>';
-    $summaryHtml .= '<table border="1" cellpadding="6" cellspacing="0" style="width: 100%; border-collapse: collapse;">
+    $summaryHtml .= '<table border="1" cellpadding="5" cellspacing="0" style="width: 100%; border-collapse: collapse;">
                         <thead style="background-color: #e6f0ff;">
                             <tr>
                                 <th><b>Employee</b></th>
-                                <th><b>Total Hours</b></th>
-                                <th><b>Hours (H:MM)</b></th>
+                                <th><b>Clocked</b></th>
+                                <th><b>OT</b></th>
+                                <th><b>Sick</b></th>
+                                <th><b>Vacation</b></th>
+                                <th><b>Grand Total</b></th>
                             </tr>
                         </thead>
                         <tbody>';
     foreach ($summaryList as $item) {
         $summaryHtml .= "<tr>
                             <td>" . htmlspecialchars($item['name']) . "</td>
-                            <td style='text-align:right;'>" . number_format($item['total'], 2) . "</td>
-                            <td style='text-align:right;'>" . decimalToHM($item['total']) . "</td>
+                            <td style='text-align:right;'>" . decimalToHM($item['clocked']) . "</td>
+                            <td style='text-align:right;'>" . decimalToHM($item['ot']) . "</td>
+                            <td style='text-align:right;'>" . decimalToHM($item['sick']) . "</td>
+                            <td style='text-align:right;'>" . decimalToHM($item['vacation']) . "</td>
+                            <td style='text-align:right;'><b>" . decimalToHM($item['grand']) . "</b></td>
                          </tr>";
     }
     $summaryHtml .= "<tr style='font-weight:bold; background-color:#f1f1f1;'>
                         <td>Grand Total</td>
-                        <td style='text-align:right;'>" . number_format($grandTotal, 2) . "</td>
-                        <td style='text-align:right;'>" . decimalToHM($grandTotal) . "</td>
+                        <td style='text-align:right;'>" . decimalToHM($gClocked) . "</td>
+                        <td style='text-align:right;'>" . decimalToHM($gOT) . "</td>
+                        <td style='text-align:right;'>" . decimalToHM($gSick) . "</td>
+                        <td style='text-align:right;'>" . decimalToHM($gVacation) . "</td>
+                        <td style='text-align:right;'>" . decimalToHM($gGrand) . "</td>
                      </tr>";
     $summaryHtml .= '</tbody></table>';
 
     $pdf->writeHTML($summaryHtml, true, false, true, false, '');
 }
 
-// Page for each user if requested
+// Per-employee detail pages
 $first = true;
-foreach ($grouped as $empId => $data) {
+foreach ($grouped as $eid => $data) {
+    // Build merged rows: clocked punches + approved time-off, sorted by date
+    $merged = [];
+    foreach ($data['rows'] as $r) {
+        $merged[] = [
+            'Date'   => $r['Date'],
+            'Type'   => 'Punch',
+            'In'     => $r['TimeIN'],
+            'Out'    => $r['TimeOUT'],
+            'Hours'  => $r['RoundedHours'],
+        ];
+    }
+    foreach ($timeOffByEmpFull[$eid] ?? [] as $req) {
+        foreach (expandTimeOffToDays($req, $start, $end) as $dr) {
+            $merged[] = [
+                'Date'  => $dr['Date'],
+                'Type'  => $dr['Category'] === 'Sick' ? 'Sick' : 'Vacation',
+                'In'    => $dr['StartTime'],
+                'Out'   => $dr['EndTime'],
+                'Hours' => $dr['Hours'],
+            ];
+        }
+    }
+    if (empty($merged)) continue;
+
+    usort($merged, fn($a, $b) => strcmp($a['Date'], $b['Date']) ?: strcmp($a['Type'], $b['Type']));
+
     if ($first) {
-        // If we already added a summary page and pages are NOT separated, continue on it.
-        // Otherwise (no summary, or separatePages on), add a fresh page.
         if (!$showSummary || $separatePages) {
             $pdf->AddPage();
         }
@@ -137,50 +228,60 @@ foreach ($grouped as $empId => $data) {
         $pdf->AddPage();
     }
 
-    $pdf->SetFont('helvetica', '', 11);
     $name = htmlspecialchars($data['name']);
-    $html = '<h2 style="text-align:center; color:#0078D7;">Payroll Summary Report</h2>';
-    $html .= "<p><strong>Employee:</strong> $name<br>";
+    $clocked  = $perEmpClocked[$eid] ?? 0;
+    $ot       = $perEmpOT[$eid]      ?? 0;
+    $sick     = $timeOffTotals[$eid]['Sick'] ?? 0;
+    $vacation = $timeOffTotals[$eid]['PTO']  ?? 0;
+    $grand    = $clocked + $sick + $vacation;
+
+    $html  = '<h2 style="text-align:center; color:#0078D7;">Payroll Summary Report</h2>';
+    $html .= "<p><strong>Employee:</strong> {$name}<br>";
     $html .= "<strong>Date Range:</strong> " . date("m/d/Y", strtotime($start)) . " to " . date("m/d/Y", strtotime($end)) . "</p>";
 
-    $html .= '<table border="1" cellpadding="6" cellspacing="0" style="width: 100%; border-collapse: collapse;">
+    $html .= '<table border="1" cellpadding="5" cellspacing="0" style="width: 100%; border-collapse: collapse;">
                 <thead style="background-color: #e6f0ff;">
                     <tr>
                         <th><b>Date</b></th>
-                        <th><b>Time In</b></th>
-                        <th><b>Time Out</b></th>
-                        <th><b>Lunch Start</b></th>
-                        <th><b>Lunch End</b></th>
-                        <th><b>Rounded Hours</b></th>
-                        <th><b>Hours (H:MM)</b></th>
+                        <th><b>Type</b></th>
+                        <th><b>In</b></th>
+                        <th><b>Out</b></th>
+                        <th><b>Hours</b></th>
                     </tr>
                 </thead>
                 <tbody>';
+    foreach ($merged as $row) {
+        $rowBg = '';
+        if ($row['Type'] === 'Sick')     $rowBg = " style='background-color:#fdecea;'";
+        if ($row['Type'] === 'Vacation') $rowBg = " style='background-color:#e8f1fc;'";
 
-    foreach ($data['rows'] as $r) {
-        $date = date("m/d/Y", strtotime($r['Date']));
-        $html .= "<tr>
-                    <td>$date</td>
-                    <td>{$r['TimeIN']}</td>
-                    <td>{$r['TimeOUT']}</td>
-                    <td>{$r['LunchStart']}</td>
-                    <td>{$r['LunchEnd']}</td>
-                    <td style='text-align:right;'>" . number_format($r['RoundedHours'], 2) . "</td>
-                    <td style='text-align:right;'>" . decimalToHM($r['RoundedHours']) . "</td>
+        $html .= "<tr{$rowBg}>
+                    <td>" . date("m/d/Y", strtotime($row['Date'])) . "</td>
+                    <td>" . htmlspecialchars($row['Type']) . "</td>
+                    <td>" . fmtTime($row['In'])  . "</td>
+                    <td>" . fmtTime($row['Out']) . "</td>
+                    <td style='text-align:right;'>" . decimalToHM($row['Hours']) . "</td>
                   </tr>";
     }
-
-    $html .= "<tr style='font-weight:bold; background-color:#f1f1f1;'>
-                <td colspan='5'>Total Hours</td>
-                <td style='text-align:right;'>" . number_format($totals[$empId], 2) . "</td>
-                <td style='text-align:right;'>" . decimalToHM($totals[$empId]) . "</td>
-              </tr>";
-
     $html .= '</tbody></table>';
+
+    // Summary block beneath the detail table
+    $html .= "<table border='1' cellpadding='5' cellspacing='0' style='width:100%; border-collapse:collapse; margin-top:10px;'>
+                <tr style='background-color:#e6f0ff; font-weight:bold;'>
+                    <td>Clocked</td><td>OT</td><td>Sick</td><td>Vacation</td><td>Grand Total</td>
+                </tr>
+                <tr>
+                    <td style='text-align:right;'>" . decimalToHM($clocked)  . "</td>
+                    <td style='text-align:right;'>" . decimalToHM($ot)       . "</td>
+                    <td style='text-align:right;'>" . decimalToHM($sick)     . "</td>
+                    <td style='text-align:right;'>" . decimalToHM($vacation) . "</td>
+                    <td style='text-align:right;'><b>" . decimalToHM($grand) . "</b></td>
+                </tr>
+              </table>";
+
     $pdf->writeHTML($html, true, false, true, false, '');
 }
 
-// Clean buffer and output PDF
 while (ob_get_level()) ob_end_clean();
 $pdf->Output('payroll_summary.pdf', 'D');
 exit;

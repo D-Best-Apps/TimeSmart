@@ -1,5 +1,6 @@
 <?php
 require_once 'header.php';
+require_once __DIR__ . '/../functions/time_off_hours.php';
 
 // Display status messages
 $statusMessage = '';
@@ -33,10 +34,71 @@ $punches = [];
 while ($row = $result->fetch_assoc()) {
     $punches[] = $row;
 }
+
+// Approved time-off overlapping this date range
+$approvedTimeOff = fetchApprovedTimeOff($conn, $start, $end, (int) $empID);
+$timeOffSick = 0; $timeOffPTO = 0;
+foreach ($approvedTimeOff as $req) {
+    $hrs = timeOffHoursInPeriod($req, $start, $end);
+    if ($req['Category'] === 'Sick') $timeOffSick += $hrs;
+    else                              $timeOffPTO  += $hrs;
+}
+function tsFmtTime(?string $t): string {
+    if (!$t) return '';
+    return date('g:i a', strtotime($t));
+}
+function tsFmtHours(float $h): string {
+    $m = (int) round($h * 60);
+    return sprintf('%d:%02d', intdiv($m, 60), $m % 60);
+}
+function tsFmtRange(string $s, string $e): string {
+    if ($s === $e) return date('m/d/Y', strtotime($s));
+    return date('m/d/Y', strtotime($s)) . ' &ndash; ' . date('m/d/Y', strtotime($e));
+}
 ?>
 <link rel="stylesheet" href="../css/user_timesheet.css">
 
 <?= $statusMessage ?>
+
+<?php if (!empty($approvedTimeOff)): ?>
+  <div class="card" style="background-color:#e8f1fc; border-left:4px solid #0078D7; padding:0.75rem 1rem; margin-bottom:1rem;">
+    <h3 style="margin-top:0;">Approved Time Off for this period</h3>
+    <p style="margin:0.25rem 0;">
+      <strong>Sick:</strong> <?= tsFmtHours($timeOffSick) ?>
+      &nbsp;&middot;&nbsp;
+      <strong>PTO/Vacation:</strong> <?= tsFmtHours($timeOffPTO) ?>
+    </p>
+    <table style="width:100%; border-collapse:collapse; margin-top:0.5rem;">
+      <thead>
+        <tr style="background-color:#d6e6f7;">
+          <th style="text-align:left; padding:4px 6px; border:1px solid #b8d4ee;">Dates</th>
+          <th style="text-align:left; padding:4px 6px; border:1px solid #b8d4ee;">Category</th>
+          <th style="text-align:left; padding:4px 6px; border:1px solid #b8d4ee;">Times</th>
+          <th style="text-align:right; padding:4px 6px; border:1px solid #b8d4ee;">Hours</th>
+          <th style="text-align:left; padding:4px 6px; border:1px solid #b8d4ee;">Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <?php foreach ($approvedTimeOff as $req): ?>
+          <?php
+            $reqHours = timeOffHoursInPeriod($req, $start, $end);
+            $timesLabel = ($req['StartTime'] && $req['EndTime'])
+                ? tsFmtTime($req['StartTime']) . ' &ndash; ' . tsFmtTime($req['EndTime'])
+                : 'all day';
+            $catLabel = $req['Category'] === 'Sick' ? 'Sick' : 'PTO/Vacation';
+          ?>
+          <tr>
+            <td style="padding:4px 6px; border:1px solid #b8d4ee;"><?= tsFmtRange($req['StartDate'], $req['EndDate']) ?></td>
+            <td style="padding:4px 6px; border:1px solid #b8d4ee;"><?= htmlspecialchars($catLabel) ?></td>
+            <td style="padding:4px 6px; border:1px solid #b8d4ee;"><?= $timesLabel ?></td>
+            <td style="padding:4px 6px; border:1px solid #b8d4ee; text-align:right;"><?= tsFmtHours($reqHours) ?></td>
+            <td style="padding:4px 6px; border:1px solid #b8d4ee;"><?= nl2br(htmlspecialchars($req['Notes'] ?? '')) ?: '&mdash;' ?></td>
+          </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+  </div>
+<?php endif; ?>
 
     <h2>Submit Time Changes for Approval</h2>
 

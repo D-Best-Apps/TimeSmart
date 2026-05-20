@@ -50,6 +50,27 @@ while ($row = $result->fetch_assoc()) {
         }
     }
 }
+
+// Pending time-off requests
+$torStmt = $conn->prepare("
+    SELECT tor.*, u.FirstName, u.LastName
+      FROM time_off_requests tor
+      JOIN users u ON u.ID = tor.EmployeeID
+     WHERE tor.Status = 'Pending'
+     ORDER BY tor.SubmittedAt ASC
+");
+$torStmt->execute();
+$timeOffRequests = $torStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+
+function formatTorDateRange(string $start, string $end): string {
+    if ($start === $end) return date('m/d/Y', strtotime($start));
+    return date('m/d/Y', strtotime($start)) . ' – ' . date('m/d/Y', strtotime($end));
+}
+function formatTorTimeRange(?string $start, ?string $end): string {
+    if (!$start || !$end) return 'all day';
+    return date('g:i a', strtotime($start)) . ' – ' . date('g:i a', strtotime($end));
+}
+
 $pageTitle = "Pending Approvals";
 require_once 'header.php';
 ?>
@@ -69,6 +90,7 @@ require_once 'header.php';
 </nav>
 
 <div class="dashboard-container">
+    <h2 style="margin-top:0;">Timesheet Edit Requests</h2>
     <?php if (count($edits) === 0): ?>
         <p class="no-edits">✅ No pending time edits to review at the moment.</p>
     <?php else: ?>
@@ -99,6 +121,47 @@ require_once 'header.php';
                             <td class="action-buttons">
                                 <button type="submit" class="approve-btn" name="action[<?= $edit['ID'] ?>][<?= $edit['Field'] ?>]" value="approve">Approve</button>
                                 <button type="submit" class="reject-btn" name="action[<?= $edit['ID'] ?>][<?= $edit['Field'] ?>]" value="reject">Reject</button>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </form>
+    <?php endif; ?>
+
+    <h2 style="margin-top:2rem;">Time-Off Requests</h2>
+    <?php if (count($timeOffRequests) === 0): ?>
+        <p class="no-edits">✅ No pending time-off requests at the moment.</p>
+    <?php else: ?>
+        <form method="POST" action="process_time_off.php">
+            <table class="approval-table">
+                <thead>
+                    <tr>
+                        <th>Submitted</th>
+                        <th>Employee</th>
+                        <th>Category</th>
+                        <th>Dates</th>
+                        <th>Times</th>
+                        <th>Notes</th>
+                        <th>Reviewer Note</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($timeOffRequests as $tor): ?>
+                        <tr>
+                            <td><?= htmlspecialchars(date('m/d/Y', strtotime($tor['SubmittedAt']))) ?></td>
+                            <td><?= htmlspecialchars($tor['FirstName'] . ' ' . $tor['LastName']) ?></td>
+                            <td><strong><?= htmlspecialchars($tor['Category']) ?></strong></td>
+                            <td><?= formatTorDateRange($tor['StartDate'], $tor['EndDate']) ?></td>
+                            <td><?= formatTorTimeRange($tor['StartTime'], $tor['EndTime']) ?></td>
+                            <td class="note-box"><?= nl2br(htmlspecialchars($tor['Notes'] ?? '')) ?: '-' ?></td>
+                            <td>
+                                <input type="text" name="review_note[<?= (int) $tor['ID'] ?>]" maxlength="500" placeholder="Optional" style="width:100%; padding:4px;">
+                            </td>
+                            <td class="action-buttons">
+                                <button type="submit" class="approve-btn" name="action[<?= (int) $tor['ID'] ?>]" value="approve">Approve</button>
+                                <button type="submit" class="reject-btn"  name="action[<?= (int) $tor['ID'] ?>]" value="reject">Reject</button>
                             </td>
                         </tr>
                     <?php endforeach; ?>
