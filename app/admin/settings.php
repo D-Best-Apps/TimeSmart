@@ -2,6 +2,7 @@
 session_start();
 require_once '../auth/db.php';
 require_once '../vendor/autoload.php'; // For PHPMailer
+require_once __DIR__ . '/../functions/m365_calendar.php';
 
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
@@ -58,6 +59,18 @@ if (isset($settings['mail_password']) && !empty($settings['mail_password'])) {
     $settings['mail_password_display'] = '';
 }
 
+// Decrypt M365 client secret for editing
+$settings['m365_client_secret_display'] = '';
+if (!empty($settings['m365_client_secret'])) {
+    $dec = decrypt_data($settings['m365_client_secret']);
+    if ($dec !== false) {
+        $settings['m365_client_secret_display'] = $dec;
+    } else {
+        $settings['m365_client_secret_display'] = 'Error decrypting M365 secret';
+        error_log("Error decrypting m365_client_secret from DB in admin/settings.php");
+    }
+}
+
 
 $message = '';
 
@@ -65,7 +78,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Update settings
     $settingsToUpdate = [
         'mail_server', 'mail_port', 'mail_username',
-        'mail_from_address', 'mail_from_name', 'mail_encryption', 'mail_admin_address'
+        'mail_from_address', 'mail_from_name', 'mail_encryption', 'mail_admin_address',
+        'm365_tenant_id', 'm365_client_id', 'm365_group_id', 'm365_timezone'
     ];
 
     foreach ($settingsToUpdate as $key) {
@@ -78,6 +92,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    // m365_enabled is a checkbox — store '1' or '0'
+    $m365EnabledVal = !empty($_POST['m365_enabled']) ? '1' : '0';
+    $stmt = $conn->prepare("INSERT INTO settings (SettingKey, SettingValue) VALUES (?, ?) ON DUPLICATE KEY UPDATE SettingValue = ?");
+    $key = 'm365_enabled';
+    $stmt->bind_param("sss", $key, $m365EnabledVal, $m365EnabledVal);
+    $stmt->execute();
+    $settings['m365_enabled'] = $m365EnabledVal;
+
     // Handle mail_password separately for encryption
     if (isset($_POST['mail_password']) && !empty($_POST['mail_password'])) {
         $encrypted_password = encrypt_data($_POST['mail_password']);
@@ -87,6 +109,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute();
         $settings['mail_password'] = $encrypted_password; // Update in settings array
         $settings['mail_password_display'] = $_POST['mail_password']; // Update display value
+    }
+
+    // Handle M365 client secret separately for encryption
+    if (isset($_POST['m365_client_secret']) && !empty($_POST['m365_client_secret'])) {
+        $encrypted_secret = encrypt_data($_POST['m365_client_secret']);
+        $stmt = $conn->prepare("INSERT INTO settings (SettingKey, SettingValue) VALUES (?, ?) ON DUPLICATE KEY UPDATE SettingValue = ?");
+        $key = 'm365_client_secret';
+        $stmt->bind_param("sss", $key, $encrypted_secret, $encrypted_secret);
+        $stmt->execute();
+        $settings['m365_client_secret'] = $encrypted_secret;
+        $settings['m365_client_secret_display'] = $_POST['m365_client_secret'];
     }
 
 
@@ -117,6 +150,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $message = '<div class="alert alert-success">Test email sent successfully!</div>';
         } catch (Exception $e) {
             $message = '<div class="alert alert-danger">Test email could not be sent. Mailer Error: ' . $mail->ErrorInfo . '</div>';
+        }
+    } elseif (isset($_POST['test_m365'])) {
+        $testResult = m365TestConnection($conn);
+        if ($testResult['success']) {
+            $mailLine = !empty($testResult['group_mail'])
+                ? ' (mail: ' . htmlspecialchars($testResult['group_mail']) . ')'
+                : '';
+            $message = '<div class="alert alert-success">M365 connection OK. Found group: <strong>'
+                     . htmlspecialchars($testResult['group_name']) . '</strong>' . $mailLine . '</div>';
+        } else {
+            $message = '<div class="alert alert-danger">M365 test failed: '
+                     . htmlspecialchars($testResult['error']) . '</div>';
         }
     } else {
         $message = '<div class="alert alert-success">Settings saved successfully!</div>';
@@ -169,9 +214,61 @@ require_once 'header.php';
                 <label for="mail_admin_address">Admin Email Address (for notifications):</label>
                 <input type="email" id="mail_admin_address" name="mail_admin_address" value="<?= htmlspecialchars($settings['mail_admin_address'] ?? '') ?>">
             </div>
+            <hr style="margin: 2rem 0;">
+
+            <h2 id="m365">M365 PTO Calendar Sync</h2>
+            <p style="color:#555; font-size:0.9em;">
+                When a time-off request is approved, an event is posted to the configured Microsoft 365
+                <strong>Group</strong> calendar. Requires an Azure AD app registration with the
+                <code>Group.ReadWrite.All</code> application permission (admin consent granted).
+                See <a href="../../docs/M365_SETUP.md" target="_blank">docs/M365_SETUP.md</a> for setup steps.
+            </p>
+
+            <div class="field">
+                <label>
+                    <input type="checkbox" name="m365_enabled" value="1" <?= ($settings['m365_enabled'] ?? '') === '1' ? 'checked' : '' ?>>
+                    Enable M365 calendar sync on approval
+                </label>
+            </div>
+
+            <div class="field">
+                <label for="m365_tenant_id">Tenant ID (Directory ID):</label>
+                <input type="text" id="m365_tenant_id" name="m365_tenant_id"
+                       value="<?= htmlspecialchars($settings['m365_tenant_id'] ?? '') ?>"
+                       placeholder="e.g. 11111111-2222-3333-4444-555555555555">
+            </div>
+
+            <div class="field">
+                <label for="m365_client_id">Client ID (Application ID):</label>
+                <input type="text" id="m365_client_id" name="m365_client_id"
+                       value="<?= htmlspecialchars($settings['m365_client_id'] ?? '') ?>"
+                       placeholder="from Azure App registrations">
+            </div>
+
+            <div class="field">
+                <label for="m365_client_secret">Client Secret:</label>
+                <input type="password" id="m365_client_secret" name="m365_client_secret"
+                       value="<?= htmlspecialchars($settings['m365_client_secret_display'] ?? '') ?>"
+                       placeholder="from Certificates &amp; secrets">
+            </div>
+
+            <div class="field">
+                <label for="m365_group_id">PTO Calendar Group ID:</label>
+                <input type="text" id="m365_group_id" name="m365_group_id"
+                       value="<?= htmlspecialchars($settings['m365_group_id'] ?? '') ?>"
+                       placeholder="Object ID of the M365 group whose calendar holds PTO events">
+            </div>
+
+            <div class="field">
+                <label for="m365_timezone">Calendar Time Zone (IANA):</label>
+                <input type="text" id="m365_timezone" name="m365_timezone"
+                       value="<?= htmlspecialchars($settings['m365_timezone'] ?? 'America/Chicago') ?>">
+            </div>
+
             <div class="buttons">
                 <button type="submit">Save Settings</button>
-                <button type="submit" name="test_email" value="1">Save & Send Test Email</button>
+                <button type="submit" name="test_email" value="1">Save &amp; Send Test Email</button>
+                <button type="submit" name="test_m365" value="1">Save &amp; Test M365 Connection</button>
             </div>
         </form>
     </div>

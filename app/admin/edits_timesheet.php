@@ -90,6 +90,14 @@ require_once 'header.php';
 </nav>
 
 <div class="dashboard-container">
+    <?php if (($_GET['m365_sync'] ?? '') === 'failed'): ?>
+        <div style="background-color:#fff3cd; border:1px solid #ffeeba; color:#856404; padding:0.75rem 1rem; border-radius:4px; margin-bottom:1rem;">
+            <strong>M365 calendar sync failed for one or more approvals.</strong><br>
+            <?= htmlspecialchars($_GET['details'] ?? '') ?><br>
+            <em>The approval went through. The calendar event was not created. Check <a href="settings.php#m365">M365 Settings</a> or the server error log.</em>
+        </div>
+    <?php endif; ?>
+
     <h2 style="margin-top:0;">Timesheet Edit Requests</h2>
     <?php if (count($edits) === 0): ?>
         <p class="no-edits">✅ No pending time edits to review at the moment.</p>

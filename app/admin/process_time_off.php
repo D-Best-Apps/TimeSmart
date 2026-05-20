@@ -3,6 +3,7 @@ session_start();
 require '../auth/db.php';
 require_once __DIR__ . '/../functions/check_permission.php';
 require_once __DIR__ . '/../functions/time_off_email.php';
+require_once __DIR__ . '/../functions/m365_calendar.php';
 date_default_timezone_set('America/Chicago');
 
 if (!isset($_SESSION['admin'])) {
@@ -19,6 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST' || empty($_POST['action'])) {
 $admin = $_SESSION['admin'];
 $now   = date('Y-m-d H:i:s');
 $reviewNotes = $_POST['review_note'] ?? [];
+$m365Failures = [];
 
 function formatDateRange(string $start, string $end): string {
     if ($start === $end) return date('m/d/Y', strtotime($start));
@@ -88,7 +90,34 @@ foreach ($_POST['action'] as $requestID => $action) {
 
         sendTimeOffEmail($conn, $employeeEmail, $subject, $body);
     }
+
+    // M365 PTO Calendar sync — only on approve, best-effort
+    if ($decision === 'Approved') {
+        $employeeName = trim(($req['FirstName'] ?? '') . ' ' . ($req['LastName'] ?? ''));
+        $sync = m365SyncApprovedRequest($conn, $req, $employeeName);
+
+        $eventId   = $sync['success'] ? $sync['eventId'] : null;
+        $syncState = $sync['success']
+            ? 'sent'
+            : (!empty($sync['skipped']) ? 'skipped' : 'error:' . ($sync['error'] ?? 'unknown'));
+
+        $syncUpdate = $conn->prepare("
+            UPDATE time_off_requests
+               SET M365EventId = ?, M365SyncStatus = ?, M365SyncAt = ?
+             WHERE ID = ?
+        ");
+        $syncUpdate->bind_param("sssi", $eventId, $syncState, $now, $requestID);
+        $syncUpdate->execute();
+
+        if (!$sync['success'] && empty($sync['skipped'])) {
+            $m365Failures[] = htmlspecialchars(($req['FirstName'] ?? '') . ' ' . ($req['LastName'] ?? '')) . ': ' . $sync['error'];
+        }
+    }
 }
 
-header("Location: edits_timesheet.php");
+$query = '';
+if (!empty($m365Failures)) {
+    $query = '?m365_sync=failed&details=' . urlencode(implode('; ', $m365Failures));
+}
+header("Location: edits_timesheet.php{$query}");
 exit;
