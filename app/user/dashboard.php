@@ -109,6 +109,12 @@ $editRequests = [];
 while ($row = $editResults->fetch_assoc()) {
     $editRequests[] = $row;
 }
+
+// Recent time-off requests
+$torStmt = $conn->prepare("SELECT ID, Category, StartDate, EndDate, StartTime, EndTime, Notes, Status FROM time_off_requests WHERE EmployeeID = ? ORDER BY SubmittedAt DESC LIMIT 10");
+$torStmt->bind_param("i", $empID);
+$torStmt->execute();
+$timeOffHistory = $torStmt->get_result()->fetch_all(MYSQLI_ASSOC);
 ?>
 <style>
     .status-badge {
@@ -192,6 +198,7 @@ while ($row = $editResults->fetch_assoc()) {
             </div>
 
             <button class="toggle-punch" onclick="togglePunch()">⏱ Show Punch In / Out</button>
+            <a href="time_off.php" class="toggle-punch" style="display:inline-block; text-decoration:none; background-color:#0078D7; margin-left:0.5rem;">🏖️ Request Time Off</a>
             <div class="punch-area" id="punchArea" style="display: none;">
                 <table>
                     <thead><tr><th>Type</th><th>Time</th><th>Date</th><th>Note</th></tr></thead>
@@ -295,6 +302,43 @@ while ($row = $editResults->fetch_assoc()) {
                     <?php endforeach; ?>
                 </tbody>
             </table>
+        </div>
+        <?php endif; ?>
+
+        <?php if (!empty($timeOffHistory)): ?>
+        <div class="card">
+            <h3>Your Recent Time-Off Requests</h3>
+            <table class="edit-status-table">
+                <thead><tr><th>Category</th><th>Dates</th><th>Times</th><th>Notes</th><th>Status</th></tr></thead>
+                <tbody>
+                    <?php foreach ($timeOffHistory as $tor): ?>
+                    <?php
+                        $status = strtolower($tor['Status']);
+                        $badgeClass = match ($status) {
+                            'pending'   => 'badge-pending',
+                            'approved'  => 'badge-approved',
+                            'rejected'  => 'badge-rejected',
+                            'withdrawn' => 'badge-unknown',
+                            default     => 'badge-unknown',
+                        };
+                        $dates = $tor['StartDate'] === $tor['EndDate']
+                            ? date('m/d/Y', strtotime($tor['StartDate']))
+                            : date('m/d/Y', strtotime($tor['StartDate'])) . ' – ' . date('m/d/Y', strtotime($tor['EndDate']));
+                        $times = ($tor['StartTime'] && $tor['EndTime'])
+                            ? date('g:i a', strtotime($tor['StartTime'])) . ' – ' . date('g:i a', strtotime($tor['EndTime']))
+                            : 'all day';
+                    ?>
+                    <tr>
+                        <td><?= htmlspecialchars($tor['Category']) ?></td>
+                        <td><?= $dates ?></td>
+                        <td><?= $times ?></td>
+                        <td><?= htmlspecialchars($tor['Notes'] ?? '') ?: '-' ?></td>
+                        <td><span class="status-badge <?= $badgeClass ?>"><?= ucfirst($status) ?></span></td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+            <p style="margin-top:0.5rem;"><a href="time_off.php">→ Manage time-off requests</a></p>
         </div>
         <?php endif; ?>
 <!-- Confirmation Popup -->
