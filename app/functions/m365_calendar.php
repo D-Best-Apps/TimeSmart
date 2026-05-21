@@ -26,7 +26,7 @@ function m365DecryptSecret(string $encrypted): ?string {
  */
 function m365GetConfig(mysqli $conn): ?array {
     $keys = ['m365_enabled', 'm365_tenant_id', 'm365_client_id',
-             'm365_client_secret', 'm365_group_id', 'm365_timezone'];
+             'm365_client_secret', 'm365_group_id', 'm365_calendar_mailbox', 'm365_timezone'];
     $config = [];
     foreach ($keys as $k) {
         $stmt = $conn->prepare("SELECT SettingValue FROM settings WHERE SettingKey = ? LIMIT 1");
@@ -38,8 +38,12 @@ function m365GetConfig(mysqli $conn): ?array {
     if (empty($config['m365_enabled']) || $config['m365_enabled'] === '0') {
         return null;
     }
-    foreach (['m365_tenant_id', 'm365_client_id', 'm365_client_secret', 'm365_group_id'] as $required) {
+    foreach (['m365_tenant_id', 'm365_client_id', 'm365_client_secret'] as $required) {
         if (empty($config[$required])) return null;
+    }
+    // One of these must be set — prefer the shared-mailbox path
+    if (empty($config['m365_calendar_mailbox']) && empty($config['m365_group_id'])) {
+        return null;
     }
     $secret = m365DecryptSecret($config['m365_client_secret']);
     if ($secret === null || $secret === '') return null;
@@ -171,7 +175,42 @@ function m365CreateGroupEvent(string $groupId, string $accessToken, array $event
 }
 
 /**
- * Top-level: sync an approved time-off request to the M365 group calendar.
+ * POST an event to a shared mailbox / user calendar.
+ * Returns ['success' => true, 'eventId' => string] or ['success' => false, 'error' => string].
+ */
+function m365CreateMailboxEvent(string $mailboxUpn, string $accessToken, array $eventData): array {
+    $url = "https://graph.microsoft.com/v1.0/users/" . rawurlencode($mailboxUpn) . "/calendar/events";
+    $ch  = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => json_encode($eventData),
+        CURLOPT_HTTPHEADER     => [
+            'Authorization: Bearer ' . $accessToken,
+            'Content-Type: application/json',
+        ],
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 30,
+    ]);
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $cErr     = curl_error($ch);
+    curl_close($ch);
+
+    if ($response === false) {
+        return ['success' => false, 'error' => 'cURL error: ' . $cErr];
+    }
+    $data = json_decode($response, true);
+    if ($httpCode >= 200 && $httpCode < 300 && !empty($data['id'])) {
+        return ['success' => true, 'eventId' => $data['id']];
+    }
+    $reason = $data['error']['message'] ?? "HTTP {$httpCode}";
+    return ['success' => false, 'error' => 'Create event: ' . $reason];
+}
+
+/**
+ * Top-level: sync an approved time-off request to the configured M365 calendar.
+ * Dispatches to the shared-mailbox endpoint if m365_calendar_mailbox is set
+ * (recommended path), otherwise falls back to the group calendar endpoint.
  * Returns ['success' => bool, 'eventId' => ?string, 'error' => ?string, 'skipped' => ?bool].
  * Never throws — callers must not depend on success.
  */
@@ -185,8 +224,13 @@ function m365SyncApprovedRequest(mysqli $conn, array $request, string $employeeN
         error_log("m365_calendar: token fetch failed: " . $token['error']);
         return ['success' => false, 'error' => $token['error']];
     }
-    $event  = m365BuildEvent($request, $employeeName, $config['m365_timezone']);
-    $result = m365CreateGroupEvent($config['m365_group_id'], $token['token'], $event);
+    $event = m365BuildEvent($request, $employeeName, $config['m365_timezone']);
+
+    if (!empty($config['m365_calendar_mailbox'])) {
+        $result = m365CreateMailboxEvent($config['m365_calendar_mailbox'], $token['token'], $event);
+    } else {
+        $result = m365CreateGroupEvent($config['m365_group_id'], $token['token'], $event);
+    }
     if (!$result['success']) {
         error_log("m365_calendar: create event failed: " . $result['error']);
     }
@@ -195,7 +239,8 @@ function m365SyncApprovedRequest(mysqli $conn, array $request, string $employeeN
 
 /**
  * Used by the settings page "Test Connection" button.
- * Fetches a token and reads the group to confirm the ID is valid + accessible.
+ * Probes the configured calendar (shared mailbox if set, otherwise group)
+ * with a read call to confirm tokens + permissions + scope are aligned.
  */
 function m365TestConnection(mysqli $conn): array {
     $config = m365GetConfig($conn);
@@ -206,6 +251,33 @@ function m365TestConnection(mysqli $conn): array {
     if (!$token['success']) {
         return ['success' => false, 'error' => $token['error']];
     }
+
+    if (!empty($config['m365_calendar_mailbox'])) {
+        $upn = $config['m365_calendar_mailbox'];
+        $url = "https://graph.microsoft.com/v1.0/users/" . rawurlencode($upn) . '/calendar?$select=id,name,owner';
+        $ch  = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_HTTPHEADER     => ['Authorization: Bearer ' . $token['token']],
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 30,
+        ]);
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        $data = json_decode($response ?: '[]', true);
+        if ($httpCode !== 200) {
+            $reason = $data['error']['message'] ?? "HTTP {$httpCode}";
+            return ['success' => false, 'error' => 'Mailbox calendar lookup failed: ' . $reason];
+        }
+        return [
+            'success'    => true,
+            'group_name' => $data['name'] ?? '(calendar)',
+            'group_mail' => $data['owner']['address'] ?? $upn,
+        ];
+    }
+
+    // Fallback: group calendar
     $url = "https://graph.microsoft.com/v1.0/groups/" . rawurlencode($config['m365_group_id']) . '?$select=displayName,id,mail';
     $ch  = curl_init($url);
     curl_setopt_array($ch, [

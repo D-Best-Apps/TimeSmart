@@ -90,7 +90,7 @@ CREATE TABLE `time_off_requests` (
   `ReviewedAt` datetime DEFAULT NULL,
   `ReviewedBy` varchar(100) DEFAULT NULL,
   `ReviewNote` varchar(500) DEFAULT NULL,
-  `M365EventId` varchar(128) DEFAULT NULL,
+  `M365EventId` varchar(255) DEFAULT NULL,
   `M365SyncStatus` varchar(255) DEFAULT NULL,
   `M365SyncAt` datetime DEFAULT NULL,
   PRIMARY KEY (`ID`),

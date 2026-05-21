@@ -79,7 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $settingsToUpdate = [
         'mail_server', 'mail_port', 'mail_username',
         'mail_from_address', 'mail_from_name', 'mail_encryption', 'mail_admin_address',
-        'm365_tenant_id', 'm365_client_id', 'm365_group_id', 'm365_timezone'
+        'm365_tenant_id', 'm365_client_id', 'm365_group_id', 'm365_calendar_mailbox', 'm365_timezone'
     ];
 
     foreach ($settingsToUpdate as $key) {
@@ -253,10 +253,24 @@ require_once 'header.php';
             </div>
 
             <div class="field">
-                <label for="m365_group_id">PTO Calendar Group ID:</label>
+                <label for="m365_calendar_mailbox">PTO Calendar Mailbox (UPN) <em>— recommended</em>:</label>
+                <input type="text" id="m365_calendar_mailbox" name="m365_calendar_mailbox"
+                       value="<?= htmlspecialchars($settings['m365_calendar_mailbox'] ?? '') ?>"
+                       placeholder="e.g. ptocalendar@yourdomain.com">
+                <p style="color:#666; font-size:0.85em; margin:0.25rem 0 0;">
+                    The shared mailbox whose calendar receives PTO events. <strong>Use this OR the Group ID below — not both.</strong>
+                    Shared mailbox is the recommended path; Unified Group calendars often fail with app-only auth.
+                </p>
+            </div>
+
+            <div class="field">
+                <label for="m365_group_id">PTO Calendar Group ID <em>— legacy fallback</em>:</label>
                 <input type="text" id="m365_group_id" name="m365_group_id"
                        value="<?= htmlspecialchars($settings['m365_group_id'] ?? '') ?>"
                        placeholder="Object ID of the M365 group whose calendar holds PTO events">
+                <p style="color:#666; font-size:0.85em; margin:0.25rem 0 0;">
+                    Only used if the Mailbox UPN above is empty.
+                </p>
             </div>
 
             <div class="field">
