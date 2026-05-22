@@ -129,9 +129,7 @@ if (empty($byEmployee)) {
                         <tr>
                             <th><b>Week Ending</b></th>
                             <th><b>Total Hours</b></th>
-                            <th><b>Total (H:MM)</b></th>
                             <th><b>Overtime</b></th>
-                            <th><b>OT (H:MM)</b></th>
                         </tr>
                     </thead>
                     <tbody>';
@@ -141,17 +139,13 @@ if (empty($byEmployee)) {
             $rowBg = $ot > 0 ? "style='background-color:#fff3cd;'" : '';
             $html .= "<tr $rowBg>
                         <td>" . date('m/d/Y', strtotime($weekEnd)) . "</td>
-                        <td style='text-align:right;'>" . number_format($hours, 2) . "</td>
                         <td style='text-align:right;'>" . decimalToHM($hours) . "</td>
-                        <td style='text-align:right;'>" . number_format($ot, 2) . "</td>
                         <td style='text-align:right;'>" . decimalToHM($ot) . "</td>
                       </tr>";
         }
         $html .= "<tr style='font-weight:bold; background-color:#f1f1f1;'>
                     <td>Period Total</td>
-                    <td style='text-align:right;'>" . number_format($data['totalHours'], 2) . "</td>
                     <td style='text-align:right;'>" . decimalToHM($data['totalHours']) . "</td>
-                    <td style='text-align:right;'>" . number_format($data['totalOT'], 2) . "</td>
                     <td style='text-align:right;'>" . decimalToHM($data['totalOT']) . "</td>
                   </tr>";
         $html .= '</tbody></table>';
@@ -176,26 +170,20 @@ if (empty($byEmployee)) {
                         <tr>
                             <th><b>Employee</b></th>
                             <th><b>Total Hours</b></th>
-                            <th><b>Total (H:MM)</b></th>
                             <th><b>Overtime</b></th>
-                            <th><b>OT (H:MM)</b></th>
                         </tr>
                     </thead>
                     <tbody>';
         foreach ($summaryList as $item) {
             $html .= "<tr>
                         <td>" . htmlspecialchars($item['name']) . "</td>
-                        <td style='text-align:right;'>" . number_format($item['totalHours'], 2) . "</td>
                         <td style='text-align:right;'>" . decimalToHM($item['totalHours']) . "</td>
-                        <td style='text-align:right;'>" . number_format($item['totalOT'], 2) . "</td>
                         <td style='text-align:right;'>" . decimalToHM($item['totalOT']) . "</td>
                       </tr>";
         }
         $html .= "<tr style='font-weight:bold; background-color:#d9edf7;'>
                     <td>Grand Total</td>
-                    <td style='text-align:right;'>" . number_format($grandTotalHours, 2) . "</td>
                     <td style='text-align:right;'>" . decimalToHM($grandTotalHours) . "</td>
-                    <td style='text-align:right;'>" . number_format($grandTotalOT, 2) . "</td>
                     <td style='text-align:right;'>" . decimalToHM($grandTotalOT) . "</td>
                   </tr>";
         $html .= '</tbody></table>';

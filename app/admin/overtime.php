@@ -179,19 +179,17 @@ require_once 'header.php';
                     <th>Employee</th>
                     <th>Week Ending</th>
                     <th>Total Hours</th>
-                    <th>Total (H:MM)</th>
                     <th>Overtime</th>
-                    <th>OT (H:MM)</th>
                 </tr>
             </thead>
             <tbody>
             <?php if (empty($byEmployee)): ?>
-                <tr><td colspan="6">No time punches found for the selected period.</td></tr>
+                <tr><td colspan="4">No time punches found for the selected period.</td></tr>
             <?php else: ?>
                 <?php $isFirstEmployee = true; ?>
                 <?php foreach ($byEmployee as $empId => $data): ?>
                     <?php if (!$isFirstEmployee): ?>
-                        <tr class="employee-spacer"><td colspan="6" style="height:18px; border-left:none; border-right:none; background-color:#fafafa;"></td></tr>
+                        <tr class="employee-spacer"><td colspan="4" style="height:18px; border-left:none; border-right:none; background-color:#fafafa;"></td></tr>
                     <?php endif; ?>
                     <?php $isFirstEmployee = false; ?>
                     <?php foreach ($data['weeks'] as $weekEnd => $hours): ?>
@@ -199,25 +197,19 @@ require_once 'header.php';
                         <tr<?= $ot > 0 ? ' style="background-color:#fff3cd;"' : '' ?>>
                             <td><?= htmlspecialchars($data['name']) ?></td>
                             <td><?= date('m/d/Y', strtotime($weekEnd)) ?></td>
-                            <td><?= number_format($hours, 2) ?></td>
                             <td><?= decimalToHM($hours) ?></td>
-                            <td><?= number_format($ot, 2) ?></td>
                             <td><?= decimalToHM($ot) ?></td>
                         </tr>
                     <?php endforeach; ?>
                     <tr class="summary-regular" style="font-weight:bold;">
                         <td colspan="2"><?= htmlspecialchars($data['name']) ?> &mdash; Period Total</td>
-                        <td><?= number_format($data['totalHours'], 2) ?></td>
                         <td><?= decimalToHM($data['totalHours']) ?></td>
-                        <td><?= number_format($data['totalOT'], 2) ?></td>
                         <td><?= decimalToHM($data['totalOT']) ?></td>
                     </tr>
                 <?php endforeach; ?>
                 <tr class="summary-total">
                     <td colspan="2">Grand Total</td>
-                    <td><?= number_format($grandTotalHours, 2) ?></td>
                     <td><?= decimalToHM($grandTotalHours) ?></td>
-                    <td><?= number_format($grandTotalOT, 2) ?></td>
                     <td><?= decimalToHM($grandTotalOT) ?></td>
                 </tr>
             <?php endif; ?>
