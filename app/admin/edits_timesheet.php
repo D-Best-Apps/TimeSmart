@@ -7,11 +7,11 @@ date_default_timezone_set('America/Chicago');
 if (!isset($_SESSION['admin'])) {
     header("Location: login.php");
     exit;
+}
 
 // Permission check
 require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('approve_edits');
-}
 
 // Fetch all pending edits with user info
 $stmt = $conn->prepare("SELECT pe.*, u.FirstName, u.LastName FROM pending_edits pe 

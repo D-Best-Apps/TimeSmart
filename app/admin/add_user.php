@@ -5,11 +5,11 @@ session_start();
 if (!isset($_SESSION['admin'])) {
     header("Location: login.php");
     exit;
+}
 
 // Permission check
 require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('manage_users');
-}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $firstName = trim($_POST['FirstName'] ?? '');

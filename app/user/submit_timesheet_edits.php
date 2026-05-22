@@ -84,9 +84,10 @@ foreach ($entries as $entry) {
     }
 }
 
+$emailStatus = 'not_attempted'; // Default — used in the redirect below even if no edits were inserted.
+
 if ($inserted > 0) {
     // Email sending logic
-    $emailStatus = 'not_attempted'; // Default status
 
     // Fetch mail settings from database
     $mailSettings = [];

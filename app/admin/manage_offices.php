@@ -6,11 +6,11 @@ session_start();
 if (!isset($_SESSION['admin'])) {
     header("Location: login.php");
     exit;
+}
 
 // Permission check
 require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('manage_offices');
-}
 
 $offices_result = $conn->query("SELECT ID, OfficeName FROM Offices ORDER BY OfficeName");
 $offices_data = [];

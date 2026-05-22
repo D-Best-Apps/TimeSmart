@@ -5,11 +5,11 @@ session_start();
 if (!isset($_SESSION['admin'])) {
     header("Location: login.php");
     exit;
+}
 
 // Permission check
 require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('edit_timesheets');
-}
 
 date_default_timezone_set('America/Chicago');
 

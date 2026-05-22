@@ -10,11 +10,11 @@ error_reporting(E_ALL);
 if (!isset($_SESSION['admin'])) {
     header("Location: login.php");
     exit;
+}
 
 // Permission check
 require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('manage_users');
-}
 
 $id = $_GET['id'] ?? null;
 if (!$id || !is_numeric($id)) {

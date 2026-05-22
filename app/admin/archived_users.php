@@ -6,11 +6,11 @@ session_start();
 if (!isset($_SESSION['admin'])) {
     header("Location: login.php");
     exit;
+}
 
 // Permission check
 require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('manage_users');
-}
 
 $archived_users_result = $conn->query("SELECT ID, FirstName, LastName, Email, ArchivedAt FROM `user-archive` ORDER BY ArchivedAt DESC");
 $archived_users_data = [];

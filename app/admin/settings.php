@@ -10,11 +10,11 @@ use PHPMailer\PHPMailer\Exception;
 if (!isset($_SESSION['admin'])) {
     header("Location: login.php");
     exit;
+}
 
 // Permission check
 require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('manage_settings');
-}
 
 // --- Encryption/Decryption Functions ---
 // For demonstration, a simple key. In production, this should be a strong, securely stored key.

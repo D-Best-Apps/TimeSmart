@@ -20,11 +20,11 @@ session_start();
 if (!isset($_SESSION['admin'])) {
     header("Location: login.php");
     exit;
+}
 
 // Permission check
 require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('manage_users');
-}
 
 $adminUsername = $_SESSION['admin'];
 

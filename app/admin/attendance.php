@@ -7,11 +7,11 @@ require_once __DIR__ . '/../functions/time_off_hours.php';
 if (!isset($_SESSION['admin'])) {
     header("Location: ../user/login.php?admin=1");
     exit;
+}
 
 // Permission check
 require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('view_attendance');
-}
 
 date_default_timezone_set('America/Chicago');
 
