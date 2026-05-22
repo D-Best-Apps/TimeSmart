@@ -105,6 +105,18 @@ if ($inserted > 0) {
         isset($mailSettings['mail_encryption']) &&
         isset($mailSettings['mail_admin_address'])
     ) {
+        // mail_password is AES-256-CBC encrypted in the settings table; decrypt before use.
+        $cipher = 'aes-256-cbc';
+        $key    = 'a_very_secret_key_for_encryption_32_chars';
+        $parts  = explode('::', base64_decode($mailSettings['mail_password']), 2);
+        $decryptedMailPassword = (count($parts) === 2)
+            ? openssl_decrypt($parts[0], $cipher, $key, 0, $parts[1])
+            : false;
+        if ($decryptedMailPassword === false) {
+            error_log("submit_timesheet_edits: mail_password decrypt failed; admin email skipped.");
+            $emailStatus = 'error:password_decrypt_failed';
+        }
+
         $mail = new PHPMailer(true);
         try {
             //Server settings
@@ -112,7 +124,7 @@ if ($inserted > 0) {
             $mail->Host       = $mailSettings['mail_server'];
             $mail->SMTPAuth   = true;
             $mail->Username   = $mailSettings['mail_username'];
-            $mail->Password   = $mailSettings['mail_password'];
+            $mail->Password   = $decryptedMailPassword;
             $mail->SMTPSecure = $mailSettings['mail_encryption'];
             $mail->Port       = $mailSettings['mail_port'];
 
