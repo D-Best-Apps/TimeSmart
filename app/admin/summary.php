@@ -152,13 +152,20 @@ foreach ($perEmpNames as $eid => $name) {
     $ot       = $perEmpOT[$eid]      ?? 0;
     $sick     = $timeOffByEmp[$eid]['Sick'] ?? 0;
     $vacation = $timeOffByEmp[$eid]['PTO']  ?? 0;
+    // Compute excess time-off — how many hours need trimming to keep weeks at ≤40
+    $excessWeeks = ($sick + $vacation > 0)
+        ? weeklyTimeOffExcess($conn, (int) $eid, $startDate, $endDate)
+        : [];
+    $totalExcess = array_sum(array_column($excessWeeks, 'excess'));
     $perEmpRows[] = [
-        'Name'     => $name,
-        'Clocked'  => $clocked,
-        'OT'       => $ot,
-        'Sick'     => $sick,
-        'Vacation' => $vacation,
-        'Grand'    => $clocked + $sick + $vacation,
+        'Name'        => $name,
+        'Clocked'     => $clocked,
+        'OT'          => $ot,
+        'Sick'        => $sick,
+        'Vacation'    => $vacation,
+        'Grand'       => $clocked + $sick + $vacation,
+        'Excess'      => $totalExcess,
+        'ExcessWeeks' => $excessWeeks,
     ];
 }
 usort($perEmpRows, fn($a, $b) => strcasecmp($a['Name'], $b['Name']));
@@ -168,6 +175,7 @@ $grandOT       = array_sum(array_column($perEmpRows, 'OT'));
 $grandSick     = array_sum(array_column($perEmpRows, 'Sick'));
 $grandVacation = array_sum(array_column($perEmpRows, 'Vacation'));
 $grandTotal    = array_sum(array_column($perEmpRows, 'Grand'));
+$grandExcess   = array_sum(array_column($perEmpRows, 'Excess'));
 $pageTitle = "Summary Reports";
 $extraCSS = ["https://cdn.jsdelivr.net/npm/litepicker/dist/css/litepicker.css", "../css/summary.css"];
 require_once 'header.php';
@@ -265,6 +273,9 @@ require_once 'header.php';
 
         <?php if (count($perEmpRows)): ?>
             <h3 style="margin-top:1.5rem;">Per Employee Total</h3>
+            <p style="color:#555; font-size:0.85em; margin-top:-0.5rem;">
+              <strong>Excess</strong> = hours of Sick/Vacation that would need to be trimmed for the employee's weekly total to stay at 40 or under.
+            </p>
             <table>
                 <thead>
                     <tr>
@@ -274,17 +285,32 @@ require_once 'header.php';
                         <th>Sick</th>
                         <th>Vacation</th>
                         <th>Grand Total</th>
+                        <th>Excess</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php foreach ($perEmpRows as $r): ?>
-                        <tr>
+                        <?php
+                          $hasExcess = $r['Excess'] > 0.001;
+                          $tooltip = '';
+                          if ($hasExcess) {
+                              $parts = [];
+                              foreach ($r['ExcessWeeks'] as $w) {
+                                  $parts[] = 'wk of ' . date('m/d', strtotime($w['weekStart'])) . ': ' . decimalToHM($w['excess']) . ' excess (clocked ' . decimalToHM($w['clocked']) . ', TO ' . decimalToHM($w['timeOff']) . ')';
+                              }
+                              $tooltip = ' title="' . htmlspecialchars(implode(' | ', $parts)) . '"';
+                          }
+                        ?>
+                        <tr<?= $hasExcess ? ' style="background-color:#fff3cd;"' : '' ?><?= $tooltip ?>>
                             <td><?= htmlspecialchars($r['Name']) ?></td>
                             <td><?= decimalToHM($r['Clocked']) ?></td>
                             <td><?= decimalToHM($r['OT']) ?></td>
                             <td><?= decimalToHM($r['Sick']) ?></td>
                             <td><?= decimalToHM($r['Vacation']) ?></td>
                             <td><strong><?= decimalToHM($r['Grand']) ?></strong></td>
+                            <td<?= $hasExcess ? ' style="color:#b02a37; font-weight:bold;"' : '' ?>>
+                                <?= $hasExcess ? decimalToHM($r['Excess']) . ' ⚠' : '&mdash;' ?>
+                            </td>
                         </tr>
                     <?php endforeach; ?>
                     <tr class="summary-total">
@@ -294,6 +320,9 @@ require_once 'header.php';
                         <td><?= decimalToHM($grandSick) ?></td>
                         <td><?= decimalToHM($grandVacation) ?></td>
                         <td><strong><?= decimalToHM($grandTotal) ?></strong></td>
+                        <td<?= $grandExcess > 0.001 ? ' style="color:#b02a37; font-weight:bold;"' : '' ?>>
+                            <?= $grandExcess > 0.001 ? decimalToHM($grandExcess) : '&mdash;' ?>
+                        </td>
                     </tr>
                 </tbody>
             </table>

@@ -134,6 +134,10 @@ if ($showSummary) {
         $ot       = $perEmpOT[$eid]      ?? 0;
         $sick     = $timeOffTotals[$eid]['Sick'] ?? 0;
         $vacation = $timeOffTotals[$eid]['PTO']  ?? 0;
+        $excessWeeks = ($sick + $vacation > 0)
+            ? weeklyTimeOffExcess($conn, (int) $eid, $start, $end)
+            : [];
+        $excess = array_sum(array_column($excessWeeks, 'excess'));
         $summaryList[] = [
             'name'     => $data['name'],
             'clocked'  => $clocked,
@@ -141,6 +145,7 @@ if ($showSummary) {
             'sick'     => $sick,
             'vacation' => $vacation,
             'grand'    => $clocked + $sick + $vacation,
+            'excess'   => $excess,
         ];
     }
     usort($summaryList, fn($a, $b) => strcasecmp($a['name'], $b['name']));
@@ -150,11 +155,13 @@ if ($showSummary) {
     $gSick     = array_sum(array_column($summaryList, 'sick'));
     $gVacation = array_sum(array_column($summaryList, 'vacation'));
     $gGrand    = array_sum(array_column($summaryList, 'grand'));
+    $gExcess   = array_sum(array_column($summaryList, 'excess'));
 
     $summaryHtml  = '<h2 style="text-align:center; color:#0078D7;">Payroll Summary Report</h2>';
     $summaryHtml .= "<p style='text-align:center;'><strong>Date Range:</strong> "
                   . date("m/d/Y", strtotime($start)) . " to " . date("m/d/Y", strtotime($end)) . "</p>";
     $summaryHtml .= '<h3>Per Employee Total</h3>';
+    $summaryHtml .= '<p style="font-size:9pt; color:#555;"><i>Excess = Sick/Vacation hours that need to be trimmed for the weekly total to stay at 40 or under.</i></p>';
     $summaryHtml .= '<table border="1" cellpadding="5" cellspacing="0" style="width: 100%; border-collapse: collapse;">
                         <thead style="background-color: #e6f0ff;">
                             <tr>
@@ -164,19 +171,29 @@ if ($showSummary) {
                                 <th><b>Sick</b></th>
                                 <th><b>Vacation</b></th>
                                 <th><b>Grand Total</b></th>
+                                <th><b>Excess</b></th>
                             </tr>
                         </thead>
                         <tbody>';
     foreach ($summaryList as $item) {
-        $summaryHtml .= "<tr>
+        $hasExcess = $item['excess'] > 0.001;
+        $rowBg = $hasExcess ? " style='background-color:#fff3cd;'" : '';
+        $excessCell = $hasExcess
+            ? "<td style='text-align:right; color:#b02a37; font-weight:bold;'>" . decimalToHM($item['excess']) . " ⚠</td>"
+            : "<td style='text-align:right;'>&mdash;</td>";
+        $summaryHtml .= "<tr{$rowBg}>
                             <td>" . htmlspecialchars($item['name']) . "</td>
                             <td style='text-align:right;'>" . decimalToHM($item['clocked']) . "</td>
                             <td style='text-align:right;'>" . decimalToHM($item['ot']) . "</td>
                             <td style='text-align:right;'>" . decimalToHM($item['sick']) . "</td>
                             <td style='text-align:right;'>" . decimalToHM($item['vacation']) . "</td>
                             <td style='text-align:right;'><b>" . decimalToHM($item['grand']) . "</b></td>
+                            {$excessCell}
                          </tr>";
     }
+    $excessTotalCell = $gExcess > 0.001
+        ? "<td style='text-align:right; color:#b02a37;'>" . decimalToHM($gExcess) . "</td>"
+        : "<td style='text-align:right;'>&mdash;</td>";
     $summaryHtml .= "<tr style='font-weight:bold; background-color:#f1f1f1;'>
                         <td>Grand Total</td>
                         <td style='text-align:right;'>" . decimalToHM($gClocked) . "</td>
@@ -184,6 +201,7 @@ if ($showSummary) {
                         <td style='text-align:right;'>" . decimalToHM($gSick) . "</td>
                         <td style='text-align:right;'>" . decimalToHM($gVacation) . "</td>
                         <td style='text-align:right;'>" . decimalToHM($gGrand) . "</td>
+                        {$excessTotalCell}
                      </tr>";
     $summaryHtml .= '</tbody></table>';
 

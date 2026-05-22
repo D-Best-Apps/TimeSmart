@@ -1,6 +1,7 @@
-<?php 
+<?php
 session_start();
 require '../auth/db.php';
+require_once __DIR__ . '/../functions/time_off_hours.php';
 date_default_timezone_set('America/Chicago');
 
 if (!isset($_SESSION['admin'])) {
@@ -69,6 +70,20 @@ $torStmt = $conn->prepare("
 $torStmt->execute();
 $timeOffRequests = $torStmt->get_result()->fetch_all(MYSQLI_ASSOC);
 
+// Recently approved time-off (last 60 days) so admin has a discovery path for edits
+$recentStmt = $conn->prepare("
+    SELECT tor.*, u.FirstName, u.LastName
+      FROM time_off_requests tor
+      JOIN users u ON u.ID = tor.EmployeeID
+     WHERE tor.Status = 'Approved'
+       AND tor.AmendsRequestID IS NULL
+       AND tor.StartDate >= DATE_SUB(CURDATE(), INTERVAL 60 DAY)
+     ORDER BY tor.StartDate DESC
+     LIMIT 30
+");
+$recentStmt->execute();
+$recentApprovedTimeOff = $recentStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+
 function formatTorDateRange(string $start, string $end): string {
     if ($start === $end) return date('m/d/Y', strtotime($start));
     return date('m/d/Y', strtotime($start)) . ' – ' . date('m/d/Y', strtotime($end));
@@ -76,6 +91,25 @@ function formatTorDateRange(string $start, string $end): string {
 function formatTorTimeRange(?string $start, ?string $end): string {
     if (!$start || !$end) return 'all day';
     return date('g:i a', strtotime($start)) . ' – ' . date('g:i a', strtotime($end));
+}
+function fmtHM(float $h): string {
+    $m = (int) round($h * 60);
+    return sprintf('%d:%02d', intdiv($m, 60), $m % 60);
+}
+
+// Pre-compute projected weekly hours for each pending time-off request so admins see the OT impact
+$projections = [];
+foreach ($timeOffRequests as $tor) {
+    $exclude = !empty($tor['AmendsRequestID']) ? (int) $tor['AmendsRequestID'] : null;
+    $projections[(int) $tor['ID']] = projectedWeeklyHours(
+        $conn,
+        (int) $tor['EmployeeID'],
+        $tor['StartDate'],
+        $tor['EndDate'],
+        $tor['StartTime'] ?: null,
+        $tor['EndTime']   ?: null,
+        $exclude
+    );
 }
 
 $pageTitle = "Pending Approvals";
@@ -158,14 +192,22 @@ require_once 'header.php';
                         <th>Dates</th>
                         <th>Times</th>
                         <th>Notes</th>
+                        <th>Projected wk</th>
                         <th>Reviewer Note</th>
                         <th>Action</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php foreach ($timeOffRequests as $tor): ?>
-                        <?php $isAmendment = !empty($tor['AmendsRequestID']); ?>
-                        <tr<?= $isAmendment ? ' style="background-color:#fff8e1;"' : '' ?>>
+                        <?php
+                          $isAmendment = !empty($tor['AmendsRequestID']);
+                          $rowProj = $projections[(int) $tor['ID']] ?? [];
+                          $maxProj = 0;
+                          foreach ($rowProj as $w) { if ($w['projected'] > $maxProj) $maxProj = $w['projected']; }
+                          $overLimit = $maxProj > 40;
+                          $bg = $overLimit ? '#ffd6d6' : ($isAmendment ? '#fff8e1' : '');
+                        ?>
+                        <tr<?= $bg ? ' style="background-color:' . $bg . ';"' : '' ?>>
                             <td><?= htmlspecialchars(date('m/d/Y', strtotime($tor['SubmittedAt']))) ?></td>
                             <td>
                                 <?= htmlspecialchars($tor['FirstName'] . ' ' . $tor['LastName']) ?>
@@ -211,6 +253,15 @@ require_once 'header.php';
                                     <div style="margin-top:0.3rem; font-size:0.85rem; color:#555;"><em>Reason for change:</em> <?= nl2br(htmlspecialchars($tor['Reason'])) ?></div>
                                 <?php endif; ?>
                             </td>
+                            <td style="font-size:0.85rem; white-space:nowrap;">
+                                <?php foreach ($rowProj as $w): ?>
+                                    <?php $isOver = $w['projected'] > 40; ?>
+                                    <div<?= $isOver ? ' style="color:#b02a37; font-weight:bold;"' : '' ?>>
+                                        wk of <?= date('m/d', strtotime($w['weekStart'])) ?>:
+                                        <?= fmtHM($w['projected']) ?> / 40<?= $isOver ? ' ⚠' : '' ?>
+                                    </div>
+                                <?php endforeach; ?>
+                            </td>
                             <td>
                                 <input type="text" name="review_note[<?= (int) $tor['ID'] ?>]" maxlength="500" placeholder="Optional" style="width:100%; padding:4px;">
                             </td>
@@ -223,6 +274,40 @@ require_once 'header.php';
                 </tbody>
             </table>
         </form>
+    <?php endif; ?>
+
+    <h2 style="margin-top:2rem;">Recent Approved Time-Off <span style="font-size:0.6em; color:#666;">(last 60 days &mdash; use to adjust hours after the fact)</span></h2>
+    <?php if (count($recentApprovedTimeOff) === 0): ?>
+        <p class="no-edits">No approved time-off in the last 60 days.</p>
+    <?php else: ?>
+        <table class="approval-table">
+            <thead>
+                <tr>
+                    <th>Employee</th>
+                    <th>Category</th>
+                    <th>Dates</th>
+                    <th>Times</th>
+                    <th>Notes</th>
+                    <th>M365 Synced</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($recentApprovedTimeOff as $tor): ?>
+                    <tr>
+                        <td><?= htmlspecialchars($tor['FirstName'] . ' ' . $tor['LastName']) ?></td>
+                        <td><strong><?= htmlspecialchars($tor['Category']) ?></strong></td>
+                        <td><?= formatTorDateRange($tor['StartDate'], $tor['EndDate']) ?></td>
+                        <td><?= formatTorTimeRange($tor['StartTime'], $tor['EndTime']) ?></td>
+                        <td class="note-box"><?= nl2br(htmlspecialchars($tor['Notes'] ?? '')) ?: '-' ?></td>
+                        <td style="font-size:0.85rem;"><?= $tor['M365SyncStatus'] === 'sent' ? '✓' : htmlspecialchars($tor['M365SyncStatus'] ?? '-') ?></td>
+                        <td>
+                            <a href="edit_time_off.php?id=<?= (int) $tor['ID'] ?>" class="approve-btn" style="text-decoration:none; padding:4px 10px;">Edit</a>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
     <?php endif; ?>
 </div>
 
