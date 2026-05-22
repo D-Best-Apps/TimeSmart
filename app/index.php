@@ -45,8 +45,7 @@ $gpsQuery->close();
   <div class="topnav-right">
     <span class="nav-date"><?= date('F j, Y') ?></span>
     <a href="index.php">🏠 Home</a>
-    <a href="./user/login.php">🔐 User Login</a>
-    <a href="./admin/login.php">🔑 Admin Login</a>
+    <a href="./user/login.php">🔐 Login</a>
   </div>
 </header>
 
@@ -59,8 +58,7 @@ $gpsQuery->close();
 <!-- 📱 Mobile Menu -->
 <nav class="mobile-nav mobile-only">
   <a href="index.php">🏠 Home</a>
-  <a href="./user/login.php">🔐 User Login</a>
-  <a href="./admin/login.php">🔑 Admin Login</a>
+  <a href="./user/login.php">🔐 Login</a>
 </nav>
 
 

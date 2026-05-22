@@ -177,10 +177,10 @@ require_once 'header.php';
 <div id="resetModal" class="modal">
     <div class="modal-content">
         <h3>Reset Password</h3>
-        <p>Are you sure you want to reset this user's password to the default?</p>
+        <p>This will replace the user's password with a one-time temporary password, clear any login lockout, and show the temp password on the next screen so you can read it off to the employee. They should change it in <strong>User Settings</strong> after logging in.</p>
         <div class="modal-actions">
             <button class="btn" onclick="closeResetModal()">Cancel</button>
-            <button class="btn primary" id="confirmResetBtn">Yes, Reset</button>
+            <button class="btn primary" id="confirmResetBtn">Reset &amp; Show Temp Password</button>
         </div>
     </div>
 </div>

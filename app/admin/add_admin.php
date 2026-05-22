@@ -3,115 +3,100 @@ require_once '../auth/db.php';
 session_start();
 
 if (!isset($_SESSION['admin'])) {
-    header("Location: login.php");
+    header("Location: ../user/login.php?admin=1");
     exit;
 }
 
-// Permission check
 require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('manage_admins');
 
 $error = "";
 $success = "";
 
-// Handle form submission
+// Handle promotion form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $username = trim($_POST['username']);
-    $password = $_POST['password'];
-    $role = $_POST['role'] ?? 'super_admin';
+    $userID = (int) ($_POST['user_id'] ?? 0);
+    $role   = $_POST['role'] ?? 'super_admin';
 
-    // Validate role
-    if (!in_array($role, ['super_admin', 'reports_only'])) {
+    if (!in_array($role, ['super_admin', 'reports_only'], true)) {
         $role = 'super_admin';
     }
 
-    if (empty($username) || empty($password)) {
-        $error = "Username and password are required.";
+    if ($userID === 0) {
+        $error = "Pick an employee to promote.";
     } else {
-        // Check if username exists
-        $stmt = $conn->prepare("SELECT id FROM admins WHERE username = ?");
-        $stmt->bind_param("s", $username);
+        // Verify user exists and is currently an employee
+        $stmt = $conn->prepare("SELECT FirstName, LastName, Role FROM users WHERE ID = ? LIMIT 1");
+        $stmt->bind_param("i", $userID);
         $stmt->execute();
-        $stmt->store_result();
-
-        if ($stmt->num_rows > 0) {
-            $error = "Username already exists.";
+        $u = $stmt->get_result()->fetch_assoc();
+        if (!$u) {
+            $error = "User not found.";
         } else {
-            $hashed = password_hash($password, PASSWORD_DEFAULT);
-            $insert = $conn->prepare("INSERT INTO admins (username, password, role) VALUES (?, ?, ?)");
-            $insert->bind_param("sss", $username, $hashed, $role);
-            $insert->execute();
-
-            $success = "Admin added successfully.";
+            $upd = $conn->prepare("UPDATE users SET Role = ? WHERE ID = ?");
+            $upd->bind_param("si", $role, $userID);
+            $upd->execute();
+            $success = htmlspecialchars($u['FirstName'] . ' ' . $u['LastName']) .
+                       " is now " . ($role === 'super_admin' ? 'Super Admin' : 'Reports Only') . ".";
         }
     }
 }
+
+// Load the employee list for the picker (only Role = employee — admins already exist)
+$employees = $conn->query("
+    SELECT ID, FirstName, LastName, Email
+      FROM users
+     WHERE Role = 'employee'
+     ORDER BY LastName, FirstName
+")->fetch_all(MYSQLI_ASSOC);
+
+$pageTitle = "Promote Employee to Admin";
+require_once 'header.php';
 ?>
+<link rel="stylesheet" href="../css/manage_admins.css" />
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Add Admin</title>
-    <link rel="icon" type="image/png" href="/images/D-Best.png">
-    <link rel="apple-touch-icon" href="/images/D-Best.png">
-    <link rel="manifest" href="/manifest.json">
+<div class="container">
+    <h2>Promote Employee to Admin</h2>
+    <p style="color:#555; font-size:0.9em;">
+        Pick an existing employee and grant them an admin role. They'll continue to log in as themselves
+        (full name + their current password); no second account is created.
+    </p>
 
-    <link rel="icon" type="image/png" href="../images/D-Best-favicon.png">
-    <link rel="apple-touch-icon" href="../images/D-Best-favicon.png">
-    <link rel="manifest" href="/manifest.json">
-    <link rel="icon" type="image/webp" href="../images/D-Best-favicon.webp">
-    <link rel="stylesheet" href="../css/admin.css">
-</head>
-<body>
-    <header>
-        <img src="/images/D-Best.png" alt="Logo" class="logo">
-        <h1>Add New Admin</h1>
-        <nav>
-        <a href="dashboard.php">Dashboard</a>
-        <a href="view_punches.php">Timesheets</a>
-        <a href="summary.php">Summary</a>
-        <a href="reports.php" class="active">Reports</a>
-        <a href="manage_users.php">Users</a>
-        <a href="attendance.php">Attendance</a>
-        <a href="manage_admins.php">Admins</a>
-        <a href="../logout.php">Logout</a>
-    </nav>
-    </header>
+    <?php if ($error): ?>
+        <p style="color:#b02a37; margin-bottom:1rem;"><?= htmlspecialchars($error) ?></p>
+    <?php elseif ($success): ?>
+        <p style="color:#1e7e34; margin-bottom:1rem;"><?= $success ?></p>
+    <?php endif; ?>
 
-    <div class="container">
-        <?php if ($error): ?>
-            <p style="color: red; margin-bottom: 1rem;"><?= htmlspecialchars($error) ?></p>
-        <?php elseif ($success): ?>
-            <p style="color: green; margin-bottom: 1rem;"><?= htmlspecialchars($success) ?></p>
-        <?php endif; ?>
-
-        <form method="POST" class="summary-filter">
-            <div class="row">
-                <div class="field">
-                    <label for="username">Username</label>
-                    <input type="text" name="username" id="username" required>
-                </div>
-
-                <div class="field">
-                    <label for="password">Password</label>
-                    <input type="text" name="password" id="password" required>
-                </div>
-
-                <div class="field">
-                    <label for="role">Role</label>
-                    <select name="role" id="role" required>
-                        <option value="super_admin">Super Admin (Full Access)</option>
-                        <option value="reports_only">Reports Only (View & Export Reports)</option>
-                    </select>
-                </div>
+    <form method="POST" class="summary-filter">
+        <div class="row">
+            <div class="field">
+                <label for="user_id">Employee</label>
+                <select name="user_id" id="user_id" required>
+                    <option value="">— Pick an employee —</option>
+                    <?php foreach ($employees as $emp): ?>
+                        <option value="<?= (int) $emp['ID'] ?>">
+                            <?= htmlspecialchars($emp['FirstName'] . ' ' . $emp['LastName']) ?>
+                            <?= $emp['Email'] ? '— ' . htmlspecialchars($emp['Email']) : '' ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
             </div>
 
-            <div class="buttons">
-                <button type="submit">Add Admin</button>
-                <a href="manage_admins.php" class="btn-reset">Cancel</a>
+            <div class="field">
+                <label for="role">Role</label>
+                <select name="role" id="role" required>
+                    <option value="super_admin">Super Admin (Full Access)</option>
+                    <option value="reports_only">Reports Only (View &amp; Export Reports)</option>
+                </select>
             </div>
-        </form>
-    </div>
-</body>
-</html>
+        </div>
+
+        <div class="buttons">
+            <button type="submit">Promote</button>
+            <a href="manage_admins.php" class="btn-reset">Cancel</a>
+        </div>
+    </form>
+</div>
+
+<?php require_once 'footer.php'; ?>

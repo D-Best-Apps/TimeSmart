@@ -1,7 +1,7 @@
 <?php
 session_start();
 if (!isset($_SESSION['admin'])) {
-    header("Location: login.php");
+    header("Location: ../user/login.php?admin=1");
     exit;
 }
 
@@ -9,13 +9,24 @@ require '../auth/db.php';
 
 $adminUsername = $_SESSION['admin'];
 
-// Fetch admin's 2FA status
-$stmt = $conn->prepare("SELECT TwoFAEnabled FROM admins WHERE username = ?");
-$stmt->bind_param("s", $adminUsername);
-$stmt->execute();
-$result = $stmt->get_result();
-$admin2FAStatus = $result->fetch_assoc();
-$is2FAEnabled = $admin2FAStatus['TwoFAEnabled'] ?? 0;
+// 2FA status now lives on users.TwoFAEnabled (post-unified-login); fall back to admins table for the
+// legacy 'admin' seed account that wasn't migrated.
+$is2FAEnabled = 0;
+if (!empty($_SESSION['EmployeeID'])) {
+    $stmt = $conn->prepare("SELECT TwoFAEnabled FROM users WHERE ID = ?");
+    $stmt->bind_param("i", $_SESSION['EmployeeID']);
+    $stmt->execute();
+    if ($row = $stmt->get_result()->fetch_assoc()) {
+        $is2FAEnabled = (int) $row['TwoFAEnabled'];
+    }
+} else {
+    $stmt = $conn->prepare("SELECT TwoFAEnabled FROM admins WHERE username = ?");
+    $stmt->bind_param("s", $adminUsername);
+    $stmt->execute();
+    if ($row = $stmt->get_result()->fetch_assoc()) {
+        $is2FAEnabled = (int) $row['TwoFAEnabled'];
+    }
+}
 
 // Get count of pending edits
 $pendingCount = 0;
@@ -45,41 +56,11 @@ if ($statsResult && $statsRow = $statsResult->fetch_assoc()) {
     $onLunch = (int) ($statsRow['onLunch'] ?? 0);
     $clockedOut = (int) ($statsRow['clockedOut'] ?? 0);
 }
+
+$pageTitle = "Admin Dashboard";
+$extraCSS = ["../css/dashboard.css"];
+require_once 'header.php';
 ?>
-
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>D-Best Admin Dashboard</title>
-    <link rel="icon" type="image/png" href="/images/D-Best.png">
-    <link rel="apple-touch-icon" href="/images/D-Best.png">
-    <link rel="manifest" href="/manifest.json">
-    <link rel="icon" type="image/png" href="../images/D-Best-favicon.png">
-    <link rel="apple-touch-icon" href="../images/D-Best-favicon.png">
-    <link rel="manifest" href="/manifest.json">
-    <link rel="icon" type="image/webp" href="../images/D-Best-favicon.webp">
-    <link rel="stylesheet" href="../css/admin.css">
-    <link rel="stylesheet" href="../css/dashboard.css">
-</head>
-<body>
-
-<header>
-    <img src="/images/D-Best.png" alt="D-Best Logo" class="logo">
-    <h1>Admin Dashboard</h1>
-    <nav>
-        <a href="dashboard.php" class="active">Dashboard</a>
-        <a href="view_punches.php">Timesheets</a>
-        <a href="edits_timesheet.php">Pending Approvals<?php if ($pendingCount > 0): ?> (<?= $pendingCount ?>)<?php endif; ?></a>
-        <a href="reports.php">Reports</a>
-        <a href="manage_users.php">Users</a>
-        <a href="manage_offices.php">Offices</a>
-        <a href="attendance.php">Attendance</a>
-        <a href="manage_admins.php">Admins</a>
-        <a href="settings.php">Settings</a>
-        <a href="../logout.php">Logout</a>
-    </nav>
-</header>
 
 <div class="info-stats">
     <a href="edits_timesheet.php" class="info-card pending">
@@ -104,8 +85,7 @@ if ($statsResult && $statsRow = $statsResult->fetch_assoc()) {
     </div>
 </div>
 
-<div class="dashboard-container">
-    <div class="dashboard">
+<div class="dashboard">
         <div class="card">
             <h2>Timesheets</h2>
             <p>Review and manage employee time punches.</p>
@@ -165,7 +145,5 @@ if ($statsResult && $statsRow = $statsResult->fetch_assoc()) {
             <a href="../logout.php">Logout</a>
         </div>
     </div>
-</div>
 
-</body>
-</html>
+<?php require_once 'footer.php'; ?>

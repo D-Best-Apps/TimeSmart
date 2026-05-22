@@ -64,8 +64,26 @@ function login_user_and_finish(int $empID, string $firstName): void {
     session_regenerate_id(true);
     $_SESSION['EmployeeID'] = $empID;
     $_SESSION['FirstName']  = $firstName;
-    unset($_SESSION['temp_user_id'], $_SESSION['user_2fa_pending'], $_SESSION['2fa_attempts'], $_SESSION['user_twofa_lock_until']);
-    header("Location: dashboard.php");
+
+    // Unified admin session: if the user has a privileged role, populate the admin/* checks.
+    // temp_role / temp_last_name / temp_from_admin were stashed by user/login.php before redirecting here.
+    $role       = (string)($_SESSION['temp_role'] ?? 'employee');
+    $fromAdmin  = !empty($_SESSION['temp_from_admin']);
+    if ($role !== 'employee') {
+        $lastName = (string)($_SESSION['temp_last_name'] ?? '');
+        $_SESSION['admin']      = trim($firstName . ' ' . $lastName);
+        $_SESSION['admin_role'] = $role;
+    }
+
+    unset($_SESSION['temp_user_id'], $_SESSION['temp_first_name'], $_SESSION['temp_last_name'], $_SESSION['temp_role'],
+          $_SESSION['temp_from_admin'], $_SESSION['user_2fa_pending'], $_SESSION['2fa_attempts'],
+          $_SESSION['user_twofa_lock_until']);
+
+    if ($role !== 'employee' && $fromAdmin) {
+        header("Location: ../admin/dashboard.php");
+    } else {
+        header("Location: dashboard.php");
+    }
     exit;
 }
 function normalize_totp_input(string $code): string {

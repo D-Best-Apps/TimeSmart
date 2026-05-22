@@ -86,6 +86,9 @@ $currentPage = basename($_SERVER['PHP_SELF']);
         <?php if (checkPermission('manage_settings')): ?>
         <a href="settings.php"<?= $currentPage == 'settings.php' ? ' class="active"' : '' ?>>Settings</a>
         <?php endif; ?>
+        <?php if (!empty($_SESSION['EmployeeID'])): ?>
+        <a href="../user/dashboard.php" title="Switch to your employee view">👤 My View</a>
+        <?php endif; ?>
         <a href="../logout.php">Logout</a>
     </nav>
 </header>

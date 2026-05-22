@@ -37,6 +37,7 @@ CREATE TABLE `users` (
   `ThemePref` varchar(10) DEFAULT 'light',
   `TwoFARecoveryCode` text DEFAULT NULL,
   `LockOut` TINYINT(1) NOT NULL DEFAULT 0,
+  `Role` enum('employee','reports_only','super_admin') NOT NULL DEFAULT 'employee',
   PRIMARY KEY (`ID`),
   UNIQUE KEY `TagID` (`TagID`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

@@ -14,9 +14,23 @@ document.getElementById('confirmResetBtn').addEventListener('click', () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: 'id=' + encodeURIComponent(resetUserId)
-    }).then(() => {
+    })
+    .then(r => r.json())
+    .then(data => {
         closeResetModal();
+        if (data && data.success && data.temp_password) {
+            alert(
+                'Password reset.\n\nTemporary password: ' + data.temp_password +
+                '\n\nGive this to the employee. Once they log in, they should change it in User Settings.'
+            );
+        } else {
+            alert('Reset failed: ' + (data && data.error ? data.error : 'unknown error'));
+        }
         window.location.reload();
+    })
+    .catch(() => {
+        closeResetModal();
+        alert('Reset failed — network error.');
     });
 });
 

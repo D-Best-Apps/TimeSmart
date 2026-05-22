@@ -3,77 +3,109 @@ require_once '../auth/db.php';
 session_start();
 
 if (!isset($_SESSION['admin'])) {
-    header("Location: login.php");
+    header("Location: ../user/login.php?admin=1");
     exit;
 }
 
-// Permission check
 require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('manage_admins');
 
-// Handle deletion
-if (isset($_GET['delete'])) {
-    $id = (int) $_GET['delete'];
-    $stmt = $conn->prepare("DELETE FROM admins WHERE id = ?");
-    $stmt->bind_param("i", $id);
-    $stmt->execute();
-    header("Location: manage_admins.php");
+// Demote (Role → employee)
+if (isset($_GET['demote'])) {
+    $id = (int) $_GET['demote'];
+    if ($id > 0) {
+        $stmt = $conn->prepare("UPDATE users SET Role = 'employee' WHERE ID = ?");
+        $stmt->bind_param("i", $id);
+        $stmt->execute();
+    }
+    header("Location: manage_admins.php?status=demoted");
     exit;
 }
 
-// Fetch all admins
-$admins = [];
-$result = $conn->query("SELECT id, username, role FROM admins ORDER BY id");
-if ($result) {
-    $admins = $result->fetch_all(MYSQLI_ASSOC);
+// Promote / change role (POST from edit_admin.php)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['set_role'])) {
+    $id   = (int) ($_POST['user_id'] ?? 0);
+    $role = $_POST['role'] ?? '';
+    if ($id > 0 && in_array($role, ['employee','reports_only','super_admin'], true)) {
+        $stmt = $conn->prepare("UPDATE users SET Role = ? WHERE ID = ?");
+        $stmt->bind_param("si", $role, $id);
+        $stmt->execute();
+    }
+    header("Location: manage_admins.php?status=updated");
+    exit;
 }
+
+// Fetch all users that currently have an admin role
+$rows = [];
+$result = $conn->query("
+    SELECT ID, FirstName, LastName, Email, Role, TwoFAEnabled
+      FROM users
+     WHERE Role <> 'employee'
+     ORDER BY LastName, FirstName
+");
+if ($result) $rows = $result->fetch_all(MYSQLI_ASSOC);
+
 $pageTitle = "Manage Admins";
 require_once 'header.php';
 ?>
 <link rel="stylesheet" href="../css/manage_admins.css" />
 
-
-    <div class="container">
-        <div class="summary-filter">
-            <div class="row">
-                <div class="field">
-                    <h2 style="margin-bottom: 1rem;">Admin Accounts</h2>
-                </div>
-                <div class="buttons">
-                    <a href="add_admin.php" class="btn-reset" style="background-color: var(--primary-color); color: white;">+ Add Admin</a>
-                </div>
+<div class="container">
+    <div class="summary-filter">
+        <div class="row">
+            <div class="field">
+                <h2 style="margin-bottom: 0.5rem;">Admin Accounts</h2>
+                <p style="color:#555; font-size:0.9em; margin-top:0;">
+                    Admins log in via the same form as employees (full name + their password). Promote any employee
+                    to <strong>super_admin</strong> or <strong>reports_only</strong> here. Demoting sets their role
+                    back to employee — their punch/timesheet access is unchanged.
+                </p>
+            </div>
+            <div class="buttons">
+                <a href="add_admin.php" class="btn-reset" style="background-color: var(--primary-color); color: white;">+ Promote Employee</a>
             </div>
         </div>
-
-        <table>
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Username</th>
-                    <th>Role</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php foreach ($admins as $admin): ?>
-                    <tr>
-                        <td><?= htmlspecialchars($admin['id']) ?></td>
-                        <td><?= htmlspecialchars($admin['username']) ?></td>
-                        <td>
-                            <?php
-                            $roleDisplay = $admin['role'] === 'super_admin' ? 'Super Admin' : 'Reports Only';
-                            $roleClass = $admin['role'] === 'super_admin' ? 'role-badge role-super' : 'role-badge role-reports';
-                            ?>
-                            <span class="<?= $roleClass ?>"><?= htmlspecialchars($roleDisplay) ?></span>
-                        </td>
-                        <td>
-                            <a class="btn-reset" style="background-color: var(--primary-color); color: white; margin-right: 0.5rem;" href="edit_admin.php?id=<?= $admin['id'] ?>">Edit</a>
-                            <a class="btn-reset" style="background-color: #dc3545; color: white;" href="?delete=<?= $admin['id'] ?>" onclick="return confirm('Are you sure you want to delete this admin?');">Delete</a>
-                        </td>
-                    </tr>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
     </div>
+
+    <?php if (($_GET['status'] ?? '') === 'updated'): ?>
+        <div class="alert alert-success" style="margin-bottom:1rem;">Role updated.</div>
+    <?php elseif (($_GET['status'] ?? '') === 'demoted'): ?>
+        <div class="alert alert-info" style="margin-bottom:1rem;">User demoted to employee.</div>
+    <?php endif; ?>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>2FA</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php if (count($rows) === 0): ?>
+                <tr><td colspan="5">No admin users yet.</td></tr>
+            <?php else: foreach ($rows as $u): ?>
+                <?php
+                  $roleDisplay = $u['Role'] === 'super_admin' ? 'Super Admin' : 'Reports Only';
+                  $roleClass   = $u['Role'] === 'super_admin' ? 'role-badge role-super' : 'role-badge role-reports';
+                ?>
+                <tr>
+                    <td><?= htmlspecialchars($u['FirstName'] . ' ' . $u['LastName']) ?></td>
+                    <td><?= htmlspecialchars($u['Email'] ?? '') ?: '&mdash;' ?></td>
+                    <td><span class="<?= $roleClass ?>"><?= htmlspecialchars($roleDisplay) ?></span></td>
+                    <td><?= $u['TwoFAEnabled'] ? '✓' : '—' ?></td>
+                    <td style="white-space: nowrap;">
+                        <div style="display: inline-flex; gap: 0.5rem; align-items: center;">
+                            <a class="btn-reset" style="background-color: var(--primary-color); color: white; display: inline-block;" href="edit_admin.php?id=<?= (int) $u['ID'] ?>">Change Role</a>
+                            <a class="btn-reset" style="background-color: #dc3545; color: white; display: inline-block;" href="?demote=<?= (int) $u['ID'] ?>" onclick="return confirm('Demote <?= htmlspecialchars($u['FirstName'] . ' ' . $u['LastName'], ENT_QUOTES) ?> back to regular employee? (Their employee account stays.)');">Demote</a>
+                        </div>
+                    </td>
+                </tr>
+            <?php endforeach; endif; ?>
+        </tbody>
+    </table>
+</div>
 
 <?php require_once 'footer.php'; ?>

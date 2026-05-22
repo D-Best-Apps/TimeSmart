@@ -162,14 +162,17 @@ environment:
 - `deploy/docker/supervisord.conf` - Process management
 - See [CONFIGURATION.md](docs/CONFIGURATION.md) for full reference
 
-## Default Credentials
+## Login
 
-**Admin Login:** `/admin/login.php`
-- Username: `admin`
-- Password: `password` (bcrypt hash in schema)
+Employee and admin auth are unified under `/user/login.php`. Users log in with their full name (`First Last` or `Last, First`) and password. The `users.Role` column controls admin access:
 
-**Employee Login:** `/user/login.php`
-- Credentials created by admin via `/admin/add_user.php`
+- `employee` (default) — punch in/out, edit own timesheet, request time off
+- `reports_only` — admin portal access limited to viewing/exporting reports
+- `super_admin` — full admin portal access
+
+`/admin/login.php` redirects to `/user/login.php?admin=1` (which shows a one-line "admins use this same form" notice). Promote/demote employees to admin via the admin portal's **Manage Admins** page.
+
+Fresh installs ship with no preset admin credentials. The first admin must be promoted by setting `Role = 'super_admin'` directly in the `users` table for an existing employee (or for the first seed user created via `/admin/add_user.php`).
 
 ## Scripts Reference
 

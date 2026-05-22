@@ -95,6 +95,9 @@ $error = '';
 $info  = '';     // for non-error notices (e.g., attempts left)
 $namePrefill = '';  // keep last typed name across round-trips
 $attemptsLeftForView = null; // int|null
+// Did the user arrive via the Admin Login button? Preserve across the form post.
+$fromAdmin = (isset($_GET['admin']) && $_GET['admin'] === '1')
+          || (isset($_POST['from_admin']) && $_POST['from_admin'] === '1');
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!csrf_valid()) {
@@ -109,10 +112,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             [$first, $last] = parse_name($namePrefill);
             $user = null;
+            $initialsAmbiguous = false;
 
             if ($first !== '' && $last !== '') {
                 $stmt = $conn->prepare("
-                    SELECT ID, FirstName, LastName, Pass, TwoFAEnabled, LockOut
+                    SELECT ID, FirstName, LastName, Pass, TwoFAEnabled, LockOut, Role
                     FROM users
                     WHERE FirstName = ? AND LastName = ?
                     LIMIT 1
@@ -124,6 +128,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $user = $res ? $res->fetch_assoc() : null;
                     if ($res) $res->free();
                     $stmt->close();
+                }
+            }
+
+            // Fallback: 2-letter initials ("GP", "g.p.", "g p", "AP" etc.) → match by first letter
+            // of FirstName and first letter of LastName. utf8mb4_general_ci collation makes the
+            // LIKE comparison case-insensitive.
+            if (!$user) {
+                $compact = preg_replace('/[^a-zA-Z]/', '', $namePrefill);
+                if (strlen($compact) === 2) {
+                    $firstChar = $compact[0] . '%';
+                    $lastChar  = $compact[1] . '%';
+                    $stmt = $conn->prepare("
+                        SELECT ID, FirstName, LastName, Pass, TwoFAEnabled, LockOut, Role
+                          FROM users
+                         WHERE FirstName LIKE ? AND LastName LIKE ?
+                         LIMIT 2
+                    ");
+                    if ($stmt) {
+                        $stmt->bind_param("ss", $firstChar, $lastChar);
+                        $stmt->execute();
+                        $res = $stmt->get_result();
+                        $matches = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
+                        if ($res) $res->free();
+                        $stmt->close();
+                        if (count($matches) === 1) {
+                            $user = $matches[0];
+                        } elseif (count($matches) > 1) {
+                            $initialsAmbiguous = true;
+                            $error = "Multiple users match those initials. Please type your full name.";
+                        }
+                    }
                 }
             }
 
@@ -153,10 +188,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $log->close();
                         }
 
-                        // 2FA flow
+                        $role = (string)($user['Role'] ?? 'employee');
+
+                        // 2FA flow — carry the role + admin-landing intent through verify_2fa.php
                         if (!empty($user['TwoFAEnabled'])) {
                             $_SESSION['temp_user_id']     = $uid;
                             $_SESSION['temp_first_name']  = (string)$user['FirstName'];
+                            $_SESSION['temp_last_name']   = (string)$user['LastName'];
+                            $_SESSION['temp_role']        = $role;
+                            $_SESSION['temp_from_admin']  = $fromAdmin ? 1 : 0;
                             $_SESSION['user_2fa_pending'] = true;
                             header("Location: verify_2fa.php");
                             exit;
@@ -165,7 +205,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         // Normal login
                         $_SESSION['EmployeeID'] = $uid;
                         $_SESSION['FirstName']  = (string)$user['FirstName'];
-                        header("Location: dashboard.php");
+
+                        // Unified admin session: any non-employee role also gets the admin/* checks
+                        if ($role !== 'employee') {
+                            $_SESSION['admin']      = trim($user['FirstName'] . ' ' . $user['LastName']);
+                            $_SESSION['admin_role'] = $role;
+                        }
+
+                        // Routing: admins who came in via Admin Login land in the admin portal.
+                        // Everyone else lands on the employee dashboard.
+                        if ($role !== 'employee' && $fromAdmin) {
+                            header("Location: ../admin/dashboard.php");
+                        } else {
+                            header("Location: dashboard.php");
+                        }
                         exit;
                     }
 
@@ -188,6 +241,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $attemptsLeftForView = $remaining;
                     }
                 }
+            } elseif ($initialsAmbiguous) {
+                /* Ambiguous initials — error already set, do NOT count as a failed attempt
+                   since the user wasn't wrong, just imprecise. */
             } else {
                 /* ---- No matching user: count by nameKey only ---- */
                 usleep(FAILURE_DELAY_US_LOGIN);
@@ -236,9 +292,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <a href="../index.php">🏠 Home</a>
     <a href="./login.php">🔐 User Login</a>
     <div class="dropdown">
-      <button class="dropbtn">⏱ Settings ▾</button>
+      <button class="dropbtn">⏱ More ▾</button>
       <div class="dropdown-content">
-        <a href="../admin/login.php">Admin Login</a>
         <a href="../admin/reports.php">Timeclock Reports</a>
       </div>
     </div>
@@ -277,6 +332,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
       <h2 id="login-title">Employee Login</h2>
 
+      <?php if (isset($_GET['admin']) && $_GET['admin'] === '1'): ?>
+        <div class="info" aria-live="polite" style="background-color:#d1ecf1; border:1px solid #bee5eb; color:#0c5460; padding:0.5rem 0.75rem; border-radius:4px; margin-bottom:0.75rem;">
+          Admins now use this same form — log in with your full name (e.g. "Amanda Pereira").
+        </div>
+      <?php endif; ?>
+
       <?php if (!empty($error)): ?>
         <div class="error" aria-live="assertive"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div>
       <?php endif; ?>
@@ -289,6 +350,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
       <form method="POST" novalidate>
         <input type="hidden" name="csrf" value="<?= htmlspecialchars($_SESSION['csrf'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
+        <?php if ($fromAdmin): ?>
+          <input type="hidden" name="from_admin" value="1">
+        <?php endif; ?>
 
         <div class="field" id="nameField">
           <label for="nameInput">Name</label>
@@ -322,7 +386,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <button type="submit">Login</button>
 
         <div class="help" style="margin-top:0.75rem; font-size:0.85rem; color:#9ca3af;" aria-live="polite">
-            Tip: You can type “Last, First” or “First Last”.
+            Tip: type your full name (“First Last” or “Last, First”) or just your initials (“GP”, “ap”…). Case doesn't matter.
         </div>
       </form>
     </div>
