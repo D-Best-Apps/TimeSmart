@@ -51,11 +51,18 @@ while ($row = $result->fetch_assoc()) {
     }
 }
 
-// Pending time-off requests
+// Pending time-off requests (includes amendments — left-joined original for diff display)
 $torStmt = $conn->prepare("
-    SELECT tor.*, u.FirstName, u.LastName
+    SELECT tor.*, u.FirstName, u.LastName,
+           orig.Category   AS Orig_Category,
+           orig.StartDate  AS Orig_StartDate,
+           orig.EndDate    AS Orig_EndDate,
+           orig.StartTime  AS Orig_StartTime,
+           orig.EndTime    AS Orig_EndTime,
+           orig.Notes      AS Orig_Notes
       FROM time_off_requests tor
       JOIN users u ON u.ID = tor.EmployeeID
+      LEFT JOIN time_off_requests orig ON orig.ID = tor.AmendsRequestID
      WHERE tor.Status = 'Pending'
      ORDER BY tor.SubmittedAt ASC
 ");
@@ -157,13 +164,53 @@ require_once 'header.php';
                 </thead>
                 <tbody>
                     <?php foreach ($timeOffRequests as $tor): ?>
-                        <tr>
+                        <?php $isAmendment = !empty($tor['AmendsRequestID']); ?>
+                        <tr<?= $isAmendment ? ' style="background-color:#fff8e1;"' : '' ?>>
                             <td><?= htmlspecialchars(date('m/d/Y', strtotime($tor['SubmittedAt']))) ?></td>
-                            <td><?= htmlspecialchars($tor['FirstName'] . ' ' . $tor['LastName']) ?></td>
-                            <td><strong><?= htmlspecialchars($tor['Category']) ?></strong></td>
-                            <td><?= formatTorDateRange($tor['StartDate'], $tor['EndDate']) ?></td>
-                            <td><?= formatTorTimeRange($tor['StartTime'], $tor['EndTime']) ?></td>
-                            <td class="note-box"><?= nl2br(htmlspecialchars($tor['Notes'] ?? '')) ?: '-' ?></td>
+                            <td>
+                                <?= htmlspecialchars($tor['FirstName'] . ' ' . $tor['LastName']) ?>
+                                <?php if ($isAmendment): ?>
+                                    <br><span style="display:inline-block; padding:1px 6px; border-radius:3px; background-color:#ffc107; color:#000; font-size:0.7rem; font-weight:bold;">AMENDMENT</span>
+                                <?php endif; ?>
+                            </td>
+                            <td>
+                                <?php if ($isAmendment && $tor['Orig_Category'] !== $tor['Category']): ?>
+                                    <s style="color:#999;"><?= htmlspecialchars($tor['Orig_Category']) ?></s><br>
+                                    <strong><?= htmlspecialchars($tor['Category']) ?></strong>
+                                <?php else: ?>
+                                    <strong><?= htmlspecialchars($tor['Category']) ?></strong>
+                                <?php endif; ?>
+                            </td>
+                            <td>
+                                <?php
+                                  $newDates = formatTorDateRange($tor['StartDate'], $tor['EndDate']);
+                                  $origDates = $isAmendment ? formatTorDateRange($tor['Orig_StartDate'], $tor['Orig_EndDate']) : null;
+                                ?>
+                                <?php if ($isAmendment && $origDates !== $newDates): ?>
+                                    <s style="color:#999;"><?= $origDates ?></s><br>
+                                    <strong><?= $newDates ?></strong>
+                                <?php else: ?>
+                                    <?= $newDates ?>
+                                <?php endif; ?>
+                            </td>
+                            <td>
+                                <?php
+                                  $newTimes  = formatTorTimeRange($tor['StartTime'], $tor['EndTime']);
+                                  $origTimes = $isAmendment ? formatTorTimeRange($tor['Orig_StartTime'], $tor['Orig_EndTime']) : null;
+                                ?>
+                                <?php if ($isAmendment && $origTimes !== $newTimes): ?>
+                                    <s style="color:#999;"><?= $origTimes ?></s><br>
+                                    <strong><?= $newTimes ?></strong>
+                                <?php else: ?>
+                                    <?= $newTimes ?>
+                                <?php endif; ?>
+                            </td>
+                            <td class="note-box">
+                                <?= nl2br(htmlspecialchars($tor['Notes'] ?? '')) ?: '-' ?>
+                                <?php if ($isAmendment && !empty($tor['Reason'])): ?>
+                                    <div style="margin-top:0.3rem; font-size:0.85rem; color:#555;"><em>Reason for change:</em> <?= nl2br(htmlspecialchars($tor['Reason'])) ?></div>
+                                <?php endif; ?>
+                            </td>
                             <td>
                                 <input type="text" name="review_note[<?= (int) $tor['ID'] ?>]" maxlength="500" placeholder="Optional" style="width:100%; padding:4px;">
                             </td>

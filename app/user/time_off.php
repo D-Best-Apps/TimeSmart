@@ -14,6 +14,12 @@ if (isset($_GET['status'])) {
         case 'withdrawn':
             $statusMessage = '<div class="alert alert-info">Your request has been withdrawn.</div>';
             break;
+        case 'updated':
+            $statusMessage = '<div class="alert alert-success">Your pending request has been updated.</div>';
+            break;
+        case 'amendment_submitted':
+            $statusMessage = '<div class="alert alert-success">Your amendment has been submitted for approval. The original request stays active until the amendment is reviewed.</div>';
+            break;
         case 'invalid':
             $reason = $_GET['reason'] ?? 'Please check your inputs.';
             $statusMessage = '<div class="alert alert-danger">Submission rejected: ' . htmlspecialchars($reason) . '</div>';
@@ -32,6 +38,16 @@ $stmt = $conn->prepare("SELECT * FROM time_off_requests WHERE EmployeeID = ? ORD
 $stmt->bind_param("i", $empID);
 $stmt->execute();
 $history = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+
+// Identify Approved rows that already have a Pending amendment — hide Edit on those
+$pendingAmendmentOf = [];
+$amendStmt = $conn->prepare("SELECT AmendsRequestID FROM time_off_requests WHERE EmployeeID = ? AND Status = 'Pending' AND AmendsRequestID IS NOT NULL");
+$amendStmt->bind_param("i", $empID);
+$amendStmt->execute();
+$amendRes = $amendStmt->get_result();
+while ($r = $amendRes->fetch_assoc()) {
+    $pendingAmendmentOf[(int) $r['AmendsRequestID']] = true;
+}
 
 $today = date('Y-m-d');
 
@@ -152,20 +168,39 @@ function formatDateRange(string $start, string $end): string {
       </thead>
       <tbody>
         <?php foreach ($history as $r): ?>
+          <?php
+            $isAmendment = !empty($r['AmendsRequestID']);
+            $hasOpenAmendment = isset($pendingAmendmentOf[(int) $r['ID']]);
+          ?>
           <tr>
             <td><?= date('m/d/Y', strtotime($r['SubmittedAt'])) ?></td>
-            <td><?= htmlspecialchars($r['Category']) ?></td>
+            <td>
+              <?= htmlspecialchars($r['Category']) ?>
+              <?php if ($isAmendment): ?>
+                <span style="display:inline-block; padding:1px 6px; border-radius:3px; background-color:#fff3cd; color:#856404; font-size:0.75rem; margin-left:0.25rem;">amendment</span>
+              <?php endif; ?>
+            </td>
             <td><?= formatDateRange($r['StartDate'], $r['EndDate']) ?></td>
             <td><?= formatTimeRange($r['StartTime'], $r['EndTime']) ?></td>
-            <td><?= nl2br(htmlspecialchars($r['Notes'] ?? '')) ?: '&mdash;' ?></td>
+            <td>
+              <?= nl2br(htmlspecialchars($r['Notes'] ?? '')) ?: '&mdash;' ?>
+              <?php if ($isAmendment && !empty($r['Reason'])): ?>
+                <div style="margin-top:0.25rem; font-size:0.85rem; color:#555;"><em>Reason for change:</em> <?= nl2br(htmlspecialchars($r['Reason'])) ?></div>
+              <?php endif; ?>
+            </td>
             <td class="status-<?= htmlspecialchars($r['Status']) ?>"><?= htmlspecialchars($r['Status']) ?></td>
             <td><?= nl2br(htmlspecialchars($r['ReviewNote'] ?? '')) ?: '&mdash;' ?></td>
-            <td>
+            <td style="white-space:nowrap;">
               <?php if ($r['Status'] === 'Pending'): ?>
-                <form method="POST" action="withdraw_time_off.php" style="margin:0;">
+                <a href="edit_time_off.php?id=<?= (int) $r['ID'] ?>" class="withdraw-btn" style="background-color:#0078D7; text-decoration:none; display:inline-block; margin-right:0.25rem;">Edit</a>
+                <form method="POST" action="withdraw_time_off.php" style="margin:0; display:inline-block;">
                   <input type="hidden" name="id" value="<?= (int) $r['ID'] ?>">
                   <button type="submit" class="withdraw-btn" onclick="return confirm('Withdraw this request?');">Withdraw</button>
                 </form>
+              <?php elseif ($r['Status'] === 'Approved' && !$hasOpenAmendment): ?>
+                <a href="edit_time_off.php?id=<?= (int) $r['ID'] ?>" class="withdraw-btn" style="background-color:#0078D7; text-decoration:none; display:inline-block;">Edit</a>
+              <?php elseif ($r['Status'] === 'Approved' && $hasOpenAmendment): ?>
+                <span style="color:#856404; font-size:0.85rem;">amendment pending</span>
               <?php endif; ?>
             </td>
           </tr>

@@ -38,7 +38,7 @@ foreach ($_POST['action'] as $requestID => $action) {
 
     $decision = ($action === 'approve') ? 'Approved' : 'Rejected';
 
-    // Load the request (must still be Pending — guard against races)
+    // Load the (pending) request joined with the user and any original it amends
     $stmt = $conn->prepare("
         SELECT tor.*, u.FirstName, u.LastName, u.Email
           FROM time_off_requests tor
@@ -50,12 +50,17 @@ foreach ($_POST['action'] as $requestID => $action) {
     $req = $stmt->get_result()->fetch_assoc();
     if (!$req) continue;
 
+    $isAmendment   = !empty($req['AmendsRequestID']);
+    $originalID    = $isAmendment ? (int) $req['AmendsRequestID'] : null;
+    $employeeName  = trim(($req['FirstName'] ?? '') . ' ' . ($req['LastName'] ?? ''));
+
     $note = trim($reviewNotes[$requestID] ?? '');
     if ($note !== '' && mb_strlen($note) > 500) {
         $note = mb_substr($note, 0, 500);
     }
     $noteVal = $note !== '' ? $note : null;
 
+    // Mark the (amendment or normal) request row decided
     $update = $conn->prepare("
         UPDATE time_off_requests
            SET Status = ?, ReviewedAt = ?, ReviewedBy = ?, ReviewNote = ?
@@ -63,37 +68,73 @@ foreach ($_POST['action'] as $requestID => $action) {
     ");
     $update->bind_param("ssssi", $decision, $now, $admin, $noteVal, $requestID);
     if (!$update->execute() || $update->affected_rows === 0) {
-        continue; // Another tab already decided this one
+        continue; // Race — another tab already decided this one
     }
 
-    // Notify employee (best-effort; never block on email failure)
-    $employeeEmail = trim($req['Email'] ?? '');
-    if ($employeeEmail !== '') {
-        $datesLabel = formatDateRange($req['StartDate'], $req['EndDate']);
-        $timesLabel = formatTimeRange($req['StartTime'], $req['EndTime']);
+    // === Amendment-approval path ===
+    // 1. Copy the amendment's new values onto the original row
+    // 2. Delete the old M365 event, create a new one against the original row
+    if ($decision === 'Approved' && $isAmendment && $originalID !== null) {
+        $copy = $conn->prepare("
+            UPDATE time_off_requests
+               SET Category=?, StartDate=?, EndDate=?, StartTime=?, EndTime=?, Notes=?
+             WHERE ID = ? AND Status = 'Approved'
+        ");
+        $copy->bind_param(
+            "ssssssi",
+            $req['Category'], $req['StartDate'], $req['EndDate'],
+            $req['StartTime'], $req['EndTime'], $req['Notes'],
+            $originalID
+        );
+        $copy->execute();
 
-        $subject = "Your Time-Off Request was {$decision}";
-        $body  = "<p>Hi " . htmlspecialchars($req['FirstName']) . ",</p>";
-        $body .= "<p>Your time-off request has been <strong>{$decision}</strong>.</p>";
-        $body .= "<ul>";
-        $body .= "<li><strong>Category:</strong> " . htmlspecialchars($req['Category']) . "</li>";
-        $body .= "<li><strong>Dates:</strong> " . htmlspecialchars($datesLabel) . "</li>";
-        $body .= "<li><strong>Times:</strong> " . htmlspecialchars($timesLabel) . "</li>";
-        if (!empty($req['Notes'])) {
-            $body .= "<li><strong>Your notes:</strong> " . nl2br(htmlspecialchars($req['Notes'])) . "</li>";
-        }
-        if ($noteVal !== null) {
-            $body .= "<li><strong>Reviewer note:</strong> " . nl2br(htmlspecialchars($noteVal)) . "</li>";
-        }
-        $body .= "<li><strong>Reviewed by:</strong> " . htmlspecialchars($admin) . "</li>";
-        $body .= "</ul>";
+        // Reload the (now updated) original to get its current M365EventId
+        $origStmt = $conn->prepare("
+            SELECT tor.*, u.FirstName, u.LastName, u.Email
+              FROM time_off_requests tor
+              JOIN users u ON u.ID = tor.EmployeeID
+             WHERE tor.ID = ?
+        ");
+        $origStmt->bind_param("i", $originalID);
+        $origStmt->execute();
+        $origRow = $origStmt->get_result()->fetch_assoc();
 
-        sendTimeOffEmail($conn, $employeeEmail, $subject, $body);
+        // Sync: delete the old event, create a new one
+        $config = m365GetConfig($conn);
+        if ($config !== null) {
+            $tok = m365GetToken($config);
+            if ($tok['success'] && !empty($config['m365_calendar_mailbox'])) {
+                $event = m365BuildEvent($origRow, $employeeName, $config['m365_timezone']);
+                $result = m365ReplaceMailboxEvent(
+                    $config['m365_calendar_mailbox'],
+                    $tok['token'],
+                    $origRow['M365EventId'] ?? null,
+                    $event
+                );
+
+                $newEventId   = $result['success'] ? $result['eventId'] : null;
+                $newSyncState = $result['success']
+                    ? 'sent'
+                    : 'error:' . ($result['error'] ?? 'unknown');
+
+                $syncUpdate = $conn->prepare("
+                    UPDATE time_off_requests
+                       SET M365EventId = ?, M365SyncStatus = ?, M365SyncAt = ?
+                     WHERE ID = ?
+                ");
+                $syncUpdate->bind_param("sssi", $newEventId, $newSyncState, $now, $originalID);
+                $syncUpdate->execute();
+
+                if (!$result['success']) {
+                    $m365Failures[] = htmlspecialchars($employeeName) . ' (amendment): ' . $result['error'];
+                }
+            } elseif (!$tok['success']) {
+                error_log("process_time_off: amendment sync skipped — token failed: " . $tok['error']);
+            }
+        }
     }
-
-    // M365 PTO Calendar sync — only on approve, best-effort
-    if ($decision === 'Approved') {
-        $employeeName = trim(($req['FirstName'] ?? '') . ' ' . ($req['LastName'] ?? ''));
+    // === Normal new-request approval path ===
+    elseif ($decision === 'Approved') {
         $sync = m365SyncApprovedRequest($conn, $req, $employeeName);
 
         $eventId   = $sync['success'] ? $sync['eventId'] : null;
@@ -110,8 +151,37 @@ foreach ($_POST['action'] as $requestID => $action) {
         $syncUpdate->execute();
 
         if (!$sync['success'] && empty($sync['skipped'])) {
-            $m365Failures[] = htmlspecialchars(($req['FirstName'] ?? '') . ' ' . ($req['LastName'] ?? '')) . ': ' . $sync['error'];
+            $m365Failures[] = htmlspecialchars($employeeName) . ': ' . $sync['error'];
         }
+    }
+
+    // Notify employee (best-effort)
+    $employeeEmail = trim($req['Email'] ?? '');
+    if ($employeeEmail !== '') {
+        $datesLabel = formatDateRange($req['StartDate'], $req['EndDate']);
+        $timesLabel = formatTimeRange($req['StartTime'], $req['EndTime']);
+        $subjectKind = $isAmendment ? "Time-Off Amendment" : "Time-Off Request";
+
+        $subject = "Your {$subjectKind} was {$decision}";
+        $body  = "<p>Hi " . htmlspecialchars($req['FirstName']) . ",</p>";
+        $body .= "<p>Your " . strtolower($subjectKind) . " has been <strong>{$decision}</strong>.</p>";
+        $body .= "<ul>";
+        $body .= "<li><strong>Category:</strong> " . htmlspecialchars($req['Category']) . "</li>";
+        $body .= "<li><strong>Dates:</strong> " . htmlspecialchars($datesLabel) . "</li>";
+        $body .= "<li><strong>Times:</strong> " . htmlspecialchars($timesLabel) . "</li>";
+        if (!empty($req['Notes'])) {
+            $body .= "<li><strong>Your notes:</strong> " . nl2br(htmlspecialchars($req['Notes'])) . "</li>";
+        }
+        if ($isAmendment && !empty($req['Reason'])) {
+            $body .= "<li><strong>Your reason for the change:</strong> " . nl2br(htmlspecialchars($req['Reason'])) . "</li>";
+        }
+        if ($noteVal !== null) {
+            $body .= "<li><strong>Reviewer note:</strong> " . nl2br(htmlspecialchars($noteVal)) . "</li>";
+        }
+        $body .= "<li><strong>Reviewed by:</strong> " . htmlspecialchars($admin) . "</li>";
+        $body .= "</ul>";
+
+        sendTimeOffEmail($conn, $employeeEmail, $subject, $body);
     }
 }
 

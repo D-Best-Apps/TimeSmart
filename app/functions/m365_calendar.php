@@ -175,6 +175,56 @@ function m365CreateGroupEvent(string $groupId, string $accessToken, array $event
 }
 
 /**
+ * DELETE an event from a shared mailbox / user calendar by event ID.
+ * Treats 404 (already gone) as success. Other failures return success=false.
+ * Used by the amendment flow when an approved request is edited.
+ */
+function m365DeleteMailboxEvent(string $mailboxUpn, string $accessToken, string $eventId): array {
+    $url = "https://graph.microsoft.com/v1.0/users/" . rawurlencode($mailboxUpn) . "/events/" . urlencode($eventId);
+    $ch  = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_CUSTOMREQUEST  => 'DELETE',
+        CURLOPT_HTTPHEADER     => ['Authorization: Bearer ' . $accessToken],
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 30,
+    ]);
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $cErr     = curl_error($ch);
+    curl_close($ch);
+
+    if ($response === false) {
+        return ['success' => false, 'error' => 'cURL error: ' . $cErr];
+    }
+    if ($httpCode === 404) {
+        return ['success' => true, 'note' => 'event already absent'];
+    }
+    if ($httpCode >= 200 && $httpCode < 300) {
+        return ['success' => true];
+    }
+    $data = json_decode($response, true);
+    $reason = $data['error']['message'] ?? "HTTP {$httpCode}";
+    return ['success' => false, 'error' => 'Delete event: ' . $reason];
+}
+
+/**
+ * Replace an existing M365 event: delete the old one and create a new one
+ * with the supplied event data. Returns the new event ID on success.
+ * Used by the amendment-approval flow. Falls through to create even if the
+ * delete fails (e.g., the old event was already removed manually) — we'd
+ * rather have a duplicate to clean up than no event at all.
+ */
+function m365ReplaceMailboxEvent(string $mailboxUpn, string $accessToken, ?string $oldEventId, array $newEventData): array {
+    if ($oldEventId) {
+        $del = m365DeleteMailboxEvent($mailboxUpn, $accessToken, $oldEventId);
+        if (!$del['success']) {
+            error_log("m365_calendar: delete-before-replace failed (continuing): " . $del['error']);
+        }
+    }
+    return m365CreateMailboxEvent($mailboxUpn, $accessToken, $newEventData);
+}
+
+/**
  * POST an event to a shared mailbox / user calendar.
  * Returns ['success' => true, 'eventId' => string] or ['success' => false, 'error' => string].
  */

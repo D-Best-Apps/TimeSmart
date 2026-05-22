@@ -85,11 +85,13 @@ CREATE TABLE `time_off_requests` (
   `StartTime` time DEFAULT NULL,
   `EndTime` time DEFAULT NULL,
   `Notes` varchar(500) DEFAULT NULL,
+  `Reason` varchar(500) DEFAULT NULL,
   `Status` enum('Pending','Approved','Rejected','Withdrawn') NOT NULL DEFAULT 'Pending',
   `SubmittedAt` datetime NOT NULL,
   `ReviewedAt` datetime DEFAULT NULL,
   `ReviewedBy` varchar(100) DEFAULT NULL,
   `ReviewNote` varchar(500) DEFAULT NULL,
+  `AmendsRequestID` int(11) DEFAULT NULL,
   `M365EventId` varchar(255) DEFAULT NULL,
   `M365SyncStatus` varchar(255) DEFAULT NULL,
   `M365SyncAt` datetime DEFAULT NULL,
@@ -97,6 +99,7 @@ CREATE TABLE `time_off_requests` (
   KEY `idx_tor_status` (`Status`),
   KEY `idx_tor_emp_status` (`EmployeeID`, `Status`),
   KEY `idx_tor_dates` (`StartDate`, `EndDate`),
+  KEY `idx_tor_amends` (`AmendsRequestID`),
   CONSTRAINT `fk_tor_employee` FOREIGN KEY (`EmployeeID`) REFERENCES `users` (`ID`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
