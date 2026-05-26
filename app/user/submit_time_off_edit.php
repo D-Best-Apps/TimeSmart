@@ -119,7 +119,7 @@ $ins = $conn->prepare("
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?, ?)
 ");
 $ins->bind_param(
-    "isssssssii",
+    "issssssssi",
     $sessionEmpID, $category, $startDate, $endDate, $startTimeVal, $endTimeVal,
     $notesVal, $reasonVal, $now, $requestID
 );

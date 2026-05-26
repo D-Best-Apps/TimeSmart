@@ -83,8 +83,8 @@ $logs = $logStmt->get_result();
             <button id="logs-btn" onclick="switchTab('logs')">Login History</button>
         </div>
 
+        <form method="POST" enctype="multipart/form-data">
         <div class="tab-content" id="profile">
-            <form method="POST" enctype="multipart/form-data">
                 <div><label>First Name</label><input type="text" name="FirstName" value="<?= htmlspecialchars($user['FirstName']) ?>" required></div>
                 <div><label>Last Name</label><input type="text" name="LastName" value="<?= htmlspecialchars($user['LastName']) ?>" required></div>
                 <div><label>Email</label><input type="email" name="Email" value="<?= htmlspecialchars($user['Email']) ?>"></div>
@@ -111,7 +111,6 @@ $logs = $logStmt->get_result();
                     <button type="reset" class="btn-cancel">Cancel</button>
                     <a href="dashboard.php" class="button btn-done">Done</a>
                 </div>
-            </form>
         </div>
 
         <div class="tab-content" id="security">
@@ -125,6 +124,11 @@ $logs = $logStmt->get_result();
                 <input type="password" name="ConfirmPassword" id="ConfirmPassword">
                 <span class="toggle-password" onclick="togglePassword('ConfirmPassword')">👁</span>
             </div>
+
+            <div class="actions full">
+                <button type="submit" class="btn-save">Save Password</button>
+            </div>
+        </form>
 
             <div class="twofa-box full">
                 <h3>Two-Factor Authentication</h3>
