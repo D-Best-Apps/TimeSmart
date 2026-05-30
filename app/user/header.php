@@ -36,7 +36,7 @@ foreach ($extensions as $ext) {
 <head>
     <title>User Dashboard</title>
     <link rel="stylesheet" href="../css/user.css?v=2">
-    <link rel="stylesheet" href="../css/style.css">
+    <link rel="stylesheet" href="../css/style.css?v=2">
     <link rel="icon" type="image/webp" href="../images/D-Best-favicon.webp">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <script src="../js/user_header.js"></script>
