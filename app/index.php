@@ -194,7 +194,7 @@ $quickDefault = getSettingValue('QuickDefaultField', $conn) ?: 'none';
             ?>
             <tr>
                 <td><a href="#" onclick="openModal(<?= $row['ID'] ?>, '<?= htmlspecialchars($fullName) ?>')"><?= htmlspecialchars($fullName) ?></a></td>
-                <td><span class="status <?= strtolower($status ?: 'out') ?>"><?= htmlspecialchars($status ?: 'Out') ?></span></td>
+                <td onclick="openModal(<?= $row['ID'] ?>, '<?= htmlspecialchars($fullName) ?>')" style="cursor:pointer" title="Clock in / out"><span class="status <?= strtolower($status ?: 'out') ?>"><?= htmlspecialchars($status ?: 'Out') ?></span></td>
                 <td><?= $lastTime ?></td>
                 <td><?= $lastDate ?></td>
                 <td><?= htmlspecialchars($note) ?></td>

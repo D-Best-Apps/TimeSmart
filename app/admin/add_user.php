@@ -32,6 +32,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    // Badge ID, if given, must meet the minimum length
+    if ($badgeID !== '' && strlen($badgeID) < 6) {
+        header('Location: ../error.php?code=400&message=' . urlencode('Badge ID must be at least 6 characters.'));
+        exit;
+    }
+
     // Convert HH:MM to HH:MM:SS format for database
     if (!empty($scheduledStartTime)) {
         $scheduledStartTime .= ':00';

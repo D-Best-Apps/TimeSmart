@@ -15,6 +15,7 @@ if (!isset($_SESSION['admin'])) {
 // Permission check
 require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('manage_users');
+require_once __DIR__ . '/../functions/profile_photo.php';
 
 $id = $_GET['id'] ?? null;
 if (!$id || !is_numeric($id)) {
@@ -56,6 +57,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // PIN, if given, must be 4-6 digits
     if ($pin !== '' && !preg_match('/^\d{4,6}$/', $pin)) {
         header('Location: ../error.php?code=400&message=' . urlencode('PIN must be 4 to 6 digits.'));
+        exit;
+    }
+
+    // Badge ID, if given, must meet the minimum length
+    if ($badgeID !== '' && strlen($badgeID) < 6) {
+        header('Location: ../error.php?code=400&message=' . urlencode('Badge ID must be at least 6 characters.'));
         exit;
     }
 
@@ -107,6 +114,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $stmt->execute();
 
+        // Optional profile photo (also used on printed badges)
+        [$photoOk, $photoRes] = save_profile_photo($_FILES['ProfilePhoto'] ?? null, (int) $id);
+        if ($photoOk === false) {
+            header('Location: ../error.php?code=400&message=' . urlencode($photoRes));
+            exit;
+        } elseif ($photoOk === true) {
+            $up = $conn->prepare("UPDATE users SET ProfilePhoto=? WHERE ID=?");
+            $up->bind_param("si", $photoRes, $id);
+            $up->execute();
+        }
+
         header("Location: manage_users.php");
         exit;
     } else {
@@ -125,7 +143,7 @@ require_once 'header.php';
         <div class="alert error"><?= htmlspecialchars($error) ?></div>
     <?php endif; ?>
 
-    <form method="POST" class="uman-form">
+    <form method="POST" class="uman-form" enctype="multipart/form-data">
         <label>First Name
             <input type="text" name="FirstName" value="<?= htmlspecialchars($user['FirstName'] ?? '') ?>" required>
         </label>
@@ -169,6 +187,13 @@ require_once 'header.php';
 
         <label>Phone Number
             <input type="text" name="PhoneNumber" value="<?= htmlspecialchars($user['PhoneNumber'] ?? '') ?>">
+        </label>
+
+        <label>Photo <small>(for the badge; JPG/PNG/WEBP, under 2 MB)</small>
+            <?php if (!empty($user['ProfilePhoto']) && file_exists(__DIR__ . '/../uploads/' . $user['ProfilePhoto'])): ?>
+                <img src="../uploads/<?= htmlspecialchars($user['ProfilePhoto']) ?>" alt="Current photo" style="display:block; width:80px; height:80px; object-fit:cover; border-radius:8px; margin:0.3rem 0;">
+            <?php endif; ?>
+            <input type="file" name="ProfilePhoto" accept="image/png,image/jpeg,image/webp">
         </label>
 
         <label>Password <small>(leave blank to keep current)</small>

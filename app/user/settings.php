@@ -1,6 +1,7 @@
 <?php
 require_once 'header.php';
 require_once __DIR__ . '/../functions/password_policy.php';
+require_once __DIR__ . '/../functions/profile_photo.php';
 
 $msg = "";
 $errors = [];
@@ -21,6 +22,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($pin !== '' && !preg_match('/^\d{4,6}$/', $pin)) {
         $errors[] = "PIN must be 4 to 6 digits.";
+    }
+    if ($badgeID !== '' && strlen($badgeID) < 6) {
+        $errors[] = "Badge ID must be at least 6 characters.";
     }
 
     // Uniqueness (excluding self) for Badge ID and PIN
@@ -56,21 +60,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    if (isset($_FILES['ProfilePhoto']) && $_FILES['ProfilePhoto']['error'] === UPLOAD_ERR_OK) {
-        $allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
-        if (!in_array($_FILES['ProfilePhoto']['type'], $allowedTypes)) {
-            $errors[] = "Invalid image type. Only JPG, PNG, WEBP allowed.";
-        } elseif ($_FILES['ProfilePhoto']['size'] > 2 * 1024 * 1024) {
-            $errors[] = "File must be under 2MB.";
-        } else {
-            $ext = pathinfo($_FILES['ProfilePhoto']['name'], PATHINFO_EXTENSION);
-            $newName = "profile_$empID." . $ext;
-            $uploadPath = "../uploads/" . $newName;
-            move_uploaded_file($_FILES['ProfilePhoto']['tmp_name'], $uploadPath);
-            $stmt = $conn->prepare("UPDATE users SET ProfilePhoto=? WHERE ID=?");
-            $stmt->bind_param("si", $newName, $empID);
-            $stmt->execute();
-        }
+    [$photoOk, $photoRes] = save_profile_photo($_FILES['ProfilePhoto'] ?? null, (int) $empID);
+    if ($photoOk === false) {
+        $errors[] = $photoRes;
+    } elseif ($photoOk === true) {
+        $stmt = $conn->prepare("UPDATE users SET ProfilePhoto=? WHERE ID=?");
+        $stmt->bind_param("si", $photoRes, $empID);
+        $stmt->execute();
     }
 
     if (empty($errors)) {

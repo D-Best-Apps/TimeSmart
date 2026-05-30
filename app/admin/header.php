@@ -114,6 +114,9 @@ $showSettingsMenu = checkPermission('manage_settings') || checkPermission('manag
                 <?php if (checkPermission('manage_admins')): ?>
                 <a href="manage_admins.php"<?= $currentPage == 'manage_admins.php' ? ' class="active"' : '' ?>>🛡️ Admins</a>
                 <?php endif; ?>
+                <?php if (checkPermission('manage_users')): ?>
+                <a href="badges.php"<?= $currentPage == 'badges.php' ? ' class="active"' : '' ?>>🪪 Print Badges</a>
+                <?php endif; ?>
             </div>
         </div>
         <?php endif; ?>
