@@ -20,20 +20,14 @@ require_once 'header.php';
             </div>
 
             <div class="report-card">
-                <h3>Timesheet Editor</h3>
-                <p>View and edit detailed punch logs including lunch and break periods per employee.</p>
-                <a href="view_punches.php">Open Timesheet Editor</a>
-            </div>
-
-            <div class="report-card">
                 <h3>Missed Days Report</h3>
-                <p>Track missed work days by pay period (Wednesday-Tuesday) with hours converted to days worked.</p>
+                <p>Payroll tally of missed work days per employee, by Wednesday&ndash;Tuesday pay period (days worked = hours &divide; 8).</p>
                 <a href="missed_days.php">Open Missed Days</a>
             </div>
 
             <div class="report-card">
                 <h3>Attendance Report</h3>
-                <p>View employee attendance calendar with present, incomplete, and absent status per day.</p>
+                <p>Day-by-day calendar grid showing each employee's Present, Incomplete, or Absent status (plus Sick/PTO) per day.</p>
                 <a href="attendance.php">Open Attendance</a>
             </div>
 
@@ -41,12 +35,6 @@ require_once 'header.php';
                 <h3>Tardies Report</h3>
                 <p>Track late arrivals by pay period with scheduled start times. Separates tardies under and over 5 minutes.</p>
                 <a href="tardies.php">Open Tardies</a>
-            </div>
-
-            <div class="report-card">
-                <h3>Export History <em>(Coming Soon)</em></h3>
-                <p>View previously exported PDF or Excel reports with download links and filters.</p>
-                <a href="#">Not Available</a>
             </div>
 
             <div class="report-card">
