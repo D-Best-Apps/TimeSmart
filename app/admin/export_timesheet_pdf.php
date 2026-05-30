@@ -67,7 +67,7 @@ function formatTime($time) {
 
 // === PDF SETUP ===
 $pdf = new TCPDF();
-$pdf->SetCreator('TimeClock System');
+$pdf->SetCreator('D-Best TimeSmart');
 $pdf->SetAuthor('D-Best Technologies');
 $pdf->SetTitle('Timesheet Report');
 $pdf->SetMargins(10, 15, 10);

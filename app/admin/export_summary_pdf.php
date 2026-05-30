@@ -117,7 +117,7 @@ foreach (array_keys($timeOffTotals) as $eid) {
 
 // PDF setup
 $pdf = new TCPDF();
-$pdf->SetCreator('TimeClock System');
+$pdf->SetCreator('D-Best TimeSmart');
 $pdf->SetAuthor('D-Best Technologies');
 $pdf->SetTitle('Payroll Summary Report');
 $pdf->SetMargins(15, 15, 15);

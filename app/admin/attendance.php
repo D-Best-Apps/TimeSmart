@@ -114,8 +114,8 @@ foreach (($selectedEmp === 'all' ? array_keys($employees) : [$selectedEmp]) as $
 if ($exportPDF) {
     $pdf = new TCPDF();
     $pdf->AddPage('L', 'A4');
-    $pdf->SetCreator('TimeClock');
-    $pdf->SetAuthor('TimeClock System');
+    $pdf->SetCreator('D-Best TimeSmart');
+    $pdf->SetAuthor('D-Best TimeSmart');
     $pdf->SetTitle('Attendance Report');
 
     $html = "<h2>Attendance Report</h2>";
@@ -284,8 +284,5 @@ require_once 'header.php';
         </tbody>
     </table>
 </div>
-
-<footer>&copy; <?= date('Y') ?> TimeClock System. All rights reserved.</footer>
-
 
 <?php require_once 'footer.php'; ?>

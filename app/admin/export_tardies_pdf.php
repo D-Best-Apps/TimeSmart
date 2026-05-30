@@ -158,7 +158,7 @@ foreach ($employeePayPeriods as $empID => $empData) {
 
 // === CREATE PDF ===
 $pdf = new TCPDF('L', PDF_UNIT, PDF_PAGE_FORMAT, true, 'UTF-8', false);
-$pdf->SetCreator('TimeClock System');
+$pdf->SetCreator('D-Best TimeSmart');
 $pdf->SetAuthor('D-Best Technologies');
 $pdf->SetTitle('Tardies Report');
 $pdf->SetMargins(15, 15, 15);

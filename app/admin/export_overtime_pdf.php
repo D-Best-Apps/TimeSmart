@@ -99,7 +99,7 @@ foreach ($byEmployee as $data) {
 }
 
 $pdf = new TCPDF();
-$pdf->SetCreator('TimeClock System');
+$pdf->SetCreator('D-Best TimeSmart');
 $pdf->SetAuthor('D-Best Technologies');
 $pdf->SetTitle('Overtime Report');
 $pdf->SetMargins(15, 15, 15);
