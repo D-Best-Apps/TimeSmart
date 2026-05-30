@@ -267,22 +267,22 @@ require_once 'header.php';
             </div>
             <hr style="margin: 2rem 0;">
 
-            <h2>Main Screen Quick Clock</h2>
+            <h2>Home Page Widgets</h2>
             <p style="color:#555; font-size:0.9em;">
-                Show fast clock in/out boxes above the employee status board on the public main screen.
-                An employee enters their PIN or scans their badge and presses Enter to toggle in/out.
-                Set each person's PIN / Badge ID on the <a href="manage_users.php">Users</a> page.
+                Optional widgets shown in the side panel of the public home page. The quick-clock lets
+                an employee enter their PIN or scan their badge and press Enter to toggle in/out —
+                set each person's PIN / Badge ID on the <a href="manage_users.php">Users</a> page.
             </p>
             <div class="field">
                 <label>
                     <input type="checkbox" name="QuickPinEnabled" value="1" <?= ($settings['QuickPinEnabled'] ?? '') === '1' ? 'checked' : '' ?>>
-                    Enable PIN entry on the main screen
+                    PIN login box
                 </label>
             </div>
             <div class="field">
                 <label>
                     <input type="checkbox" name="QuickBadgeEnabled" value="1" <?= ($settings['QuickBadgeEnabled'] ?? '') === '1' ? 'checked' : '' ?>>
-                    Enable badge scanning on the main screen
+                    Badge login box
                 </label>
             </div>
             <div class="field">
@@ -301,12 +301,6 @@ require_once 'header.php';
                 <a href="badges.php" target="_blank" class="button" style="display:inline-block; padding:0.6rem 1.2rem; background:#0078D7; color:#fff; border-radius:8px; text-decoration:none;">🪪 Print Badges (PDF)</a>
             </div>
             <?php endif; ?>
-            <div class="buttons">
-                <button type="submit">Save Settings</button>
-            </div>
-            <hr style="margin: 2rem 0;">
-
-            <h2>Home Page Widgets</h2>
             <div class="field">
                 <label>
                     <input type="checkbox" name="WeatherEnabled" value="1" <?= ($settings['WeatherEnabled'] ?? '') === '1' ? 'checked' : '' ?>>
@@ -329,7 +323,7 @@ require_once 'header.php';
                     Show the daily XKCD comic
                 </label>
                 <p style="color:#666; font-size:0.85em; margin:0.25rem 0 0;">
-                    A thumbnail of the latest <a href="https://xkcd.com" target="_blank" rel="noopener">xkcd</a> comic, shown above the weather.
+                    A thumbnail of the latest <a href="https://xkcd.com" target="_blank" rel="noopener">xkcd</a> comic, shown below the weather.
                 </p>
             </div>
             <div class="buttons">

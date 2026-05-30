@@ -38,7 +38,7 @@ $quickDefault = getSettingValue('QuickDefaultField', $conn) ?: 'none';
 <html>
 <head>
     <title>D-Best TimeClock</title>
-    <link rel="stylesheet" href="css/style.css?v=8">
+    <link rel="stylesheet" href="css/style.css?v=9">
     <link rel="icon" type="image/png" href="/images/D-Best.png">
     <link rel="apple-touch-icon" href="/images/D-Best.png">
     <link rel="icon" type="image/png" href="images/D-Best-favicon.png">
@@ -82,14 +82,29 @@ $quickDefault = getSettingValue('QuickDefaultField', $conn) ?: 'none';
 <div class="wrapper">
     <div class="main">
       <div class="home-layout">
-        <?php if ($weather || $xkcd): ?>
-        <aside class="weather-col" aria-label="Weather and comic">
-            <?php if ($xkcd): ?>
-            <a class="xkcd-card" href="<?= htmlspecialchars($xkcd['link']) ?>" target="_blank" rel="noopener" title="<?= htmlspecialchars($xkcd['alt']) ?>">
-                <div class="xkcd-head">xkcd #<?= htmlspecialchars($xkcd['num']) ?> &middot; <?= htmlspecialchars($xkcd['title']) ?></div>
-                <img class="xkcd-img" src="<?= htmlspecialchars($xkcd['img']) ?>" alt="<?= htmlspecialchars($xkcd['title']) ?>" loading="lazy">
-                <div class="xkcd-foot">click to view full comic →</div>
-            </a>
+        <?php if (($quickPin || $quickBadge) || $weather || $xkcd): ?>
+        <aside class="weather-col" aria-label="Quick clock, weather and comic">
+            <?php if ($quickPin || $quickBadge): ?>
+            <div class="quick-clock" id="quickClock" data-default="<?= htmlspecialchars($quickDefault) ?>">
+                <div class="quick-clock-inner">
+                    <?php if ($quickPin): ?>
+                    <form class="qc-form" data-method="pin" autocomplete="off">
+                        <label for="qcPin">PIN Login</label>
+                        <input type="password" id="qcPin" name="value" inputmode="numeric" pattern="\d*"
+                               maxlength="6" placeholder="Enter PIN, then Enter"
+                               autocomplete="new-password" data-1p-ignore="true" data-lpignore="true">
+                    </form>
+                    <?php endif; ?>
+                    <?php if ($quickBadge): ?>
+                    <form class="qc-form" data-method="badge" autocomplete="off">
+                        <label for="qcBadge">Badge Login</label>
+                        <input type="text" id="qcBadge" name="value" placeholder="Scan badge"
+                               autocomplete="off" data-1p-ignore="true" data-lpignore="true">
+                    </form>
+                    <?php endif; ?>
+                </div>
+                <div class="qc-feedback" id="qcFeedback" aria-live="polite"></div>
+            </div>
             <?php endif; ?>
             <?php if ($weather): ?>
             <div class="weather-card">
@@ -113,31 +128,16 @@ $quickDefault = getSettingValue('QuickDefaultField', $conn) ?: 'none';
                 </div>
             </div>
             <?php endif; ?>
+            <?php if ($xkcd): ?>
+            <a class="xkcd-card" href="<?= htmlspecialchars($xkcd['link']) ?>" target="_blank" rel="noopener" title="<?= htmlspecialchars($xkcd['alt']) ?>">
+                <div class="xkcd-head">xkcd #<?= htmlspecialchars($xkcd['num']) ?> &middot; <?= htmlspecialchars($xkcd['title']) ?></div>
+                <img class="xkcd-img" src="<?= htmlspecialchars($xkcd['img']) ?>" alt="<?= htmlspecialchars($xkcd['title']) ?>" loading="lazy">
+                <div class="xkcd-foot">click to view full comic →</div>
+            </a>
+            <?php endif; ?>
         </aside>
         <?php endif; ?>
         <div class="status-col">
-        <?php if ($quickPin || $quickBadge): ?>
-        <div class="quick-clock" id="quickClock" data-default="<?= htmlspecialchars($quickDefault) ?>">
-            <div class="quick-clock-inner">
-                <?php if ($quickPin): ?>
-                <form class="qc-form" data-method="pin" autocomplete="off">
-                    <label for="qcPin">PIN Login</label>
-                    <input type="password" id="qcPin" name="value" inputmode="numeric" pattern="\d*"
-                           maxlength="6" placeholder="Enter PIN, then Enter"
-                           autocomplete="new-password" data-1p-ignore="true" data-lpignore="true">
-                </form>
-                <?php endif; ?>
-                <?php if ($quickBadge): ?>
-                <form class="qc-form" data-method="badge" autocomplete="off">
-                    <label for="qcBadge">Badge Login</label>
-                    <input type="text" id="qcBadge" name="value" placeholder="Scan badge"
-                           autocomplete="off" data-1p-ignore="true" data-lpignore="true">
-                </form>
-                <?php endif; ?>
-            </div>
-            <div class="qc-feedback" id="qcFeedback" aria-live="polite"></div>
-        </div>
-        <?php endif; ?>
         <h2>Employee Status</h2>
         <table>
             <tr>

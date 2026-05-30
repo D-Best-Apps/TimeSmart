@@ -216,10 +216,10 @@ a.nav-date {
   margin-left: 6px;
 }
 
-/* 😉 XKCD thumbnail (sits above the weather card) */
+/* 😉 XKCD thumbnail (sits under the weather card) */
 .xkcd-card {
   display: block;
-  margin: 0 0 16px;
+  margin-top: 16px;
   background: white;
   border-radius: 8px;
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
@@ -266,16 +266,15 @@ a.nav-date {
 
 .quick-clock-inner {
   display: flex;
-  gap: 24px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .qc-form {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  flex: 0 1 300px;
-  max-width: 300px;
+  width: 100%;
   margin: 0;
 }
 
