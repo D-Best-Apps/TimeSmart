@@ -42,6 +42,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'gen_m
     exit;
 }
 
+// --- Action: save badge options (company name + office toggle) ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_opts') {
+    $opts = [
+        'CompanyName'     => trim($_POST['CompanyName'] ?? ''),
+        'BadgeShowOffice' => !empty($_POST['BadgeShowOffice']) ? '1' : '0',
+    ];
+    foreach ($opts as $k => $v) {
+        $s = $conn->prepare("INSERT INTO settings (SettingKey, SettingValue) VALUES (?, ?) ON DUPLICATE KEY UPDATE SettingValue = ?");
+        $s->bind_param("sss", $k, $v, $v);
+        $s->execute();
+        $s->close();
+    }
+    header("Location: badges.php?saved=1");
+    exit;
+}
+
 // --- PDF output: print the selected badges ---
 if (isset($_GET['print'])) {
     $ids = array_values(array_filter(array_map('intval', (array) ($_GET['ids'] ?? []))));
@@ -153,6 +169,11 @@ $users = [];
 $res = $conn->query("SELECT ID, FirstName, LastName, Office, BadgeID, ProfilePhoto FROM users ORDER BY LastName, FirstName");
 while ($row = $res->fetch_assoc()) { $users[] = $row; }
 $filled = isset($_GET['filled']) ? (int) $_GET['filled'] : null;
+$saved  = isset($_GET['saved']);
+
+$companyName = getSettingValue('CompanyName', $conn);
+if ($companyName === null || $companyName === '') { $companyName = 'D-Best TimeSmart'; }
+$showOffice = getSettingValue('BadgeShowOffice', $conn) !== '0';
 
 $pageTitle = "Print Badges";
 require_once 'header.php';
@@ -173,6 +194,23 @@ require_once 'header.php';
     Generated <?= $filled ?> Badge ID<?= $filled === 1 ? '' : 's' ?>.
   </p>
 <?php endif; ?>
+<?php if ($saved): ?>
+  <p style="background:#d4edda; color:#1d7a36; padding:0.7rem 1rem; border-radius:8px;">Badge options saved.</p>
+<?php endif; ?>
+
+<form method="post" style="margin:0 0 1.25rem; padding:1rem 1.2rem; background:#f8f9fb; border-radius:8px;">
+  <input type="hidden" name="action" value="save_opts">
+  <div style="display:flex; gap:1.25rem; flex-wrap:wrap; align-items:flex-end;">
+    <label>Company name <small>(top of each badge)</small>
+      <input type="text" name="CompanyName" maxlength="60" value="<?= htmlspecialchars($companyName) ?>"
+             style="display:block; margin-top:0.3rem; padding:0.6rem; border:1px solid #ccc; border-radius:6px; min-width:260px;">
+    </label>
+    <label style="display:flex; align-items:center; gap:0.4rem;">
+      <input type="checkbox" name="BadgeShowOffice" value="1" <?= $showOffice ? 'checked' : '' ?>> Include office on badges
+    </label>
+    <button type="submit" class="badge-btn secondary">Save options</button>
+  </div>
+</form>
 
 <p style="color:#555;">Tick the employees to print, then <strong>Print Selected</strong>. Badges open as a printable PDF.
    Employees without a Badge ID are skipped — use <strong>Generate missing Badge IDs</strong> to fill them with random 8-digit codes.</p>

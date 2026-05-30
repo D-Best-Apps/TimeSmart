@@ -45,10 +45,10 @@ foreach ($extensions as $ext) {
     <?php include '../functions/modal.html'; ?>
 
 <header class="topnav desktop-only">
-  <div class="topnav-left">
+  <a class="topnav-left" href="dashboard.php" title="Home" style="display:flex; align-items:center; gap:10px; text-decoration:none; color:inherit;">
     <img src="../images/D-Best-favicon.webp" class="nav-logo" alt="Logo">
     <span class="nav-title">D-Best TimeSmart</span>
-  </div>
+  </a>
   <div class="topnav-right">
     <span class="nav-date"><?= date('F j, Y') ?></span>
     <div class="profile-dropdown">

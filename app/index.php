@@ -50,28 +50,7 @@ $quickDefault = getSettingValue('QuickDefaultField', $conn) ?: 'none';
 </head>
 <body>
 
-<!-- 🌐 Desktop Nav -->
-<header class="topnav desktop-only">
-  <div class="topnav-left">
-    <img src="/images/D-Best.png" class="nav-logo" alt="Logo">
-    <span class="nav-title">D-Best TimeSmart</span>
-  </div>
-  <div class="topnav-right">
-    <span class="nav-date"><?= date('F j, Y') ?></span>
-    <a href="./user/login.php">🔐 Login</a>
-  </div>
-</header>
-
-<!-- 📱 Mobile Banner -->
-<div class="mobile-banner mobile-only">
-  <img src="/images/D-Best.png" alt="Logo" class="nav-logo">
-  <span class="nav-title">D-Best TimeSmart</span>
-</div>
-
-<!-- 📱 Mobile Menu -->
-<nav class="mobile-nav mobile-only">
-  <a href="./user/login.php">🔐 Login</a>
-</nav>
+<?php include __DIR__ . '/partials/public_header.php'; ?>
 
 
 
@@ -90,14 +69,16 @@ $quickDefault = getSettingValue('QuickDefaultField', $conn) ?: 'none';
                         <label for="qcPin">PIN Login</label>
                         <input type="password" id="qcPin" name="value" inputmode="numeric" pattern="\d*"
                                maxlength="6" placeholder="Enter PIN, then Enter"
-                               autocomplete="new-password" data-1p-ignore="true" data-lpignore="true">
+                               autocomplete="new-password" data-1p-ignore="true" data-lpignore="true"
+                               <?= $quickDefault === 'pin' ? 'autofocus' : '' ?>>
                     </form>
                     <?php endif; ?>
                     <?php if ($quickBadge): ?>
                     <form class="qc-form" data-method="badge" autocomplete="off">
                         <label for="qcBadge">Badge Login</label>
                         <input type="text" id="qcBadge" name="value" placeholder="Scan badge"
-                               autocomplete="off" data-1p-ignore="true" data-lpignore="true">
+                               autocomplete="off" data-1p-ignore="true" data-lpignore="true"
+                               <?= $quickDefault === 'badge' ? 'autofocus' : '' ?>>
                     </form>
                     <?php endif; ?>
                 </div>

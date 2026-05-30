@@ -80,7 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'mail_server', 'mail_port', 'mail_username',
         'mail_from_address', 'mail_from_name', 'mail_encryption', 'mail_admin_address',
         'm365_tenant_id', 'm365_client_id', 'm365_calendar_mailbox', 'm365_timezone',
-        'WeatherZip', 'QuickDefaultField', 'CompanyName'
+        'WeatherZip', 'QuickDefaultField'
     ];
 
     foreach ($settingsToUpdate as $key) {
@@ -152,14 +152,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $stmt->bind_param("sss", $key, $comicEnabledVal, $comicEnabledVal);
     $stmt->execute();
     $settings['ComicEnabled'] = $comicEnabledVal;
-
-    // Badge: include office line?
-    $badgeOfficeVal = !empty($_POST['BadgeShowOffice']) ? '1' : '0';
-    $stmt = $conn->prepare("INSERT INTO settings (SettingKey, SettingValue) VALUES (?, ?) ON DUPLICATE KEY UPDATE SettingValue = ?");
-    $key = 'BadgeShowOffice';
-    $stmt->bind_param("sss", $key, $badgeOfficeVal, $badgeOfficeVal);
-    $stmt->execute();
-    $settings['BadgeShowOffice'] = $badgeOfficeVal;
 
     // Handle mail_password separately for encryption
     if (isset($_POST['mail_password']) && !empty($_POST['mail_password'])) {
@@ -328,27 +320,6 @@ require_once 'header.php';
                 <p style="color:#666; font-size:0.85em; margin:0.25rem 0 0;">
                     A thumbnail of the latest <a href="https://xkcd.com" target="_blank" rel="noopener">xkcd</a> comic, shown below the weather.
                 </p>
-            </div>
-            <div class="buttons">
-                <button type="submit">Save Settings</button>
-            </div>
-            <hr style="margin: 2rem 0;">
-
-            <h2>Badges</h2>
-            <div class="field">
-                <label for="CompanyName">Company name (shown at the top of each badge):</label>
-                <input type="text" id="CompanyName" name="CompanyName" maxlength="60"
-                       value="<?= htmlspecialchars($settings['CompanyName'] ?? 'D-Best TimeSmart') ?>"
-                       placeholder="D-Best TimeSmart">
-            </div>
-            <div class="field">
-                <label>
-                    <input type="checkbox" name="BadgeShowOffice" value="1" <?= ($settings['BadgeShowOffice'] ?? '1') === '1' ? 'checked' : '' ?>>
-                    Include the office name on badges
-                </label>
-            </div>
-            <div class="field">
-                <a href="badges.php" class="button" style="display:inline-block; padding:0.6rem 1.2rem; background:#0078D7; color:#fff; border-radius:8px; text-decoration:none;">🪪 Open Badge Printing</a>
             </div>
             <div class="buttons">
                 <button type="submit">Save Settings</button>

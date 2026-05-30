@@ -100,30 +100,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </head>
 <body>
 
-<!-- 🌐 Desktop Nav -->
-<header class="topnav desktop-only">
-  <div class="topnav-left">
-    <img src="/images/D-Best.png" class="nav-logo" alt="Logo">
-    <span class="nav-title">D-Best TimeSmart</span>
-  </div>
-  <div class="topnav-right">
-    <span class="nav-date"><?= date('F j, Y') ?></span>
-    <a href="index.php">🏠 Home</a>
-    <a href="user/login.php">🔐 Login</a>
-  </div>
-</header>
-
-<!-- 📱 Mobile Banner -->
-<div class="mobile-banner mobile-only">
-  <img src="/images/D-Best.png" alt="Logo" class="nav-logo">
-  <span class="nav-title">D-Best TimeSmart</span>
-</div>
-
-<!-- 📱 Mobile Menu -->
-<nav class="mobile-nav mobile-only">
-  <a href="index.php">🏠 Home</a>
-  <a href="user/login.php">🔐 Login</a>
-</nav>
+<?php include __DIR__ . '/partials/public_header.php'; ?>
 
 <div class="wrapper">
   <main class="main card" style="max-width: 640px; margin: auto;">
