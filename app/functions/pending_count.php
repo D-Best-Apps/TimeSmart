@@ -23,11 +23,14 @@ function getPendingApprovalCount($conn): int {
                    SELECT 1 FROM timepunches tp
                     WHERE tp.EmployeeID = pe.EmployeeID
                       AND tp.Date = pe.Date
+                      -- compare at minute precision: punches store seconds while
+                      -- requests come from an HH:MM form, so raw comparisons would
+                      -- count phantom edits that change nothing.
                       AND (
-                          (pe.TimeIN     IS NOT NULL AND pe.TimeIN     <> '' AND NOT (pe.TimeIN     <=> tp.TimeIN))     OR
-                          (pe.LunchStart IS NOT NULL AND pe.LunchStart <> '' AND NOT (pe.LunchStart <=> tp.LunchStart)) OR
-                          (pe.LunchEnd   IS NOT NULL AND pe.LunchEnd   <> '' AND NOT (pe.LunchEnd   <=> tp.LunchEnd))   OR
-                          (pe.TimeOut    IS NOT NULL AND pe.TimeOut    <> '' AND NOT (pe.TimeOut    <=> tp.TimeOut))
+                          (pe.TimeIN     IS NOT NULL AND pe.TimeIN     <> '' AND NOT (TIME_FORMAT(pe.TimeIN,     '%H:%i') <=> TIME_FORMAT(tp.TimeIN,     '%H:%i'))) OR
+                          (pe.LunchStart IS NOT NULL AND pe.LunchStart <> '' AND NOT (TIME_FORMAT(pe.LunchStart, '%H:%i') <=> TIME_FORMAT(tp.LunchStart, '%H:%i'))) OR
+                          (pe.LunchEnd   IS NOT NULL AND pe.LunchEnd   <> '' AND NOT (TIME_FORMAT(pe.LunchEnd,   '%H:%i') <=> TIME_FORMAT(tp.LunchEnd,   '%H:%i'))) OR
+                          (pe.TimeOut    IS NOT NULL AND pe.TimeOut    <> '' AND NOT (TIME_FORMAT(pe.TimeOut,    '%H:%i') <=> TIME_FORMAT(tp.TimeOut,    '%H:%i')))
                       )
                )
           )

@@ -38,10 +38,14 @@ foreach ($entries as $entry) {
     $changes = [];
 
     foreach ($fields as $field) {
-        $new = trim($entry[$field] ?? '');
-        $old = $original[$field];
+        $new = trim($entry[$field] ?? '');                                // "HH:MM" from the form
+        $oldRaw = $original[$field];                                      // "HH:MM:SS" or null in the DB
+        $old = !empty($oldRaw) ? date('H:i', strtotime($oldRaw)) : '';
 
-        if ($new !== $old && $new !== '') {
+        // Compare at minute precision. The form posts HH:MM while punches are
+        // stored with seconds (e.g. 17:00:10), so a raw !== comparison would
+        // record a phantom "change" for any field the employee never touched.
+        if ($new !== '' && $new !== $old) {
             $changes[$field] = $new;
         }
     }

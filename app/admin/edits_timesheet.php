@@ -37,22 +37,30 @@ while ($row = $result->fetch_assoc()) {
 
     if (!$original) continue;
 
-    // Check the pending_edits
+    // Check the pending_edits. Compare at minute precision: punches are stored
+    // with seconds (e.g. 17:00:10) while requests come from an HH:MM form, so a
+    // raw comparison would surface phantom edits that change nothing.
     foreach (['TimeIN', 'LunchStart', 'LunchEnd', 'TimeOut'] as $field) {
-        if (array_key_exists($field, $row) && !is_null($row[$field]) && $row[$field] !== '' && $row[$field] !== $original[$field]) {
-            $edits[] = [
-                'ID' => $row['ID'],
-                'FirstName' => $row['FirstName'],
-                'LastName' => $row['LastName'],
-                'Date' => $date,
-                'Field' => $field,
-                'Original' => $original[$field] ?? '',
-                'Requested' => $row[$field],
-                'Note' => $row['Note'],
-                'Reason' => $row['Reason'],
-                'AdminPrivateNote' => $row['AdminPrivateNote'] ?? '',
-            ];
+        if (!array_key_exists($field, $row) || is_null($row[$field]) || $row[$field] === '') {
+            continue;
         }
+        $reqMin  = date('H:i', strtotime($row[$field]));
+        $origMin = !empty($original[$field]) ? date('H:i', strtotime($original[$field])) : '';
+        if ($reqMin === $origMin) {
+            continue; // no real (minute-precision) change
+        }
+        $edits[] = [
+            'ID' => $row['ID'],
+            'FirstName' => $row['FirstName'],
+            'LastName' => $row['LastName'],
+            'Date' => $date,
+            'Field' => $field,
+            'Original' => $origMin,
+            'Requested' => $reqMin,
+            'Note' => $row['Note'],
+            'Reason' => $row['Reason'],
+            'AdminPrivateNote' => $row['AdminPrivateNote'] ?? '',
+        ];
     }
 }
 
