@@ -14,9 +14,11 @@ requirePermission('manage_offices');
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['OfficeName'])) {
     $officeName = trim($_POST['OfficeName']);
+    $entries = preg_split('/[\s,]+/', trim($_POST['AllowedIPs'] ?? ''), -1, PREG_SPLIT_NO_EMPTY);
+    $allowedIPs = empty($entries) ? null : implode(', ', $entries);
     if (!empty($officeName)) {
-        $stmt = $conn->prepare("INSERT INTO Offices (OfficeName) VALUES (?)");
-        $stmt->bind_param("s", $officeName);
+        $stmt = $conn->prepare("INSERT INTO Offices (OfficeName, AllowedIPs) VALUES (?, ?)");
+        $stmt->bind_param("ss", $officeName, $allowedIPs);
         $stmt->execute();
     }
 }

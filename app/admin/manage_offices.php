@@ -12,7 +12,7 @@ if (!isset($_SESSION['admin'])) {
 require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('manage_offices');
 
-$offices_result = $conn->query("SELECT ID, OfficeName FROM Offices ORDER BY OfficeName");
+$offices_result = $conn->query("SELECT ID, OfficeName, AllowedIPs FROM Offices ORDER BY OfficeName");
 $offices_data = [];
 while ($row = $offices_result->fetch_assoc()) {
     $offices_data[] = $row;
@@ -49,20 +49,29 @@ require_once 'header.php';
                 <strong><?= htmlspecialchars($_GET['reassigned']) ?></strong>.
             <?php endif; ?>
         </div>
+    <?php elseif (isset($_GET['ips_saved'])): ?>
+        <div class="alert alert-success">Allowed IPs updated.</div>
     <?php elseif (!empty($_GET['error'])): ?>
         <div class="alert alert-danger"><?= htmlspecialchars($_GET['error']) ?></div>
     <?php endif; ?>
+
+    <p style="color:var(--muted-text); font-size:0.9rem; margin:0 0 1rem;">
+        <strong>Allowed IPs</strong> restricts where employees of an office may clock in/out — but only when
+        <em>Restrict punches by office IP</em> is enabled in <a href="settings.php">General Settings</a>.
+        Leave an office blank to allow punches from anywhere (e.g. Overseas).
+    </p>
 
     <table class="uman-table">
         <thead>
         <tr>
             <th>Office Name</th>
+            <th>Allowed IPs</th>
             <th>Actions</th>
         </tr>
         </thead>
         <tbody>
         <?php foreach ($offices_data as $office): ?>
-            <?php $oc = $officeUserCounts[$office['OfficeName']] ?? 0; ?>
+            <?php $oc = $officeUserCounts[$office['OfficeName']] ?? 0; $ips = trim((string)($office['AllowedIPs'] ?? '')); ?>
             <tr>
                 <td>
                     <?= htmlspecialchars($office['OfficeName']) ?>
@@ -70,7 +79,16 @@ require_once 'header.php';
                         (<?= $oc ?> <?= $oc === 1 ? 'employee' : 'employees' ?>)
                     </span>
                 </td>
+                <td style="font-size:0.85rem;">
+                    <?php if ($ips !== ''): ?>
+                        <?= htmlspecialchars($ips) ?>
+                    <?php else: ?>
+                        <span style="color:var(--muted-text);">any (unrestricted)</span>
+                    <?php endif; ?>
+                </td>
                 <td>
+                    <button type="button" class="btn secondary small"
+                            onclick="openOfficeIPs(<?= (int)$office['ID'] ?>, <?= htmlspecialchars(json_encode($office['OfficeName']), ENT_QUOTES) ?>, <?= htmlspecialchars(json_encode($ips), ENT_QUOTES) ?>)">Set IPs</button>
                     <button type="button" class="btn secondary small"
                             onclick="openRenameOffice(<?= (int)$office['ID'] ?>, <?= htmlspecialchars(json_encode($office['OfficeName']), ENT_QUOTES) ?>)">Rename</button>
                     <button type="button" class="btn danger small"
@@ -80,6 +98,25 @@ require_once 'header.php';
         <?php endforeach; ?>
         </tbody>
     </table>
+</div>
+
+<!-- Set Office IPs Modal -->
+<div id="officeIPsModal" class="modal">
+    <div class="modal-content">
+        <form action="update_office_ips.php" method="POST">
+            <h3>Allowed IPs — <span id="officeIPsName"></span></h3>
+            <p style="color:var(--muted-text); font-size:0.9rem; margin:0 0 1rem;">
+                One or more IP addresses or CIDR ranges, separated by commas or new lines
+                (e.g. <code>99.3.49.81, 198.51.100.0/24</code>). Leave blank to allow punches from anywhere.
+            </p>
+            <input type="hidden" name="ID" id="officeIPsId">
+            <textarea name="AllowedIPs" id="officeIPsField" rows="3" placeholder="Leave blank = unrestricted"></textarea>
+            <div class="modal-actions">
+                <button type="button" class="btn" onclick="document.getElementById('officeIPsModal').style.display='none'">Cancel</button>
+                <button type="submit" class="btn primary">Save</button>
+            </div>
+        </form>
+    </div>
 </div>
 
 <!-- Rename Office Modal -->
@@ -130,6 +167,13 @@ function openRenameOffice(id, name) {
     document.getElementById('renameOfficeModal').style.display = 'block';
 }
 
+function openOfficeIPs(id, name, ips) {
+    document.getElementById('officeIPsId').value = id;
+    document.getElementById('officeIPsName').textContent = name;
+    document.getElementById('officeIPsField').value = ips || '';
+    document.getElementById('officeIPsModal').style.display = 'block';
+}
+
 function openRemoveOffice(id, name, count) {
     document.getElementById('removeOfficeId').value = id;
     var msg     = document.getElementById('removeOfficeMsg');
@@ -178,6 +222,7 @@ function openRemoveOffice(id, name, count) {
         <form action="add_office.php" method="POST">
             <h3>Add New Office</h3>
             <input type="text" name="OfficeName" placeholder="Office Name" required>
+            <textarea name="AllowedIPs" rows="2" placeholder="Allowed IPs (optional) — leave blank for any" style="margin-top:0.75rem;"></textarea>
             <div class="modal-actions">
                 <button type="button" class="btn" onclick="document.getElementById('addOfficeModal').style.display='none'">Cancel</button>
                 <button type="submit" class="btn primary">Add Office</button>
