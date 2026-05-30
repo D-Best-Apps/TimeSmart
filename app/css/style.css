@@ -139,6 +139,7 @@ a.nav-date {
 
 .weather-col {
   flex: 0 0 240px;
+  order: 2; /* sit to the right of the status table on desktop */
 }
 
 .weather-card {
