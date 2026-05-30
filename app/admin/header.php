@@ -90,12 +90,12 @@ $showSettingsMenu = checkPermission('manage_settings') || checkPermission('manag
     <a href="reports.php" title="Admin home"><img src="/images/D-Best.png" alt="D-Best Logo" class="logo"></a>
     <h1><?= htmlspecialchars($pageTitle) ?></h1>
     <nav>
-        <a href="reports.php"<?= $currentPage == 'reports.php' ? ' class="active"' : '' ?>>Reports</a>
+        <a href="reports.php"<?= $currentPage == 'reports.php' ? ' class="active"' : '' ?>>📊 Reports</a>
         <?php if (checkPermission('edit_timesheets')): ?>
-        <a href="view_punches.php"<?= $currentPage == 'view_punches.php' ? ' class="active"' : '' ?>>Timesheets</a>
+        <a href="view_punches.php"<?= $currentPage == 'view_punches.php' ? ' class="active"' : '' ?>>🕒 Timesheets</a>
         <?php endif; ?>
         <?php if (checkPermission('approve_edits')): ?>
-        <a href="edits_timesheet.php"<?= $currentPage == 'edits_timesheet.php' ? ' class="active"' : '' ?>>Pending Approvals<?php if ($pendingCount > 0): ?> (<?= $pendingCount ?>)<?php endif; ?></a>
+        <a href="edits_timesheet.php"<?= $currentPage == 'edits_timesheet.php' ? ' class="active"' : '' ?>>✅ Pending Approvals<?php if ($pendingCount > 0): ?> (<?= $pendingCount ?>)<?php endif; ?></a>
         <?php endif; ?>
         <?php if (checkPermission('manage_users')): ?>
         <a href="badges.php"<?= $currentPage == 'badges.php' ? ' class="active"' : '' ?>>🪪 Badges</a>

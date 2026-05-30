@@ -38,7 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['set_role'])) {
 // Fetch all users that currently have an admin role
 $rows = [];
 $result = $conn->query("
-    SELECT ID, FirstName, LastName, Email, Role, TwoFAEnabled
+    SELECT ID, FirstName, LastName, Role
       FROM users
      WHERE Role <> 'employee'
      ORDER BY LastName, FirstName
@@ -76,15 +76,13 @@ require_once 'header.php';
         <thead>
             <tr>
                 <th>Name</th>
-                <th>Email</th>
                 <th>Role</th>
-                <th>2FA</th>
                 <th>Actions</th>
             </tr>
         </thead>
         <tbody>
             <?php if (count($rows) === 0): ?>
-                <tr><td colspan="5">No admin users yet.</td></tr>
+                <tr><td colspan="3">No admin users yet.</td></tr>
             <?php else: foreach ($rows as $u): ?>
                 <?php
                   $roleDisplay = $u['Role'] === 'super_admin' ? 'Super Admin' : 'Reports Only';
@@ -92,9 +90,7 @@ require_once 'header.php';
                 ?>
                 <tr>
                     <td><?= htmlspecialchars($u['FirstName'] . ' ' . $u['LastName']) ?></td>
-                    <td><?= htmlspecialchars($u['Email'] ?? '') ?: '&mdash;' ?></td>
                     <td><span class="<?= $roleClass ?>"><?= htmlspecialchars($roleDisplay) ?></span></td>
-                    <td><?= $u['TwoFAEnabled'] ? '✓' : '—' ?></td>
                     <td style="white-space: nowrap;">
                         <div style="display: inline-flex; gap: 0.5rem; align-items: center;">
                             <a class="btn primary small" href="edit_admin.php?id=<?= (int) $u['ID'] ?>">Change Role</a>
