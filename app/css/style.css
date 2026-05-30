@@ -216,6 +216,36 @@ a.nav-date {
   margin-left: 6px;
 }
 
+/* 😉 XKCD thumbnail riding under the weather card */
+.xkcd-card {
+  display: block;
+  margin-top: 16px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
+  padding: 12px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.xkcd-head {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1f5a78;
+  margin-bottom: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.xkcd-img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+  border-radius: 4px;
+}
+
 /* 📊 Table */
 table {
   width: 100%;

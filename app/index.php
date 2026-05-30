@@ -21,6 +21,7 @@ $gpsQuery->close();
 // Home-page weather panel (null when no ZIP configured / lookup fails)
 require_once __DIR__ . '/functions/weather.php';
 $weather = getWeatherData($conn);
+$xkcd = $weather ? getXkcdComic() : null; // ride along under the weather panel
 ?>
 
 
@@ -28,7 +29,7 @@ $weather = getWeatherData($conn);
 <html>
 <head>
     <title>D-Best TimeClock</title>
-    <link rel="stylesheet" href="css/style.css?v=3">
+    <link rel="stylesheet" href="css/style.css?v=4">
     <link rel="icon" type="image/png" href="/images/D-Best.png">
     <link rel="apple-touch-icon" href="/images/D-Best.png">
     <link rel="icon" type="image/png" href="images/D-Best-favicon.png">
@@ -94,6 +95,12 @@ $weather = getWeatherData($conn);
                     <?php endforeach; ?>
                 </div>
             </div>
+            <?php if ($xkcd): ?>
+            <a class="xkcd-card" href="<?= htmlspecialchars($xkcd['link']) ?>" target="_blank" rel="noopener" title="<?= htmlspecialchars($xkcd['alt']) ?>">
+                <div class="xkcd-head">xkcd #<?= htmlspecialchars($xkcd['num']) ?> &middot; <?= htmlspecialchars($xkcd['title']) ?></div>
+                <img class="xkcd-img" src="<?= htmlspecialchars($xkcd['img']) ?>" alt="<?= htmlspecialchars($xkcd['title']) ?>" loading="lazy">
+            </a>
+            <?php endif; ?>
         </aside>
         <?php endif; ?>
         <div class="status-col">

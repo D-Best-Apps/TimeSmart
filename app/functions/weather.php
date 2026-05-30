@@ -70,6 +70,39 @@ if (!function_exists('weatherHttpGet')) {
     }
 }
 
+if (!function_exists('getXkcdComic')) {
+    /**
+     * Latest XKCD comic for the home-page thumbnail (the date easter egg's
+     * sidekick). Cached 3h so the 30s auto-refresh doesn't re-fetch.
+     *
+     * @return array|null ['num','title','img','alt','link']
+     */
+    function getXkcdComic() {
+        $cacheFile = sys_get_temp_dir() . '/timesmart_xkcd.json';
+        if (is_readable($cacheFile) && (filemtime($cacheFile) > (time() - 10800))) {
+            $cached = json_decode((string) file_get_contents($cacheFile), true);
+            if (is_array($cached)) {
+                return $cached;
+            }
+        }
+
+        $d = weatherHttpGet('https://xkcd.com/info.0.json');
+        if (!$d || empty($d['img'])) {
+            return null;
+        }
+
+        $out = [
+            'num'   => (int) ($d['num'] ?? 0),
+            'title' => (string) ($d['safe_title'] ?? 'xkcd'),
+            'img'   => (string) $d['img'],
+            'alt'   => (string) ($d['alt'] ?? ''),
+            'link'  => 'https://xkcd.com/' . (int) ($d['num'] ?? 0) . '/',
+        ];
+        @file_put_contents($cacheFile, json_encode($out));
+        return $out;
+    }
+}
+
 if (!function_exists('getWeatherData')) {
     /**
      * @return array|null  ['place','zip','current'=>['temp','emoji','label'],
