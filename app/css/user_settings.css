@@ -11,10 +11,15 @@
         --input-focus: #80bdff;
     }
 
+    h1 {
+        text-align: center;
+    }
+
     .tabs {
         display: flex;
-        justify-content: center;
-        margin: 1.5rem 0 0;
+        justify-content: flex-start;
+        max-width: 900px;
+        margin: 1.5rem auto 0;
         gap: 1rem;
     }
 
@@ -36,7 +41,7 @@
 
     .tab-content {
         display: none;
-        max-width: 1200px; /* Changed */
+        max-width: 900px;
         margin: 0 auto;
         background: var(--card-bg);
         padding: 2rem;

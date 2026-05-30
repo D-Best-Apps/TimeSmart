@@ -126,8 +126,10 @@ $showSettingsMenu = checkPermission('manage_settings') || checkPermission('manag
         </button>
         <div id="profileMenu" class="nav-dropdown-menu hidden">
             <?php if (!empty($_SESSION['EmployeeID'])): ?>
-            <a href="../user/dashboard.php" title="Switch to your employee view">👤 My Timesheet</a>
-            <a href="../user/settings.php">⚙️ My Account Settings</a>
+            <a href="../user/dashboard.php" title="Switch to your employee view">🏠 User Home</a>
+            <a href="../user/settings.php">⚙️ User Settings</a>
+            <a href="../user/timesheet.php">✏️ Edit Timesheet</a>
+            <a href="../user/time_off.php">🏖️ Request Time Off</a>
             <?php endif; ?>
             <a href="../logout.php">↩️ Logout</a>
         </div>

@@ -66,7 +66,7 @@ $logStmt->bind_param("i", $empID);
 $logStmt->execute();
 $logs = $logStmt->get_result();
 ?>
-<link rel="stylesheet" href="../css/user_settings.css">
+<link rel="stylesheet" href="../css/user_settings.css?v=2">
 
 
 <script src="../js/user_settings.js"></script>
