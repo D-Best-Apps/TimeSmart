@@ -45,9 +45,9 @@ function checkPermission($required_permission) {
  * Require permission or redirect to dashboard with error
  *
  * @param string $required_permission The permission required
- * @param string $redirect_url Optional custom redirect URL (default: dashboard.php)
+ * @param string $redirect_url Optional custom redirect URL (default: reports.php)
  */
-function requirePermission($required_permission, $redirect_url = 'dashboard.php') {
+function requirePermission($required_permission, $redirect_url = 'reports.php') {
     if (!checkPermission($required_permission)) {
         $error_message = urlencode('You do not have permission to access this page.');
         header("Location: {$redirect_url}?error=" . $error_message);

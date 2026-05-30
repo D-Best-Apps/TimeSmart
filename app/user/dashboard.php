@@ -200,7 +200,7 @@ $timeOffHistory = $torStmt->get_result()->fetch_all(MYSQLI_ASSOC);
             <button class="toggle-punch" onclick="togglePunch()">⏱ Show Punch In / Out</button>
             <a href="time_off.php" class="toggle-punch" style="display:inline-block; text-decoration:none; background-color:#0078D7; margin-left:0.5rem;">🏖️ Request Time Off</a>
             <?php if (!empty($_SESSION['admin']) && !empty($_SESSION['admin_role'])): ?>
-                <a href="../admin/dashboard.php" class="toggle-punch" style="display:inline-block; text-decoration:none; background-color:#6c757d; margin-left:0.5rem;">🛠 Admin Portal</a>
+                <a href="../admin/reports.php" class="toggle-punch" style="display:inline-block; text-decoration:none; background-color:#6c757d; margin-left:0.5rem;">🛠 Admin Portal</a>
             <?php endif; ?>
             <div class="punch-area" id="punchArea" style="display: none;">
                 <table>

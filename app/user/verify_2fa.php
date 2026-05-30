@@ -79,7 +79,7 @@ function login_user_and_finish(int $empID, string $firstName): void {
           $_SESSION['user_twofa_lock_until'], $_SESSION['otp_last_sent']);
 
     if ($role !== 'employee' && $fromAdmin) {
-        header("Location: ../admin/dashboard.php");
+        header("Location: ../admin/reports.php");
     } else {
         header("Location: dashboard.php");
     }
