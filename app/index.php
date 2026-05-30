@@ -29,7 +29,7 @@ $xkcd = $weather ? getXkcdComic() : null; // ride along under the weather panel
 <html>
 <head>
     <title>D-Best TimeClock</title>
-    <link rel="stylesheet" href="css/style.css?v=4">
+    <link rel="stylesheet" href="css/style.css?v=5">
     <link rel="icon" type="image/png" href="/images/D-Best.png">
     <link rel="apple-touch-icon" href="/images/D-Best.png">
     <link rel="icon" type="image/png" href="images/D-Best-favicon.png">
@@ -99,6 +99,7 @@ $xkcd = $weather ? getXkcdComic() : null; // ride along under the weather panel
             <a class="xkcd-card" href="<?= htmlspecialchars($xkcd['link']) ?>" target="_blank" rel="noopener" title="<?= htmlspecialchars($xkcd['alt']) ?>">
                 <div class="xkcd-head">xkcd #<?= htmlspecialchars($xkcd['num']) ?> &middot; <?= htmlspecialchars($xkcd['title']) ?></div>
                 <img class="xkcd-img" src="<?= htmlspecialchars($xkcd['img']) ?>" alt="<?= htmlspecialchars($xkcd['title']) ?>" loading="lazy">
+                <div class="xkcd-foot">click to view full comic →</div>
             </a>
             <?php endif; ?>
         </aside>
