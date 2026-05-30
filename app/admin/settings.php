@@ -108,6 +108,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $stmt->execute();
     $settings['EnforceGPS'] = $enforceGpsVal;
 
+    $restrictIpVal = !empty($_POST['RestrictByIP']) ? '1' : '0';
+    $stmt = $conn->prepare("INSERT INTO settings (SettingKey, SettingValue) VALUES (?, ?) ON DUPLICATE KEY UPDATE SettingValue = ?");
+    $key = 'RestrictByIP';
+    $stmt->bind_param("sss", $key, $restrictIpVal, $restrictIpVal);
+    $stmt->execute();
+    $settings['RestrictByIP'] = $restrictIpVal;
+
+    $allowedIpsVal = trim($_POST['AllowedIPs'] ?? '');
+    $stmt = $conn->prepare("INSERT INTO settings (SettingKey, SettingValue) VALUES (?, ?) ON DUPLICATE KEY UPDATE SettingValue = ?");
+    $key = 'AllowedIPs';
+    $stmt->bind_param("sss", $key, $allowedIpsVal, $allowedIpsVal);
+    $stmt->execute();
+    $settings['AllowedIPs'] = $allowedIpsVal;
+
     $pwModeVal = !empty($_POST['PasswordHigh']) ? 'high' : 'low';
     $stmt = $conn->prepare("INSERT INTO settings (SettingKey, SettingValue) VALUES (?, ?) ON DUPLICATE KEY UPDATE SettingValue = ?");
     $key = 'PasswordSecurityMode';
@@ -196,10 +210,26 @@ require_once 'header.php';
             <div class="field">
                 <label>
                     <input type="checkbox" name="EnforceGPS" value="1" <?= ($settings['EnforceGPS'] ?? '') === '1' ? 'checked' : '' ?>>
-                    Require GPS for all punches
+                    Require GPS on mobile devices
                 </label>
                 <p style="color:#666; font-size:0.85em; margin:0.25rem 0 0;">
-                    When on, employees must share location to clock in/out.
+                    When on, a punch from a phone/tablet is blocked unless the browser shares its location.
+                    Laptops/desktops are not blocked (their location is still recorded if the browser provides it).
+                </p>
+            </div>
+            <div class="field">
+                <label>
+                    <input type="checkbox" name="RestrictByIP" value="1" <?= ($settings['RestrictByIP'] ?? '') === '1' ? 'checked' : '' ?>>
+                    Restrict punches to allowed IP addresses
+                </label>
+                <p style="color:#666; font-size:0.85em; margin:0.25rem 0 0;">
+                    When on, punches are only accepted from the networks listed below (applies to all devices).
+                    This is the practical on-site control for laptops. Leave the list empty to disable the restriction.
+                </p>
+                <textarea name="AllowedIPs" rows="3" placeholder="e.g. 203.0.113.7, 198.51.100.0/24, 2001:db8::/32"><?= htmlspecialchars($settings['AllowedIPs'] ?? '') ?></textarea>
+                <p style="color:#666; font-size:0.8em; margin:0.25rem 0 0;">
+                    One or more IP addresses or CIDR ranges, separated by commas or new lines. Use your office's
+                    public IP (and VPN egress, if any).
                 </p>
             </div>
             <div class="field">

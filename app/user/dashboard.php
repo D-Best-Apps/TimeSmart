@@ -361,5 +361,5 @@ $timeOffHistory = $torStmt->get_result()->fetch_all(MYSQLI_ASSOC);
   </div>
 </div>
 <script>const empID = <?= (int)$empID ?>;</script>
-<script src="../js/user_dashboard.js"></script>
+<script src="../js/user_dashboard.js?v=2"></script>
 <?php require_once 'footer.php'; ?>

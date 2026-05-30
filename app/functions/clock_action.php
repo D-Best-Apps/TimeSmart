@@ -9,6 +9,7 @@
 require_once __DIR__ . '/../auth/db.php';
 require_once __DIR__ . '/../vendor/autoload.php'; // For PHPMailer
 require_once __DIR__ . '/settings_helper.php'; // Use the new helper for settings
+require_once __DIR__ . '/location_policy.php'; // is_mobile_ua(), ip_in_allowlist()
 date_default_timezone_set('America/Chicago');
 header('Content-Type: application/json');
 
@@ -406,21 +407,25 @@ if (!$empID || !$action) {
 }
 
 
-// Fetch GPS requirement from settings
-$gpsRequired = false;
-$gpsQuery = $conn->prepare("SELECT SettingValue FROM settings WHERE SettingKey = 'EnforceGPS' LIMIT 1");
-if ($gpsQuery) {
-    $gpsQuery->execute();
-    $gpsQuery->bind_result($value);
-    if ($gpsQuery->fetch()) {
-        $gpsRequired = ($value === '1');
-    }
-    $gpsQuery->close();
+// --- Punch-location policy (two independent controls) ---
+$gpsRequireMobile = (getSettingValue('EnforceGPS', $conn) === '1');
+$restrictByIP     = (getSettingValue('RestrictByIP', $conn) === '1');
+$allowedIPs       = (string) (getSettingValue('AllowedIPs', $conn) ?? '');
+
+$isMobile = is_mobile_ua($_SERVER['HTTP_USER_AGENT'] ?? '');
+
+// (a) Require GPS on mobile devices. Desktops/laptops are not blocked (their
+//     location is still recorded if the browser provides it).
+if ($gpsRequireMobile && $isMobile && ($lat === null || $lon === null)) {
+    send_json_response(false, "📍 Location is required to clock in/out from a mobile device. Enable location access and try again.", 400);
 }
 
-// If GPS is required, we must have EITHER valid GPS coordinates OR a valid IP address.
-if ($gpsRequired && ($lat === null || $lon === null) && $ip === null) {
-    send_json_response(false, "📍 Location is required, but neither GPS nor IP address could be determined.", 400);
+// (b) Restrict punches to an allowed IP allowlist (all devices). An empty list
+//     means "no restriction" so a misconfigured toggle can't lock everyone out.
+if ($restrictByIP && trim($allowedIPs) !== '') {
+    if ($ip === null || !ip_in_allowlist($ip, $allowedIPs)) {
+        send_json_response(false, "🚫 Punching is only allowed from an approved network. Contact an administrator if you're on-site.", 403);
+    }
 }
 
 // --- Time Calculation ---

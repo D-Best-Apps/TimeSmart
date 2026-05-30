@@ -37,10 +37,30 @@ function submitAction(action) {
 
 function proceedWithAction(action) {
     const note = document.getElementById('note').value;
+
+    // If GPS capture is enabled, try to attach the device's location (required on
+    // mobile, recorded everywhere). Best-effort: the server makes the final call.
+    fetch('../functions/get_setting.php?setting=EnforceGPS')
+        .then(r => r.json())
+        .then(cfg => {
+            if (cfg && cfg.success && cfg.value === '1' && navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    pos => sendUserPunch(action, note, pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy),
+                    ()  => sendUserPunch(action, note, '', '', ''),
+                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+                );
+            } else {
+                sendUserPunch(action, note, '', '', '');
+            }
+        })
+        .catch(() => sendUserPunch(action, note, '', '', ''));
+}
+
+function sendUserPunch(action, note, latitude, longitude, accuracy) {
     fetch('../functions/clock_action.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ EmployeeID: empID, action: action, note: note })
+        body: JSON.stringify({ EmployeeID: empID, action: action, note: note, latitude, longitude, accuracy })
     })
     .then(res => res.json())
     .then(data => {
