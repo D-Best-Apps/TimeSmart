@@ -11,12 +11,9 @@ $adminUsername = $_SESSION['admin'];
 
 // (Self-serve 2FA enable/disable now lives in the header profile menu.)
 
-// Get count of pending edits
-$pendingCount = 0;
-$stmt = $conn->query("SELECT COUNT(*) AS total FROM pending_edits WHERE Status = 'Pending'");
-if ($row = $stmt->fetch_assoc()) {
-    $pendingCount = $row['total'];
-}
+// Get count of items actually needing review (matches the header badge + approvals page)
+require_once __DIR__ . '/../functions/pending_count.php';
+$pendingCount = getPendingApprovalCount($conn);
 
 // Additional stats
 $totalUsers = 0;
@@ -76,7 +73,7 @@ require_once 'header.php';
         </div>
         <div class="card">
             <h2>Pending Approvals</h2>
-            <p><?= $pendingCount ?> timesheet edits need review.</p>
+            <p><?= $pendingCount ?> <?= $pendingCount === 1 ? 'item needs' : 'items need' ?> review.</p>
             <a href="edits_timesheet.php">Review</a>
         </div>
         <div class="card">

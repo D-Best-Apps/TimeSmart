@@ -18,17 +18,9 @@ if (!isset($_SESSION['admin'])) {
     exit;
 }
 
-// Get pending approvals count for badge (timesheet edits + time-off requests)
-$pendingCount = 0;
-$pendingQuery = $conn->query("
-    SELECT
-        (SELECT COUNT(*) FROM pending_edits WHERE Status = 'Pending')
-      + (SELECT COUNT(*) FROM time_off_requests WHERE Status = 'Pending') AS count
-");
-if ($pendingQuery) {
-    $pendingRow = $pendingQuery->fetch_assoc();
-    $pendingCount = (int) $pendingRow['count'];
-}
+// Get pending approvals count for badge (real timesheet edits + time-off requests)
+require_once __DIR__ . '/../functions/pending_count.php';
+$pendingCount = getPendingApprovalCount($conn);
 
 // Current admin's name, avatar and 2FA status for the profile corner menu
 $adminName   = 'Account';
