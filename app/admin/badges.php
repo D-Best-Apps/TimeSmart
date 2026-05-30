@@ -26,6 +26,69 @@ function gen_badge_id(mysqli $conn): string {
     return $cand;
 }
 
+/** Render one badge into the rectangle (x,y,w,h) in the chosen orientation. */
+function draw_badge(TCPDF $pdf, float $x, float $y, float $w, float $h, array $b, string $company, bool $showOffice, string $orient, string $uploadDir, array $barStyle): void {
+    $pdf->RoundedRect($x, $y, $w, $h, 2.5, '1111', 'D', ['width' => 0.3, 'color' => [120, 120, 120]]);
+
+    $name   = trim(($b['FirstName'] ?? '') . ' ' . ($b['LastName'] ?? ''));
+    $office = trim((string) ($b['Office'] ?? ''));
+    $code   = (string) ($b['BadgeID'] ?? '');
+    $photo  = (string) ($b['ProfilePhoto'] ?? '');
+    $hasPhoto = $photo !== '' && strpos($photo, '/') === false && strpos($photo, '\\') === false && is_file($uploadDir . $photo);
+    $photoPath = $uploadDir . $photo;
+
+    if ($orient === 'v') {
+        // Portrait: photo on top, centered text, barcode along the bottom.
+        $pad = 4;
+        $top = $y + $pad;
+        if ($hasPhoto) {
+            $pw = min(30, $w - 2 * $pad);
+            $pdf->Image($photoPath, $x + ($w - $pw) / 2, $top, $pw, $pw, '', '', '', true, 300, '', false, false, 0, false, false, false);
+            $top += $pw + 2.5;
+        }
+        $pdf->SetFont('helvetica', 'B', 8);
+        $pdf->SetTextColor(7, 56, 81);
+        $pdf->SetXY($x + $pad, $top);
+        $pdf->Cell($w - 2 * $pad, 4, $company, 0, 0, 'C');
+        $pdf->SetFont('helvetica', 'B', 12);
+        $pdf->SetTextColor(0, 0, 0);
+        $pdf->SetXY($x + $pad, $top + 5);
+        $pdf->Cell($w - 2 * $pad, 6, $name, 0, 0, 'C');
+        if ($showOffice && $office !== '') {
+            $pdf->SetFont('helvetica', '', 8);
+            $pdf->SetTextColor(90, 90, 90);
+            $pdf->SetXY($x + $pad, $top + 11);
+            $pdf->Cell($w - 2 * $pad, 4, $office, 0, 0, 'C');
+        }
+        $bh = 13;
+        $pdf->write1DBarcode($code, 'C128', $x + $pad, $y + $h - $bh - 3, $w - 2 * $pad, $bh, 0.4, $barStyle, 'N');
+    } else {
+        // Landscape: photo on the right; company, name, office and barcode left-aligned.
+        $pad = 5;
+        $photoW = min(24, $h - 2 * $pad);
+        $textW = $w - 2 * $pad;
+        if ($hasPhoto) {
+            $pdf->Image($photoPath, $x + $w - $pad - $photoW, $y + ($h - $photoW) / 2, $photoW, $photoW, '', '', '', true, 300, '', false, false, 0, false, false, false);
+            $textW = $w - 2 * $pad - $photoW - 3;
+        }
+        $pdf->SetFont('helvetica', 'B', 9);
+        $pdf->SetTextColor(7, 56, 81);
+        $pdf->SetXY($x + $pad, $y + 4);
+        $pdf->Cell($textW, 5, $company, 0, 0, 'L');
+        $pdf->SetFont('helvetica', 'B', 13);
+        $pdf->SetTextColor(0, 0, 0);
+        $pdf->SetXY($x + $pad, $y + 12);
+        $pdf->Cell($textW, 7, $name, 0, 0, 'L');
+        if ($showOffice && $office !== '') {
+            $pdf->SetFont('helvetica', '', 9);
+            $pdf->SetTextColor(90, 90, 90);
+            $pdf->SetXY($x + $pad, $y + 19.5);
+            $pdf->Cell($textW, 5, $office, 0, 0, 'L');
+        }
+        $pdf->write1DBarcode($code, 'C128', $x + $pad, $y + $h - 18, $textW, 15, 0.4, $barStyle, 'N');
+    }
+}
+
 // --- Action: fill in any missing / too-short Badge IDs with random 8-digit values ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'gen_missing') {
     $res = $conn->query("SELECT ID FROM users WHERE BadgeID IS NULL OR BadgeID = '' OR CHAR_LENGTH(BadgeID) < " . BADGE_MIN_LEN);
@@ -60,12 +123,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 
 // --- PDF output: print the selected badges ---
 if (isset($_GET['print'])) {
-    $ids = array_values(array_filter(array_map('intval', (array) ($_GET['ids'] ?? []))));
+    $ids    = array_values(array_filter(array_map('intval', (array) ($_GET['ids'] ?? []))));
+    $orient = (($_GET['orient'] ?? 'h') === 'v') ? 'v' : 'h';          // h = landscape, v = portrait
+    $media  = (($_GET['media'] ?? 'sheet') === 'card') ? 'card' : 'sheet'; // sheet = Letter, card = one CR80 page
     require_once './tcpdf/tcpdf.php';
 
     $company = getSettingValue('CompanyName', $conn);
     if ($company === null || $company === '') { $company = 'D-Best TimeSmart'; }
     $showOffice = getSettingValue('BadgeShowOffice', $conn) !== '0'; // default: show
+    $uploadDir = __DIR__ . '/../uploads/';
+
+    $barStyle = [
+        'position' => '', 'align' => 'C', 'stretch' => false, 'fitwidth' => true,
+        'cellfitalign' => '', 'border' => false, 'hpadding' => 'auto', 'vpadding' => 'auto',
+        'fgcolor' => [0, 0, 0], 'bgcolor' => false, 'text' => true, 'font' => 'helvetica',
+        'fontsize' => 8, 'stretchtext' => 4,
+    ];
 
     $badges = [];
     if (!empty($ids)) {
@@ -82,6 +155,38 @@ if (isset($_GET['print'])) {
         $stmt->close();
     }
 
+    if (empty($badges)) {
+        $pdf = new TCPDF('P', 'mm', 'LETTER', true, 'UTF-8', false);
+        $pdf->SetPrintHeader(false); $pdf->SetPrintFooter(false);
+        $pdf->AddPage();
+        $pdf->SetFont('helvetica', '', 14);
+        $pdf->SetXY(15, 30);
+        $pdf->MultiCell(180, 10, "No badges to print.\n\nSelect at least one employee who has a Badge ID.", 0, 'L');
+        $pdf->Output('badges.pdf', 'I');
+        exit;
+    }
+
+    if ($media === 'card') {
+        // One badge per page, sized to a standard CR80 ID card in the chosen orientation.
+        $cw = $orient === 'v' ? 53.98 : 85.6;
+        $ch = $orient === 'v' ? 85.6  : 53.98;
+        $pdf = new TCPDF($orient === 'v' ? 'P' : 'L', 'mm', [$cw, $ch], true, 'UTF-8', false);
+        $pdf->SetCreator('D-Best TimeSmart');
+        $pdf->SetAuthor('D-Best Technologies');
+        $pdf->SetTitle('Employee Badges');
+        $pdf->SetPrintHeader(false);
+        $pdf->SetPrintFooter(false);
+        $pdf->SetAutoPageBreak(false);
+        foreach ($badges as $b) {
+            $pdf->AddPage();
+            draw_badge($pdf, 0.6, 0.6, $cw - 1.2, $ch - 1.2, $b, $company, $showOffice, $orient, $uploadDir, $barStyle);
+        }
+        $pdf->Output('badges.pdf', 'I');
+        exit;
+    }
+
+    // Sheet mode: tile multiple cards on a Letter page (cut them out afterwards).
+    if ($orient === 'v') { $cardW = 54; $cardH = 86; } else { $cardW = 90; $cardH = 54; }
     $pdf = new TCPDF('P', 'mm', 'LETTER', true, 'UTF-8', false);
     $pdf->SetCreator('D-Best TimeSmart');
     $pdf->SetAuthor('D-Best Technologies');
@@ -91,75 +196,13 @@ if (isset($_GET['print'])) {
     $pdf->SetAutoPageBreak(false);
     $pdf->AddPage();
 
-    if (empty($badges)) {
-        $pdf->SetFont('helvetica', '', 14);
-        $pdf->SetXY(15, 30);
-        $pdf->MultiCell(180, 10, "No badges to print.\n\nSelect at least one employee who has a Badge ID.", 0, 'L');
-        $pdf->Output('badges.pdf', 'I');
-        exit;
-    }
-
-    $cardW = 90; $cardH = 52; $gapX = 10; $gapY = 8;
-    $cols = 2; $marginX = 15; $marginTop = 15; $pageBottom = 279 - 12;
-    $uploadDir = __DIR__ . '/../uploads/';
-
-    $barStyle = [
-        'position' => '', 'align' => 'C', 'stretch' => false, 'fitwidth' => true,
-        'cellfitalign' => '', 'border' => false, 'hpadding' => 'auto', 'vpadding' => 'auto',
-        'fgcolor' => [0, 0, 0], 'bgcolor' => false, 'text' => true, 'font' => 'helvetica',
-        'fontsize' => 9, 'stretchtext' => 4,
-    ];
-
-    $x = $marginX; $y = $marginTop; $col = 0;
+    $marginX = 14; $marginTop = 14; $gap = 8; $pageW = 216; $pageBottom = 279 - 14;
+    $x = $marginX; $y = $marginTop;
     foreach ($badges as $b) {
-        if ($y + $cardH > $pageBottom) { $pdf->AddPage(); $x = $marginX; $y = $marginTop; $col = 0; }
-
-        $name   = trim(($b['FirstName'] ?? '') . ' ' . ($b['LastName'] ?? ''));
-        $office = trim((string) ($b['Office'] ?? ''));
-        $code   = (string) $b['BadgeID'];
-
-        $pdf->RoundedRect($x, $y, $cardW, $cardH, 3, '1111', 'D', ['width' => 0.3, 'color' => [120, 120, 120]]);
-
-        // Optional photo on the RIGHT. Only embed an existing, real file under uploads/.
-        $photo = (string) ($b['ProfilePhoto'] ?? '');
-        $hasPhoto = false;
-        $photoW = 24;
-        if ($photo !== '' && strpos($photo, '/') === false && strpos($photo, '\\') === false) {
-            $photoPath = $uploadDir . $photo;
-            if (is_file($photoPath)) {
-                $hasPhoto = true;
-                $pdf->Image($photoPath, $x + $cardW - 5 - $photoW, $y + 13, $photoW, $photoW, '', '', '', true, 300, '', false, false, 0, false, false, false);
-            }
-        }
-        // Left-hand column shared by company, name, office and barcode.
-        $textW = $hasPhoto ? ($cardW - 10 - $photoW - 3) : ($cardW - 10);
-
-        // Company name (top, left)
-        $pdf->SetFont('helvetica', 'B', 9);
-        $pdf->SetTextColor(7, 56, 81);
-        $pdf->SetXY($x + 5, $y + 4);
-        $pdf->Cell($textW, 5, $company, 0, 0, 'L');
-
-        // Name (left)
-        $pdf->SetFont('helvetica', 'B', 13);
-        $pdf->SetTextColor(0, 0, 0);
-        $pdf->SetXY($x + 5, $y + 12);
-        $pdf->Cell($textW, 7, $name, 0, 0, 'L');
-
-        // Office (left, optional)
-        if ($showOffice && $office !== '') {
-            $pdf->SetFont('helvetica', '', 9);
-            $pdf->SetTextColor(90, 90, 90);
-            $pdf->SetXY($x + 5, $y + 19.5);
-            $pdf->Cell($textW, 5, $office, 0, 0, 'L');
-        }
-
-        // Barcode (left, in line with the text column)
-        $pdf->write1DBarcode($code, 'C128', $x + 5, $y + 30, $textW, 15, 0.4, $barStyle, 'N');
-
-        $col++;
-        if ($col >= $cols) { $col = 0; $x = $marginX; $y += $cardH + $gapY; }
-        else { $x += $cardW + $gapX; }
+        if ($y + $cardH > $pageBottom) { $pdf->AddPage(); $x = $marginX; $y = $marginTop; }
+        draw_badge($pdf, $x, $y, $cardW, $cardH, $b, $company, $showOffice, $orient, $uploadDir, $barStyle);
+        $x += $cardW + $gap;
+        if ($x + $cardW > $pageW - $marginX) { $x = $marginX; $y += $cardH + $gap; }
     }
 
     $pdf->Output('badges.pdf', 'I');
@@ -226,6 +269,16 @@ require_once 'header.php';
 
 <form method="get" action="badges.php" target="_blank">
   <input type="hidden" name="print" value="1">
+  <div class="badge-tools" style="gap:1.5rem; background:#f8f9fb; padding:0.75rem 1rem; border-radius:8px;">
+    <span><strong>Orientation:</strong>
+      <label style="margin-left:0.5rem;"><input type="radio" name="orient" value="h" checked> Horizontal</label>
+      <label style="margin-left:0.5rem;"><input type="radio" name="orient" value="v"> Vertical</label>
+    </span>
+    <span><strong>Output:</strong>
+      <label style="margin-left:0.5rem;"><input type="radio" name="media" value="sheet" checked> Letter sheet (multiple, then cut)</label>
+      <label style="margin-left:0.5rem;"><input type="radio" name="media" value="card"> ID-card printer (one per page, CR80)</label>
+    </span>
+  </div>
   <div class="badge-tools">
     <label><input type="checkbox" id="selAll" onclick="document.querySelectorAll('.badge-cb').forEach(c=>c.checked=this.checked)"> Select all</label>
     <button type="submit" class="badge-btn">🪪 Print Selected (PDF)</button>
