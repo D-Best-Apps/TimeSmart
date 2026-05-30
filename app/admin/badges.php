@@ -120,40 +120,42 @@ if (isset($_GET['print'])) {
 
         $pdf->RoundedRect($x, $y, $cardW, $cardH, 3, '1111', 'D', ['width' => 0.3, 'color' => [120, 120, 120]]);
 
-        // Company name (top)
-        $pdf->SetFont('helvetica', 'B', 9);
-        $pdf->SetTextColor(7, 56, 81);
-        $pdf->SetXY($x + 5, $y + 3.5);
-        $pdf->Cell($cardW - 10, 5, $company, 0, 0, 'L');
-
-        // Optional photo (left). Only embed an existing, real file under uploads/.
+        // Optional photo on the RIGHT. Only embed an existing, real file under uploads/.
         $photo = (string) ($b['ProfilePhoto'] ?? '');
         $hasPhoto = false;
+        $photoW = 24;
         if ($photo !== '' && strpos($photo, '/') === false && strpos($photo, '\\') === false) {
             $photoPath = $uploadDir . $photo;
             if (is_file($photoPath)) {
                 $hasPhoto = true;
-                $pdf->Image($photoPath, $x + 5, $y + 11, 18, 18, '', '', '', true, 300, '', false, false, 0, false, false, false);
+                $pdf->Image($photoPath, $x + $cardW - 5 - $photoW, $y + 13, $photoW, $photoW, '', '', '', true, 300, '', false, false, 0, false, false, false);
             }
         }
-        $textX = $hasPhoto ? ($x + 26) : ($x + 5);
+        // Left-hand column shared by company, name, office and barcode.
+        $textW = $hasPhoto ? ($cardW - 10 - $photoW - 3) : ($cardW - 10);
 
-        // Name
+        // Company name (top, left)
+        $pdf->SetFont('helvetica', 'B', 9);
+        $pdf->SetTextColor(7, 56, 81);
+        $pdf->SetXY($x + 5, $y + 4);
+        $pdf->Cell($textW, 5, $company, 0, 0, 'L');
+
+        // Name (left)
         $pdf->SetFont('helvetica', 'B', 13);
         $pdf->SetTextColor(0, 0, 0);
-        $pdf->SetXY($textX, $y + 12);
-        $pdf->Cell($x + $cardW - 5 - $textX, 7, $name, 0, 0, 'L');
+        $pdf->SetXY($x + 5, $y + 12);
+        $pdf->Cell($textW, 7, $name, 0, 0, 'L');
 
-        // Office (optional)
+        // Office (left, optional)
         if ($showOffice && $office !== '') {
             $pdf->SetFont('helvetica', '', 9);
             $pdf->SetTextColor(90, 90, 90);
-            $pdf->SetXY($textX, $y + 19);
-            $pdf->Cell($x + $cardW - 5 - $textX, 5, $office, 0, 0, 'L');
+            $pdf->SetXY($x + 5, $y + 19.5);
+            $pdf->Cell($textW, 5, $office, 0, 0, 'L');
         }
 
-        // Barcode (bottom)
-        $pdf->write1DBarcode($code, 'C128', $x + 8, $y + 31, $cardW - 16, 15, 0.4, $barStyle, 'N');
+        // Barcode (left, in line with the text column)
+        $pdf->write1DBarcode($code, 'C128', $x + 5, $y + 30, $textW, 15, 0.4, $barStyle, 'N');
 
         $col++;
         if ($col >= $cols) { $col = 0; $x = $marginX; $y += $cardH + $gapY; }

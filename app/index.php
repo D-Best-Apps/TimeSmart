@@ -38,7 +38,7 @@ $quickDefault = getSettingValue('QuickDefaultField', $conn) ?: 'none';
 <html>
 <head>
     <title>D-Best TimeClock</title>
-    <link rel="stylesheet" href="css/style.css?v=10">
+    <link rel="stylesheet" href="css/style.css?v=11">
     <link rel="icon" type="image/png" href="/images/D-Best.png">
     <link rel="apple-touch-icon" href="/images/D-Best.png">
     <link rel="icon" type="image/png" href="images/D-Best-favicon.png">
@@ -67,9 +67,10 @@ $quickDefault = getSettingValue('QuickDefaultField', $conn) ?: 'none';
                     <?php if ($quickPin): ?>
                     <form class="qc-form" data-method="pin" autocomplete="off">
                         <label for="qcPin">PIN Login</label>
-                        <input type="password" id="qcPin" name="value" inputmode="numeric" pattern="\d*"
-                               maxlength="6" placeholder="Enter PIN, then Enter"
-                               autocomplete="new-password" data-1p-ignore="true" data-lpignore="true"
+                        <input type="text" id="qcPin" name="value" inputmode="numeric" pattern="\d*"
+                               maxlength="6" placeholder="Enter PIN, then Enter" class="pin-mask"
+                               autocomplete="off" data-1p-ignore="true" data-lpignore="true"
+                               data-form-type="other" data-bwignore
                                <?= $quickDefault === 'pin' ? 'autofocus' : '' ?>>
                     </form>
                     <?php endif; ?>
@@ -78,6 +79,7 @@ $quickDefault = getSettingValue('QuickDefaultField', $conn) ?: 'none';
                         <label for="qcBadge">Badge Login</label>
                         <input type="text" id="qcBadge" name="value" placeholder="Scan badge"
                                autocomplete="off" data-1p-ignore="true" data-lpignore="true"
+                               data-form-type="other" data-bwignore
                                <?= $quickDefault === 'badge' ? 'autofocus' : '' ?>>
                     </form>
                     <?php endif; ?>

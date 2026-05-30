@@ -300,6 +300,13 @@ a.nav-date {
   outline: none;
 }
 
+/* Mask the PIN without using type=password, so browsers/password managers
+   don't offer to save or autofill it. */
+.pin-mask {
+  -webkit-text-security: disc;
+  text-security: disc;
+}
+
 .qc-feedback {
   font-size: 15px;
 }
