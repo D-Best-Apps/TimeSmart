@@ -79,7 +79,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $settingsToUpdate = [
         'mail_server', 'mail_port', 'mail_username',
         'mail_from_address', 'mail_from_name', 'mail_encryption', 'mail_admin_address',
-        'm365_tenant_id', 'm365_client_id', 'm365_calendar_mailbox', 'm365_timezone'
+        'm365_tenant_id', 'm365_client_id', 'm365_calendar_mailbox', 'm365_timezone',
+        'WeatherZip'
     ];
 
     foreach ($settingsToUpdate as $key) {
@@ -229,6 +230,22 @@ require_once 'header.php';
                 <p style="color:#666; font-size:0.85em; margin:0.25rem 0 0;">
                     On: at least 7 characters and 3 of 4 character types — uppercase, lowercase, number, symbol (recommended for online installs).
                     Off: at least 2 characters, any (for offline / air-gapped installs).
+                </p>
+            </div>
+            <div class="buttons">
+                <button type="submit">Save Settings</button>
+            </div>
+            <hr style="margin: 2rem 0;">
+
+            <h2>Home Page Weather</h2>
+            <div class="field">
+                <label for="WeatherZip">Weather ZIP Code:</label>
+                <input type="text" id="WeatherZip" name="WeatherZip" inputmode="numeric" maxlength="5"
+                       value="<?= htmlspecialchars($settings['WeatherZip'] ?? '') ?>"
+                       placeholder="e.g. 60601">
+                <p style="color:#666; font-size:0.85em; margin:0.25rem 0 0;">
+                    Shows current conditions and a short forecast on the public home page.
+                    Enter a 5-digit US ZIP code, or leave blank to hide the weather panel.
                 </p>
             </div>
             <div class="buttons">

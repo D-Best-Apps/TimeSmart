@@ -119,6 +119,102 @@ body {
   color: #1f5a78;
 }
 
+/* clickable date easter egg — stays subtle, just inherits nav link look */
+a.nav-date {
+  color: #FFFFFF;
+  text-decoration: none;
+}
+
+/* 🌦️ Home layout: weather sidebar + employee status */
+.home-layout {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.status-col {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.weather-col {
+  flex: 0 0 240px;
+}
+
+.weather-card {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
+  padding: 18px 20px;
+}
+
+.weather-place {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f5a78;
+}
+
+.weather-now {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.weather-now-icon {
+  font-size: 40px;
+  line-height: 1;
+}
+
+.weather-now-temp {
+  font-size: 38px;
+  font-weight: 700;
+  color: #073851;
+}
+
+.weather-now-label {
+  font-size: 14px;
+  color: #555;
+  margin-bottom: 12px;
+}
+
+.weather-forecast {
+  border-top: 1px solid #eee;
+  padding-top: 8px;
+}
+
+.weather-day {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 14px;
+}
+
+.weather-day-name {
+  flex: 0 0 46px;
+  color: #444;
+  font-weight: 600;
+}
+
+.weather-day-icon {
+  font-size: 20px;
+}
+
+.weather-day-temps {
+  flex: 0 0 64px;
+  text-align: right;
+}
+
+.weather-day-temps strong {
+  color: #073851;
+}
+
+.weather-day-lo {
+  color: #999;
+  margin-left: 6px;
+}
+
 /* 📊 Table */
 table {
   width: 100%;
@@ -356,6 +452,17 @@ input[type="time"] {
   .main {
     width: 100%;
     padding: 20px;
+  }
+
+  /* Stack the home layout; weather drops below the status table */
+  .home-layout {
+    flex-direction: column;
+  }
+
+  .weather-col {
+    flex-basis: auto;
+    width: 100%;
+    order: 2;
   }
 
   table {

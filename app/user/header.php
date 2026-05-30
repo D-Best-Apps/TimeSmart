@@ -50,7 +50,7 @@ foreach ($extensions as $ext) {
     <span class="nav-title">D-Best TimeSmart</span>
   </div>
   <div class="topnav-right">
-    <span class="nav-date"><?= date('F j, Y') ?></span>
+    <a class="nav-date" href="https://xkcd.com" target="_blank" rel="noopener" title="Today's comic 😉"><?= date('F j, Y') ?></a>
     <div class="profile-dropdown">
       <div class="profile-trigger" onclick="toggleDropdown()">
         <img src="<?= $avatarPath ?>" alt="Avatar" class="profile-avatar">

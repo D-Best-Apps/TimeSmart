@@ -17,6 +17,10 @@ if ($gpsQuery->fetch()) {
     $gpsRequired = ($value === '1');
 }
 $gpsQuery->close();
+
+// Home-page weather panel (null when no ZIP configured / lookup fails)
+require_once __DIR__ . '/functions/weather.php';
+$weather = getWeatherData($conn);
 ?>
 
 
@@ -43,7 +47,7 @@ $gpsQuery->close();
     <span class="nav-title">D-Best TimeSmart</span>
   </div>
   <div class="topnav-right">
-    <span class="nav-date"><?= date('F j, Y') ?></span>
+    <a class="nav-date" href="https://xkcd.com" target="_blank" rel="noopener" title="Today's comic 😉"><?= date('F j, Y') ?></a>
     <a href="index.php">🏠 Home</a>
     <a href="./user/login.php">🔐 Login</a>
   </div>
@@ -67,6 +71,32 @@ $gpsQuery->close();
 <!-- 🔹 Page Content -->
 <div class="wrapper">
     <div class="main">
+      <div class="home-layout">
+        <?php if ($weather): ?>
+        <aside class="weather-col" aria-label="Local weather">
+            <div class="weather-card">
+                <div class="weather-place"><?= htmlspecialchars($weather['place']) ?></div>
+                <div class="weather-now">
+                    <span class="weather-now-icon"><?= $weather['current']['emoji'] ?></span>
+                    <span class="weather-now-temp"><?= htmlspecialchars($weather['current']['temp']) ?>&deg;</span>
+                </div>
+                <div class="weather-now-label"><?= htmlspecialchars($weather['current']['label']) ?></div>
+                <div class="weather-forecast">
+                    <?php foreach ($weather['days'] as $day): ?>
+                    <div class="weather-day" title="<?= htmlspecialchars($day['label']) ?>">
+                        <span class="weather-day-name"><?= htmlspecialchars($day['name']) ?></span>
+                        <span class="weather-day-icon"><?= $day['emoji'] ?></span>
+                        <span class="weather-day-temps">
+                            <strong><?= htmlspecialchars($day['hi']) ?>&deg;</strong>
+                            <span class="weather-day-lo"><?= htmlspecialchars($day['lo']) ?>&deg;</span>
+                        </span>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+        </aside>
+        <?php endif; ?>
+        <div class="status-col">
         <h2>Employee Status</h2>
         <table>
             <tr>
@@ -132,6 +162,8 @@ $gpsQuery->close();
             </tr>
             <?php endwhile; ?>
         </table>
+        </div><!-- /.status-col -->
+      </div><!-- /.home-layout -->
     </div>
 </div>
 
