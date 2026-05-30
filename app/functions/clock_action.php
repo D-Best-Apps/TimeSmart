@@ -11,6 +11,9 @@ require_once __DIR__ . '/../vendor/autoload.php'; // For PHPMailer
 require_once __DIR__ . '/settings_helper.php'; // Use the new helper for settings
 require_once __DIR__ . '/location_policy.php'; // is_mobile_ua(), ip_in_allowlist()
 date_default_timezone_set('America/Chicago');
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 header('Content-Type: application/json');
 
 use PHPMailer\PHPMailer\PHPMailer;
@@ -225,6 +228,30 @@ function logPendingEdit($conn, $empID, $date, $field, $newTime, $note) {
     return true;
 }
 
+// --- Quick-clock brute-force throttle (file-based, per client IP) ---
+// Only failed PIN/badge lookups count, so a busy shared kiosk with many quick
+// successes is never throttled; an automated guesser is. Tunable below.
+function qc_rl_path($ip) { return sys_get_temp_dir() . '/qc_rl_' . md5((string) $ip) . '.json'; }
+function qc_rl_blocked_for($ip) {
+    $f = qc_rl_path($ip);
+    if (!is_readable($f)) { return 0; }
+    $j = json_decode((string) file_get_contents($f), true);
+    $until = is_array($j) ? (int) ($j['blockedUntil'] ?? 0) : 0;
+    return $until > time() ? ($until - time()) : 0;
+}
+function qc_rl_record_fail($ip) {
+    $window = 300; $maxFails = 10; $blockSecs = 60; // 10 fails / 5 min -> 60s lockout
+    $f = qc_rl_path($ip); $now = time();
+    $j = is_readable($f) ? json_decode((string) file_get_contents($f), true) : null;
+    if (!is_array($j) || ($now - (int) ($j['first'] ?? 0)) > $window) {
+        $j = ['first' => $now, 'fails' => 0, 'blockedUntil' => 0];
+    }
+    $j['fails'] = (int) ($j['fails'] ?? 0) + 1;
+    if ($j['fails'] >= $maxFails) { $j['blockedUntil'] = $now + $blockSecs; $j['fails'] = 0; $j['first'] = $now; }
+    @file_put_contents($f, json_encode($j));
+}
+function qc_rl_reset($ip) { $f = qc_rl_path($ip); if (is_file($f)) { @unlink($f); } }
+
 // --- Check TagID Status (kiosk_status) ---
 if (!empty($_POST['mode']) && $_POST['mode'] === 'kiosk_status' && !empty($_POST['TagID'])) {
     $tagID = trim($_POST['TagID']);
@@ -400,6 +427,11 @@ if (!empty($_POST['mode']) && $_POST['mode'] === 'quickclock') {
     $date   = date("Y-m-d");
     $ip     = get_client_ip();
 
+    $rlWait = qc_rl_blocked_for($ip);
+    if ($rlWait > 0) {
+        send_json_response(false, "🚫 Too many attempts. Try again in {$rlWait}s.", 429);
+    }
+
     if ($method === 'pin') {
         if (getSettingValue('QuickPinEnabled', $conn) !== '1') {
             send_json_response(false, "PIN clock-in is turned off.", 403);
@@ -426,9 +458,11 @@ if (!empty($_POST['mode']) && $_POST['mode'] === 'quickclock') {
     $stmt->bind_result($empID, $firstName);
     if (!$stmt->fetch()) {
         $stmt->close();
+        qc_rl_record_fail($ip);
         send_json_response(false, $method === 'pin' ? "❌ PIN not recognized." : "❌ Badge not recognized.", 404);
     }
     $stmt->close();
+    qc_rl_reset($ip); // a valid PIN/badge clears any failure streak
 
     // Current open punch, if any
     $punch = $conn->prepare("SELECT ID, TimeIN, LunchStart, LunchEnd FROM timepunches WHERE EmployeeID = ? AND TimeOUT IS NULL ORDER BY Date DESC, TimeIN DESC LIMIT 1");
@@ -491,6 +525,32 @@ $ip       = get_client_ip();
 // --- Validation ---
 if (!$empID || !$action) {
     send_json_response(false, "❌ Missing employee ID or action.", 400);
+}
+
+// --- Authentication ---
+// Two legitimate callers hit this path:
+//   1. Public board modal: posts the target employee's password -> verify it here.
+//   2. Logged-in employee (dashboard): no password, but an authenticated session ->
+//      trust the session and force the punch onto the session's own employee.
+// Anything else (a blind POST with an EmployeeID and neither) is rejected.
+$providedPassword = (string) ($input['password'] ?? '');
+if ($providedPassword !== '') {
+    $authStmt = $conn->prepare("SELECT Pass FROM users WHERE ID = ?");
+    if (!$authStmt) { send_json_response(false, "DB prepare error (auth)", 500, $conn->error); }
+    $authStmt->bind_param("i", $empID);
+    $authStmt->execute();
+    $authStmt->bind_result($passHash);
+    $authOk = $authStmt->fetch() && !empty($passHash) && password_verify($providedPassword, $passHash);
+    $authStmt->close();
+    if (!$authOk) {
+        send_json_response(false, "❌ Invalid password.", 401);
+    }
+} else {
+    $sessionEmp = (int) ($_SESSION['EmployeeID'] ?? 0);
+    if ($sessionEmp <= 0) {
+        send_json_response(false, "🔒 Please verify your password to clock in/out.", 401);
+    }
+    $empID = $sessionEmp; // a logged-in user can only punch themselves
 }
 
 

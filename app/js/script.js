@@ -171,7 +171,11 @@ function confirmSubmit() {
  */
 function sendPunch(empID, action, note, time, lat = '', lon = '', accuracy = '') {
     const clientTime = new Date().toISOString();
-    
+    // The public board modal collected the employee's password; resend it so the
+    // server can authenticate the punch (it no longer trusts a bare EmployeeID).
+    const pwEl = document.getElementById('modalPassword');
+    const password = pwEl ? pwEl.value : '';
+
     const data = {
         EmployeeID: empID,
         action: action,
@@ -180,7 +184,8 @@ function sendPunch(empID, action, note, time, lat = '', lon = '', accuracy = '')
         latitude: lat,
         longitude: lon,
         accuracy: accuracy,
-        clientTime: clientTime
+        clientTime: clientTime,
+        password: password
     };
 
     fetch("../functions/clock_action.php", {

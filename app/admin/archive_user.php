@@ -19,8 +19,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ID'])) {
         $conn->begin_transaction();
 
         try {
-            // Copy user to user-archive table
-            $conn->query("INSERT INTO `user-archive` SELECT *, NOW() FROM users WHERE ID = $id");
+            // Copy user to user-archive table. Explicit column list (not SELECT *)
+            // so it doesn't depend on the two tables having identical column counts
+            // /order — which they don't (users carries extra OTP/Role columns).
+            $cols = "ID, LastName, Email, FirstName, Pass, BadgeID, PIN, ProfilePhoto, ClockStatus, Office, TwoFASecret, TwoFAEnabled, RecoveryCodeHash, AdminOverride2FA, JobTitle, PhoneNumber, ThemePref, TwoFARecoveryCode, LockOut";
+            $arch = $conn->prepare("INSERT INTO `user-archive` ($cols, ArchivedAt) SELECT $cols, NOW() FROM users WHERE ID = ?");
+            $arch->bind_param("i", $id);
+            $arch->execute();
+            $arch->close();
 
             // Delete from related tables
             $conn->query("DELETE FROM timepunches WHERE EmployeeID = $id");
