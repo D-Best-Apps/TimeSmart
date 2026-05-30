@@ -1,9 +1,7 @@
 <?php
 /*************************************************
- * User 2FA Verification (fixed to ensure EmployeeID is set)
+ * User 2FA Verification — email one-time code (+ backup recovery code)
  *************************************************/
-
-use OTPHP\TOTP;
 
 header("X-Frame-Options: DENY");
 header("X-Content-Type-Options: nosniff");
@@ -25,6 +23,7 @@ session_start();
 
 require '../vendor/autoload.php';
 require '../auth/db.php';
+require_once __DIR__ . '/../functions/email_otp.php';
 
 if (empty($_SESSION['temp_user_id'])) {
     header("Location: login.php");
@@ -75,9 +74,9 @@ function login_user_and_finish(int $empID, string $firstName): void {
         $_SESSION['admin_role'] = $role;
     }
 
-    unset($_SESSION['temp_user_id'], $_SESSION['temp_first_name'], $_SESSION['temp_last_name'], $_SESSION['temp_role'],
-          $_SESSION['temp_from_admin'], $_SESSION['user_2fa_pending'], $_SESSION['2fa_attempts'],
-          $_SESSION['user_twofa_lock_until']);
+    unset($_SESSION['temp_user_id'], $_SESSION['temp_first_name'], $_SESSION['temp_last_name'], $_SESSION['temp_email'],
+          $_SESSION['temp_role'], $_SESSION['temp_from_admin'], $_SESSION['user_2fa_pending'], $_SESSION['2fa_attempts'],
+          $_SESSION['user_twofa_lock_until'], $_SESSION['otp_last_sent']);
 
     if ($role !== 'employee' && $fromAdmin) {
         header("Location: ../admin/dashboard.php");
@@ -105,17 +104,25 @@ if (!isset($_SESSION['2fa_attempts'])) {
 
 $empID = (int)$_SESSION['temp_user_id'];
 
-$stmt = $conn->prepare("SELECT FirstName, TwoFASecret, TwoFARecoveryCode FROM users WHERE ID = ?");
+$stmt = $conn->prepare("SELECT FirstName, Email, TwoFARecoveryCode FROM users WHERE ID = ?");
 $stmt->bind_param("i", $empID);
 $stmt->execute();
 $res  = $stmt->get_result();
 $user = $res ? $res->fetch_assoc() : null;
 $stmt->close();
 
-if (!$user || empty($user['TwoFASecret'])) {
+if (!$user) {
     unset($_SESSION['temp_user_id'], $_SESSION['2fa_attempts'], $_SESSION['user_2fa_pending']);
     header("Location: login.php");
     exit;
+}
+
+// Mask the destination email for display, e.g. "j***@example.com"
+$emailForDisplay = (string)($user['Email'] ?? ($_SESSION['temp_email'] ?? ''));
+$maskedEmail = '';
+if ($emailForDisplay !== '' && strpos($emailForDisplay, '@') !== false) {
+    [$local, $domain] = explode('@', $emailForDisplay, 2);
+    $maskedEmail = mb_substr($local, 0, 1) . str_repeat('*', max(1, mb_strlen($local) - 1)) . '@' . $domain;
 }
 
 $msg = '';
@@ -123,22 +130,25 @@ $msg = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!csrf_valid()) {
         $msg = "Invalid request.";
+    } elseif (isset($_POST['resend'])) {
+        // Rate-limit resends to once every 30 seconds
+        $lastSent = (int)($_SESSION['otp_last_sent'] ?? 0);
+        if (time() - $lastSent < 30) {
+            $msg = "A code was just sent. Please wait a moment before requesting another.";
+        } elseif ($emailForDisplay !== '') {
+            sendEmailOtp($conn, $empID, $emailForDisplay, (string)$user['FirstName']);
+            $_SESSION['otp_last_sent'] = time();
+            $msg = "A new code has been sent to your email.";
+        } else {
+            $msg = "No email is on file for your account. Contact an administrator.";
+        }
     } elseif (twofa_is_locked_user()) {
         $msg = "Too many failed attempts. Please try again later.";
     } else {
-        $rawCode  = trim($_POST['code'] ?? '');
-        $totpCode = normalize_totp_input($rawCode);
-        $success = false;
+        $rawCode = trim($_POST['code'] ?? '');
+        $success = verifyEmailOtp($conn, $empID, $rawCode);
 
-        if ($totpCode !== '') {
-            try {
-                $otp = TOTP::create($user['TwoFASecret']);
-                if ($otp->verify($totpCode)) {
-                    $success = true;
-                }
-            } catch (Throwable $e) {}
-        }
-
+        // Fallback: one-time backup recovery code (JSON array on the user)
         if (!$success && !empty($user['TwoFARecoveryCode'])) {
             $decoded = json_decode($user['TwoFARecoveryCode'], true);
             if (is_array($decoded)) {
@@ -150,6 +160,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $upd->bind_param("si", $jsonCodes, $empID);
                     $upd->execute();
                     $upd->close();
+                    clearEmailOtp($conn, $empID);
                     $success = true;
                 }
             }
@@ -186,7 +197,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
 
         <h2 id="verify-title">Two-Factor Verification</h2>
-        <p class="sub">Enter the 6-digit code from your authenticator app or a backup code.</p>
+        <p class="sub">
+            We emailed a 6-digit code<?= $maskedEmail !== '' ? ' to <strong>' . htmlspecialchars($maskedEmail, ENT_QUOTES, 'UTF-8') . '</strong>' : '' ?>.
+            Enter it below, or use a backup code.
+        </p>
 
         <form method="POST" novalidate>
             <input type="hidden" name="csrf" value="<?= htmlspecialchars($_SESSION['csrf'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
@@ -200,11 +214,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     maxlength="20"
                     inputmode="numeric"
                     autocomplete="one-time-code"
-                    placeholder="123 456 or BACKUPCODE"
+                    placeholder="123456 or BACKUPCODE"
                     required>
             </div>
 
             <button type="submit">Verify</button>
+        </form>
+
+        <form method="POST" novalidate style="margin-top:0.75rem;">
+            <input type="hidden" name="csrf" value="<?= htmlspecialchars($_SESSION['csrf'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
+            <button type="submit" name="resend" value="1" class="link-button"
+                    style="background:none; border:none; color:#0078D7; cursor:pointer; text-decoration:underline; font-size:0.9rem; padding:0;">
+                Didn't get it? Resend code
+            </button>
         </form>
 
         <?php if (!empty($msg)): ?>
@@ -219,7 +241,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ?>
                 Too many attempts. Try again in ~<?= (int)$mins ?>m <?= (int)$secs ?>s.
             <?php else: ?>
-                Tip: You can paste the code; spaces will be ignored for TOTP.
+                Tip: the code expires after a few minutes — use “Resend code” if it’s expired.
             <?php endif; ?>
         </div>
     </div>

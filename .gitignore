@@ -37,3 +37,6 @@ backups/
 # But keep schema + migration scripts tracked
 !deploy/database/*.sql
 !deploy/database/migrations/*.sql
+
+# Runtime artifacts
+app/supervisord.pid

@@ -23,7 +23,7 @@ date_default_timezone_set('America/Chicago');
 <header class="topnav desktop-only">
   <div class="topnav-left">
     <img src="/images/D-Best.png" class="nav-logo" alt="Logo">
-    <span class="nav-title">D-BEST TimeSmart</span>
+    <span class="nav-title">D-Best TimeSmart</span>
   </div>
   <div class="topnav-right">
     <span class="nav-date"><?= date('F j, Y') ?></span>
@@ -42,7 +42,7 @@ date_default_timezone_set('America/Chicago');
 <!-- 📱 Mobile Banner -->
 <div class="mobile-banner mobile-only">
   <img src="/images/D-Best.png" alt="Logo" class="nav-logo">
-  <span class="nav-title">D-BEST TimeSmart</span>
+  <span class="nav-title">D-Best TimeSmart</span>
 </div>
 
 <!-- 📱 Mobile Menu Trigger -->
@@ -82,7 +82,7 @@ date_default_timezone_set('America/Chicago');
 </div>
 
 <footer>
-  <p>D-BEST TimeSmart &copy; <?= date('Y') ?>. All rights reserved.</p>
+  <p>D-Best TimeSmart &copy; <?= date('Y') ?>. All rights reserved.</p>
   <p style="margin-top: 0.3rem;">
     <a href="/docs/privacy.php" style="color:#e0e0e0; text-decoration:none; margin-right:15px;">Privacy Policy</a>
     <a href="/docs/terms.php" style="color:#e0e0e0; text-decoration:none;">Terms of Use</a>

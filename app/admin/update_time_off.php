@@ -46,6 +46,8 @@ $startTime = trim($_POST['StartTime'] ?? '');
 $endTime   = trim($_POST['EndTime']   ?? '');
 $notes     = trim($_POST['Notes']     ?? '');
 $adminNote = trim($_POST['AdminNote'] ?? '');
+$canViewPrivate = canViewPrivateNotes($conn);
+$privateNote = $canViewPrivate ? trim($_POST['AdminPrivateNote'] ?? '') : null;
 
 function rejectAdmin(int $rid, string $reason): void {
     header('Location: edit_time_off.php?id=' . $rid . '&status=invalid&reason=' . urlencode($reason));
@@ -68,6 +70,7 @@ if ($hasStartTime && $hasEndTime) {
 
 if ($notes     !== '' && mb_strlen($notes)     > 500) $notes     = mb_substr($notes,     0, 500);
 if ($adminNote !== '' && mb_strlen($adminNote) > 500) $adminNote = mb_substr($adminNote, 0, 500);
+if ($privateNote !== null && mb_strlen($privateNote) > 500) $privateNote = mb_substr($privateNote, 0, 500);
 
 $startTimeVal = $hasStartTime ? $startTime : null;
 $endTimeVal   = $hasEndTime   ? $endTime   : null;
@@ -80,13 +83,25 @@ $mergedReviewNote = $adminNote !== ''
     ? trim(($existingReviewNote ? $existingReviewNote . "\n" : '') . "[" . date('m/d/Y') . " " . $admin . "] " . $adminNote)
     : $existingReviewNote;
 
-$u = $conn->prepare("
-    UPDATE time_off_requests
-       SET Category=?, StartDate=?, EndDate=?, StartTime=?, EndTime=?, Notes=?, ReviewNote=?, ReviewedAt=?, ReviewedBy=?
-     WHERE ID=?
-");
-$u->bind_param("sssssssssi",
-    $category, $startDate, $endDate, $startTimeVal, $endTimeVal, $notesVal, $mergedReviewNote, $now, $admin, $requestID);
+// Admins without private-note access leave AdminPrivateNote untouched.
+if ($canViewPrivate) {
+    $privVal = ($privateNote !== null && $privateNote !== '') ? $privateNote : null;
+    $u = $conn->prepare("
+        UPDATE time_off_requests
+           SET Category=?, StartDate=?, EndDate=?, StartTime=?, EndTime=?, Notes=?, ReviewNote=?, AdminPrivateNote=?, ReviewedAt=?, ReviewedBy=?
+         WHERE ID=?
+    ");
+    $u->bind_param("ssssssssssi",
+        $category, $startDate, $endDate, $startTimeVal, $endTimeVal, $notesVal, $mergedReviewNote, $privVal, $now, $admin, $requestID);
+} else {
+    $u = $conn->prepare("
+        UPDATE time_off_requests
+           SET Category=?, StartDate=?, EndDate=?, StartTime=?, EndTime=?, Notes=?, ReviewNote=?, ReviewedAt=?, ReviewedBy=?
+         WHERE ID=?
+    ");
+    $u->bind_param("sssssssssi",
+        $category, $startDate, $endDate, $startTimeVal, $endTimeVal, $notesVal, $mergedReviewNote, $now, $admin, $requestID);
+}
 $u->execute();
 
 // If the request was Approved (so it has a calendar event), replace the M365 event

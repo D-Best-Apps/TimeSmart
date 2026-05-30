@@ -1,12 +1,12 @@
-// 🟦 Open the modal and prepare it for PIN input
+// 🟦 Open the modal and prepare it for password input
 function openModal(empID, fullName) {
     document.getElementById("modal").classList.remove("hidden");
     document.getElementById("employeeName").innerText = fullName;
     document.getElementById("modalEmployeeID").value = empID;
-    document.getElementById("modalPIN").value = "";
+    document.getElementById("modalPassword").value = "";
     document.getElementById("note").value = "";
     document.getElementById("statusArea").classList.add("hidden");
-    document.getElementById("pinForm").classList.remove("hidden");
+    document.getElementById("passwordForm").classList.remove("hidden");
     document.getElementById("modalError").innerText = "";
     document.getElementById("adjustPopup").classList.add("hidden");
     document.getElementById("confirmPopup").classList.add("hidden");
@@ -25,22 +25,22 @@ document.getElementById("modalClose").onclick = () => {
     document.getElementById("modal").classList.add("hidden");
 };
 
-// ✅ PIN Form Submission & Verification
-document.getElementById("pinForm").addEventListener("submit", function (e) {
+// ✅ Password Form Submission & Verification
+document.getElementById("passwordForm").addEventListener("submit", function (e) {
     e.preventDefault();
     const empID = document.getElementById("modalEmployeeID").value;
-    const pin = document.getElementById("modalPIN").value;
+    const password = document.getElementById("modalPassword").value;
 
-    fetch("functions/verify_pin.php", {
+    fetch("functions/verify_password.php", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: `EmployeeID=${encodeURIComponent(empID)}&PIN=${encodeURIComponent(pin)}`
+        body: `EmployeeID=${encodeURIComponent(empID)}&password=${encodeURIComponent(password)}`
     })
     .then(res => res.json())
     .then(data => {
         if (data.success) {
             document.getElementById("statusArea").classList.remove("hidden");
-            document.getElementById("pinForm").classList.add("hidden");
+            document.getElementById("passwordForm").classList.add("hidden");
             document.getElementById("currentStatus").innerText = `Status: ${data.status}, Time: ${data.time}`;
             document.getElementById("modalError").innerText = "";
         } else {
@@ -48,7 +48,7 @@ document.getElementById("pinForm").addEventListener("submit", function (e) {
         }
     })
     .catch(() => {
-        document.getElementById("modalError").innerText = "Error verifying PIN.";
+        document.getElementById("modalError").innerText = "Error verifying password.";
     });
 });
 

@@ -142,6 +142,13 @@ require_once 'header.php';
         <textarea id="AdminNote" name="AdminNote" maxlength="500" placeholder="e.g., 'Adjusted to 2 hours per actual time used'"></textarea>
       </div>
 
+      <?php if (canViewPrivateNotes($conn)): ?>
+      <div class="field">
+        <label for="AdminPrivateNote">Private note (internal — never emailed or shown to employee)</label>
+        <textarea id="AdminPrivateNote" name="AdminPrivateNote" maxlength="500" placeholder="Admin-only note for this request"><?= htmlspecialchars($req['AdminPrivateNote'] ?? '') ?></textarea>
+      </div>
+      <?php endif; ?>
+
       <button type="submit">Save changes</button>
       <a href="edits_timesheet.php" style="margin-left:1rem;">Cancel</a>
     </form>

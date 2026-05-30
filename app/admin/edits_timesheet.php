@@ -13,6 +13,9 @@ if (!isset($_SESSION['admin'])) {
 require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('approve_edits');
 
+// Whether this admin may see/write admin-only private notes
+$canViewPrivate = canViewPrivateNotes($conn);
+
 // Fetch all pending edits with user info
 $stmt = $conn->prepare("SELECT pe.*, u.FirstName, u.LastName FROM pending_edits pe 
                         JOIN users u ON pe.EmployeeID = u.ID 
@@ -47,6 +50,7 @@ while ($row = $result->fetch_assoc()) {
                 'Requested' => $row[$field],
                 'Note' => $row['Note'],
                 'Reason' => $row['Reason'],
+                'AdminPrivateNote' => $row['AdminPrivateNote'] ?? '',
             ];
         }
     }
@@ -115,20 +119,8 @@ foreach ($timeOffRequests as $tor) {
 $pageTitle = "Pending Approvals";
 require_once 'header.php';
 ?>
-<link rel="stylesheet" href="../css/edits.css" />
+<link rel="stylesheet" href="../css/edits_timesheet.css" />
 
-
-<nav>
-    <a href="dashboard.php">Dashboard</a>
-    <a href="view_punches.php">Timesheets</a>
-    <a href="summary.php">Summary</a>
-    <a href="reports.php">Reports</a>
-    <a href="manage_users.php">Users</a>
-    <a href="manage_offices.php">Offices</a>
-    <a href="attendance.php">Attendance</a>
-    <a href="manage_admins.php">Admins</a>
-    <a href="../logout.php">Logout</a>
-</nav>
 
 <div class="dashboard-container">
     <?php if (($_GET['m365_sync'] ?? '') === 'failed'): ?>
@@ -154,6 +146,7 @@ require_once 'header.php';
                         <th>Requested</th>
                         <th>Note</th>
                         <th>Reason</th>
+                        <?php if ($canViewPrivate): ?><th>Private Note</th><?php endif; ?>
                         <th>Action</th>
                     </tr>
                 </thead>
@@ -167,6 +160,11 @@ require_once 'header.php';
                             <td style="color:#0078D7;"><strong><?= htmlspecialchars($edit['Requested']) ?></strong></td>
                             <td><?= htmlspecialchars($edit['Note']) ?: '-' ?></td>
                             <td class="note-box"><?= htmlspecialchars($edit['Reason']) ?></td>
+                            <?php if ($canViewPrivate): ?>
+                            <td>
+                                <textarea name="private_note[<?= (int) $edit['ID'] ?>]" maxlength="2000" rows="2" placeholder="Admin-only — not shown to employee" style="width:160px; padding:4px;"><?= htmlspecialchars($edit['AdminPrivateNote']) ?></textarea>
+                            </td>
+                            <?php endif; ?>
                             <td class="action-buttons">
                                 <button type="submit" class="approve-btn" name="action[<?= $edit['ID'] ?>][<?= $edit['Field'] ?>]" value="approve">Approve</button>
                                 <button type="submit" class="reject-btn" name="action[<?= $edit['ID'] ?>][<?= $edit['Field'] ?>]" value="reject">Reject</button>
@@ -194,6 +192,7 @@ require_once 'header.php';
                         <th>Notes</th>
                         <th>Projected wk</th>
                         <th>Reviewer Note</th>
+                        <?php if ($canViewPrivate): ?><th>Private Note</th><?php endif; ?>
                         <th>Action</th>
                     </tr>
                 </thead>
@@ -265,6 +264,11 @@ require_once 'header.php';
                             <td>
                                 <input type="text" name="review_note[<?= (int) $tor['ID'] ?>]" maxlength="500" placeholder="Optional" style="width:100%; padding:4px;">
                             </td>
+                            <?php if ($canViewPrivate): ?>
+                            <td>
+                                <textarea name="tor_private_note[<?= (int) $tor['ID'] ?>]" maxlength="500" rows="2" placeholder="Admin-only — not emailed" style="width:160px; padding:4px;"><?= htmlspecialchars($tor['AdminPrivateNote'] ?? '') ?></textarea>
+                            </td>
+                            <?php endif; ?>
                             <td class="action-buttons">
                                 <button type="submit" class="approve-btn" name="action[<?= (int) $tor['ID'] ?>]" value="approve">Approve</button>
                                 <button type="submit" class="reject-btn"  name="action[<?= (int) $tor['ID'] ?>]" value="reject">Reject</button>
@@ -288,6 +292,7 @@ require_once 'header.php';
                     <th>Dates</th>
                     <th>Times</th>
                     <th>Notes</th>
+                    <?php if ($canViewPrivate): ?><th>Private Note</th><?php endif; ?>
                     <th>M365 Synced</th>
                     <th>Action</th>
                 </tr>
@@ -300,9 +305,12 @@ require_once 'header.php';
                         <td><?= formatTorDateRange($tor['StartDate'], $tor['EndDate']) ?></td>
                         <td><?= formatTorTimeRange($tor['StartTime'], $tor['EndTime']) ?></td>
                         <td class="note-box"><?= nl2br(htmlspecialchars($tor['Notes'] ?? '')) ?: '-' ?></td>
+                        <?php if ($canViewPrivate): ?>
+                        <td class="note-box" style="color:#555;"><?= nl2br(htmlspecialchars($tor['AdminPrivateNote'] ?? '')) ?: '-' ?></td>
+                        <?php endif; ?>
                         <td style="font-size:0.85rem;"><?= $tor['M365SyncStatus'] === 'sent' ? '✓' : htmlspecialchars($tor['M365SyncStatus'] ?? '-') ?></td>
                         <td>
-                            <a href="edit_time_off.php?id=<?= (int) $tor['ID'] ?>" class="approve-btn" style="text-decoration:none; padding:4px 10px;">Edit</a>
+                            <a href="edit_time_off.php?id=<?= (int) $tor['ID'] ?>" class="btn small secondary">Edit</a>
                         </td>
                     </tr>
                 <?php endforeach; ?>

@@ -48,7 +48,6 @@ if ($result) $rows = $result->fetch_all(MYSQLI_ASSOC);
 $pageTitle = "Manage Admins";
 require_once 'header.php';
 ?>
-<link rel="stylesheet" href="../css/manage_admins.css" />
 
 <div class="container">
     <div class="summary-filter">
@@ -62,7 +61,7 @@ require_once 'header.php';
                 </p>
             </div>
             <div class="buttons">
-                <a href="add_admin.php" class="btn-reset" style="background-color: var(--primary-color); color: white;">+ Promote Employee</a>
+                <a href="add_admin.php" class="btn primary">+ Promote Employee</a>
             </div>
         </div>
     </div>
@@ -98,8 +97,8 @@ require_once 'header.php';
                     <td><?= $u['TwoFAEnabled'] ? '✓' : '—' ?></td>
                     <td style="white-space: nowrap;">
                         <div style="display: inline-flex; gap: 0.5rem; align-items: center;">
-                            <a class="btn-reset" style="background-color: var(--primary-color); color: white; display: inline-block;" href="edit_admin.php?id=<?= (int) $u['ID'] ?>">Change Role</a>
-                            <a class="btn-reset" style="background-color: #dc3545; color: white; display: inline-block;" href="?demote=<?= (int) $u['ID'] ?>" onclick="return confirm('Demote <?= htmlspecialchars($u['FirstName'] . ' ' . $u['LastName'], ENT_QUOTES) ?> back to regular employee? (Their employee account stays.)');">Demote</a>
+                            <a class="btn primary small" href="edit_admin.php?id=<?= (int) $u['ID'] ?>">Change Role</a>
+                            <a class="btn danger small" href="?demote=<?= (int) $u['ID'] ?>" onclick="return confirm('Demote <?= htmlspecialchars($u['FirstName'] . ' ' . $u['LastName'], ENT_QUOTES) ?> back to regular employee? (Their employee account stays.)');">Demote</a>
                         </div>
                     </td>
                 </tr>

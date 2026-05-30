@@ -81,3 +81,18 @@ function isSuperAdmin() {
 function isReportsOnly() {
     return getAdminRole() === 'reports_only';
 }
+
+/**
+ * Whether the current admin may view (and write) admin-only "private notes" on
+ * timesheet-edit and time-off requests.
+ *
+ * Gated purely by role: only super_admins. reports_only admins cannot reach the
+ * approval pages at all, and employees have no admin access. Private notes are
+ * never shown to or emailed to employees.
+ *
+ * @param mysqli|null $conn Unused; kept for call-site compatibility.
+ * @return bool
+ */
+function canViewPrivateNotes($conn = null) {
+    return isSuperAdmin();
+}

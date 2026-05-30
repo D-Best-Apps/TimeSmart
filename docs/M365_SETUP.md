@@ -122,7 +122,6 @@ Admin → **Settings → M365 PTO Calendar Sync**:
 | Client ID | step 1 |
 | Client Secret | step 2 |
 | **PTO Calendar Mailbox (UPN)** | the shared mailbox's primary SMTP (e.g. `ptocalendar@dbest.com`) |
-| PTO Calendar Group ID | *leave blank — only used if Mailbox UPN is empty (legacy fallback)* |
 | Calendar Time Zone | `America/Chicago` (or your tz) |
 
 Click **Save & Test M365 Connection**. Success → green banner with the calendar name. Failure → see Troubleshooting.
@@ -161,4 +160,4 @@ Click **Save & Test M365 Connection**. Success → green banner with the calenda
 
 ## Appendix — Unified Group calendar (legacy / not recommended)
 
-If you really want to target a Microsoft 365 Group's calendar instead of a shared mailbox, the code still supports it: leave the **Mailbox UPN** setting empty and populate **PTO Calendar Group ID** with the group's Object ID. Additional Azure work needed: change the Graph permission from `Calendars.ReadWrite` to `Group.ReadWrite.All`. Be aware that Exchange Online frequently refuses app-only writes to Unified Group calendars even with everything correctly configured (member additions of Service Principals are explicitly blocked by Graph; owner addition often silently fails). If you go this route and hit `ErrorAccessDenied` that nothing fixes, switch to a shared mailbox — that's what this doc recommends.
+If you really want to target a Microsoft 365 Group's calendar instead of a shared mailbox, the code still supports it: leave the **Mailbox UPN** setting empty and populate **PTO Calendar Group ID** with the group's Object ID. *(The Group ID field has been removed from the Settings UI; set the `m365_group_id` row directly in the `settings` table if you need it.)* Additional Azure work needed: change the Graph permission from `Calendars.ReadWrite` to `Group.ReadWrite.All`. Be aware that Exchange Online frequently refuses app-only writes to Unified Group calendars even with everything correctly configured (member additions of Service Principals are explicitly blocked by Graph; owner addition often silently fails). If you go this route and hit `ErrorAccessDenied` that nothing fixes, switch to a shared mailbox — that's what this doc recommends.

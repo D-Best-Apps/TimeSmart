@@ -30,6 +30,28 @@ if ($pendingQuery) {
     $pendingCount = (int) $pendingRow['count'];
 }
 
+// Current admin's name, avatar and 2FA status for the profile corner menu
+$adminName   = 'Account';
+$adminAvatar = '../images/default_avatar.png';
+$is2FAEnabled = 0;
+if (!empty($_SESSION['EmployeeID'])) {
+    $meID = (int) $_SESSION['EmployeeID'];
+    $meStmt = $conn->prepare("SELECT FirstName, TwoFAEnabled FROM users WHERE ID = ?");
+    $meStmt->bind_param("i", $meID);
+    $meStmt->execute();
+    if ($me = $meStmt->get_result()->fetch_assoc()) {
+        $adminName    = $me['FirstName'] ?: 'Account';
+        $is2FAEnabled = (int) $me['TwoFAEnabled'];
+    }
+    foreach (['png', 'jpg', 'jpeg', 'webp'] as $ext) {
+        $try = "../avatars/{$meID}_pro.$ext";
+        if (file_exists($try)) {
+            $adminAvatar = $try;
+            break;
+        }
+    }
+}
+
 // Page title and extra CSS should be set before including this header
 if (!isset($pageTitle)) {
     $pageTitle = "Admin Portal";
@@ -52,13 +74,25 @@ $currentPage = basename($_SERVER['PHP_SELF']);
     <link rel="icon" type="image/png" href="../images/D-Best-favicon.png">
     <link rel="apple-touch-icon" href="../images/D-Best-favicon.png">
     <link rel="icon" type="image/webp" href="../images/D-Best-favicon.webp">
-    <link rel="stylesheet" href="../css/admin.css">
+    <link rel="stylesheet" href="../css/admin.css?v=3">
+    <style>
+        /* Fallback so the new nav elements are never unstyled if admin.css is cached */
+        .admin-profile-avatar { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; }
+        .nav-dropdown-menu.hidden { display: none; }
+    </style>
     <?php foreach ($extraCSS as $css): ?>
     <link rel="stylesheet" href="<?= $css ?>" />
     <?php endforeach; ?>
 </head>
 <body>
 
+<?php
+// Pages that live under the Settings dropdown — used for active-state highlight
+$settingsPages = ['settings.php', 'manage_users.php', 'manage_offices.php', 'manage_admins.php'];
+$settingsActive = in_array($currentPage, $settingsPages, true);
+$showSettingsMenu = checkPermission('manage_settings') || checkPermission('manage_users')
+                 || checkPermission('manage_offices') || checkPermission('manage_admins');
+?>
 <header>
     <img src="/images/D-Best.png" alt="D-Best Logo" class="logo">
     <h1><?= htmlspecialchars($pageTitle) ?></h1>
@@ -71,27 +105,65 @@ $currentPage = basename($_SERVER['PHP_SELF']);
         <a href="edits_timesheet.php"<?= $currentPage == 'edits_timesheet.php' ? ' class="active"' : '' ?>>Pending Approvals<?php if ($pendingCount > 0): ?> (<?= $pendingCount ?>)<?php endif; ?></a>
         <?php endif; ?>
         <a href="reports.php"<?= $currentPage == 'reports.php' ? ' class="active"' : '' ?>>Reports</a>
-        <?php if (checkPermission('manage_users')): ?>
-        <a href="manage_users.php"<?= $currentPage == 'manage_users.php' ? ' class="active"' : '' ?>>Users</a>
-        <?php endif; ?>
-        <?php if (checkPermission('manage_offices')): ?>
-        <a href="manage_offices.php"<?= $currentPage == 'manage_offices.php' ? ' class="active"' : '' ?>>Offices</a>
-        <?php endif; ?>
         <?php if (checkPermission('view_attendance')): ?>
         <a href="attendance.php"<?= $currentPage == 'attendance.php' ? ' class="active"' : '' ?>>Attendance</a>
         <?php endif; ?>
-        <?php if (checkPermission('manage_admins')): ?>
-        <a href="manage_admins.php"<?= $currentPage == 'manage_admins.php' ? ' class="active"' : '' ?>>Admins</a>
+
+        <?php if ($showSettingsMenu): ?>
+        <div class="nav-dropdown">
+            <button type="button" class="nav-dropdown-toggle<?= $settingsActive ? ' active' : '' ?>" onclick="toggleNavMenu('settingsMenu', this)">Settings ▾</button>
+            <div id="settingsMenu" class="nav-dropdown-menu hidden">
+                <?php if (checkPermission('manage_settings')): ?>
+                <a href="settings.php"<?= $currentPage == 'settings.php' ? ' class="active"' : '' ?>>⚙️ General Settings</a>
+                <?php endif; ?>
+                <?php if (checkPermission('manage_users')): ?>
+                <a href="manage_users.php"<?= $currentPage == 'manage_users.php' ? ' class="active"' : '' ?>>👥 Users</a>
+                <?php endif; ?>
+                <?php if (checkPermission('manage_offices')): ?>
+                <a href="manage_offices.php"<?= $currentPage == 'manage_offices.php' ? ' class="active"' : '' ?>>🏢 Offices</a>
+                <?php endif; ?>
+                <?php if (checkPermission('manage_admins')): ?>
+                <a href="manage_admins.php"<?= $currentPage == 'manage_admins.php' ? ' class="active"' : '' ?>>🛡️ Admins</a>
+                <?php endif; ?>
+            </div>
+        </div>
         <?php endif; ?>
-        <?php if (checkPermission('manage_settings')): ?>
-        <a href="settings.php"<?= $currentPage == 'settings.php' ? ' class="active"' : '' ?>>Settings</a>
-        <?php endif; ?>
-        <?php if (!empty($_SESSION['EmployeeID'])): ?>
-        <a href="../user/dashboard.php" title="Switch to your employee view">👤 My View</a>
-        <?php endif; ?>
-        <a href="../logout.php">Logout</a>
     </nav>
+
+    <div class="admin-profile">
+        <button type="button" class="admin-profile-trigger" onclick="toggleNavMenu('profileMenu', this)">
+            <img src="<?= htmlspecialchars($adminAvatar) ?>" alt="Avatar" class="admin-profile-avatar">
+            <span class="admin-profile-name"><?= htmlspecialchars($adminName) ?></span> ▾
+        </button>
+        <div id="profileMenu" class="nav-dropdown-menu hidden">
+            <?php if (!empty($_SESSION['EmployeeID'])): ?>
+            <a href="../user/dashboard.php" title="Switch to your employee view">👤 My Timesheet</a>
+            <a href="../user/settings.php">⚙️ My Account Settings</a>
+            <?php endif; ?>
+            <a href="../logout.php">↩️ Logout</a>
+        </div>
+    </div>
 </header>
+
+<script>
+function toggleNavMenu(id, trigger) {
+    var menu = document.getElementById(id);
+    if (!menu) return;
+    // Close any other open menus first
+    document.querySelectorAll('.nav-dropdown-menu').forEach(function (m) {
+        if (m !== menu) m.classList.add('hidden');
+    });
+    menu.classList.toggle('hidden');
+}
+
+window.addEventListener('click', function (e) {
+    document.querySelectorAll('.nav-dropdown-menu').forEach(function (menu) {
+        if (menu.classList.contains('hidden')) return;
+        var wrap = menu.closest('.nav-dropdown, .admin-profile');
+        if (wrap && !wrap.contains(e.target)) menu.classList.add('hidden');
+    });
+});
+</script>
 
 <div class="dashboard-container">
     <div class="container">

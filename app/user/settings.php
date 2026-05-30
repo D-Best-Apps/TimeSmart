@@ -1,5 +1,6 @@
 <?php
 require_once 'header.php';
+require_once __DIR__ . '/../functions/password_policy.php';
 
 $msg = "";
 $errors = [];
@@ -20,8 +21,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!empty($_POST['NewPassword']) || !empty($_POST['ConfirmPassword'])) {
         if ($_POST['NewPassword'] !== $_POST['ConfirmPassword']) {
             $errors[] = "Passwords do not match.";
-        } elseif (strlen($_POST['NewPassword']) < 6) {
-            $errors[] = "Password must be at least 6 characters.";
+        } elseif ($pwErrors = validatePassword($_POST['NewPassword'], $conn)) {
+            $errors = array_merge($errors, $pwErrors);
         } else {
             $newPass = password_hash($_POST['NewPassword'], PASSWORD_BCRYPT, ['cost' => 14]);
             $stmt = $conn->prepare("UPDATE users SET Pass=? WHERE ID=?");
@@ -85,12 +86,12 @@ $logs = $logStmt->get_result();
 
         <form method="POST" enctype="multipart/form-data">
         <div class="tab-content" id="profile">
-                <div><label>First Name</label><input type="text" name="FirstName" value="<?= htmlspecialchars($user['FirstName']) ?>" required></div>
-                <div><label>Last Name</label><input type="text" name="LastName" value="<?= htmlspecialchars($user['LastName']) ?>" required></div>
-                <div><label>Email</label><input type="email" name="Email" value="<?= htmlspecialchars($user['Email']) ?>"></div>
-                <div><label>Tag ID</label><input type="text" name="TagID" value="<?= htmlspecialchars($user['TagID']) ?>"></div>
-                <div><label>Job Title</label><input type="text" name="JobTitle" value="<?= htmlspecialchars($user['JobTitle']) ?>"></div>
-                <div><label>Phone Number</label><input type="text" name="PhoneNumber" value="<?= htmlspecialchars($user['PhoneNumber']) ?>"></div>
+                <div><label>First Name</label><input type="text" name="FirstName" value="<?= htmlspecialchars($user['FirstName'] ?? '') ?>" required></div>
+                <div><label>Last Name</label><input type="text" name="LastName" value="<?= htmlspecialchars($user['LastName'] ?? '') ?>" required></div>
+                <div><label>Email</label><input type="email" name="Email" value="<?= htmlspecialchars($user['Email'] ?? '') ?>"></div>
+                <div><label>Tag ID</label><input type="text" name="TagID" value="<?= htmlspecialchars($user['TagID'] ?? '') ?>"></div>
+                <div><label>Job Title</label><input type="text" name="JobTitle" value="<?= htmlspecialchars($user['JobTitle'] ?? '') ?>"></div>
+                <div><label>Phone Number</label><input type="text" name="PhoneNumber" value="<?= htmlspecialchars($user['PhoneNumber'] ?? '') ?>"></div>
                 <div>
                     <label>Theme Preference</label>
                     <select name="ThemePref">
@@ -114,6 +115,9 @@ $logs = $logStmt->get_result();
         </div>
 
         <div class="tab-content" id="security">
+            <p class="full" style="font-size:0.85rem; color:#9ca3af; margin:0 0 0.5rem;">
+                Password requirements: <?= htmlspecialchars(passwordRequirementsText($conn)) ?>
+            </p>
             <div class="password-box full">
                 <label>New Password</label>
                 <input type="password" name="NewPassword" id="NewPassword">
@@ -133,27 +137,16 @@ $logs = $logStmt->get_result();
             <div class="twofa-box full">
                 <h3>Two-Factor Authentication</h3>
                 <?php if ($user['TwoFAEnabled']): ?>
-                    <p>✅ 2FA is enabled.</p>
-                    <?php if ($user['AdminOverride2FA']): ?>
-                        <button type="button" id="show-2fa-pass" class="btn-cancel">Disable 2FA</button>
-                        <form action="disable_2fa.php" method="POST" id="disable-2fa-form" class="disable-2fa-form">
-                            <div class="password-box">
-                                <label for="password_2fa">Password</label>
-                                <input type="password" name="password" id="password_2fa" required>
-                                <span class="toggle-password" onclick="togglePassword('password_2fa')">👁</span>
-                            </div>
-                            <button class="btn-cancel" type="submit">Confirm Disable</button>
-                        </form>
-                    <?php else: ?>
-                        <p><em>Admin has locked 2FA settings.</em></p>
-                    <?php endif; ?>
+                    <p>✅ Two-factor authentication is <strong>on</strong>. At each login we email a one-time
+                       code to <strong><?= htmlspecialchars($user['Email'] ?? '') ?: 'your address' ?></strong>.</p>
+                    <p style="color:#666; font-size:0.9em;">
+                        Make sure your email above is correct. To turn 2FA on or off, contact an administrator.
+                    </p>
                 <?php else: ?>
-                    <p>❌ 2FA is not enabled.</p>
-                    <?php if ($user['AdminOverride2FA']): ?>
-                        <a href="enable_2fa.php" class="button btn-save">Enable 2FA</a>
-                    <?php else: ?>
-                        <p><em>Admin has locked 2FA settings.</em></p>
-                    <?php endif; ?>
+                    <p>❌ Two-factor authentication is <strong>off</strong>.</p>
+                    <p style="color:#666; font-size:0.9em;">
+                        2FA uses a code emailed to you at login. An administrator can enable it for your account.
+                    </p>
                 <?php endif; ?>
             </div>
         </div>

@@ -9,24 +9,7 @@ require '../auth/db.php';
 
 $adminUsername = $_SESSION['admin'];
 
-// 2FA status now lives on users.TwoFAEnabled (post-unified-login); fall back to admins table for the
-// legacy 'admin' seed account that wasn't migrated.
-$is2FAEnabled = 0;
-if (!empty($_SESSION['EmployeeID'])) {
-    $stmt = $conn->prepare("SELECT TwoFAEnabled FROM users WHERE ID = ?");
-    $stmt->bind_param("i", $_SESSION['EmployeeID']);
-    $stmt->execute();
-    if ($row = $stmt->get_result()->fetch_assoc()) {
-        $is2FAEnabled = (int) $row['TwoFAEnabled'];
-    }
-} else {
-    $stmt = $conn->prepare("SELECT TwoFAEnabled FROM admins WHERE username = ?");
-    $stmt->bind_param("s", $adminUsername);
-    $stmt->execute();
-    if ($row = $stmt->get_result()->fetch_assoc()) {
-        $is2FAEnabled = (int) $row['TwoFAEnabled'];
-    }
-}
+// (Self-serve 2FA enable/disable now lives in the header profile menu.)
 
 // Get count of pending edits
 $pendingCount = 0;
@@ -125,24 +108,6 @@ require_once 'header.php';
             <h2>Settings</h2>
             <p>Configure system settings and preferences.</p>
             <a href="settings.php">Open</a>
-        </div>
-        <?php if (!$is2FAEnabled): ?>
-        <div class="card">
-            <h2>Enable 2FA</h2>
-            <p>Secure your admin account with Two-Factor Authentication.</p>
-            <a href="enable_2fa.php">Setup 2FA</a>
-        </div>
-        <?php else: ?>
-        <div class="card">
-            <h2>Disable 2FA</h2>
-            <p>Remove Two-Factor Authentication from your admin account.</p>
-            <a href="disable_2fa.php">Disable 2FA</a>
-        </div>
-        <?php endif; ?>
-        <div class="card">
-            <h2>Logout</h2>
-            <p>Sign out of the admin dashboard.</p>
-            <a href="../logout.php">Logout</a>
         </div>
     </div>
 

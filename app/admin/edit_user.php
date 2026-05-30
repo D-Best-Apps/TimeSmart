@@ -34,14 +34,6 @@ if (!$user) {
     exit;
 }
 
-// Check if user is admin
-$adminUsername = $user['FirstName'] . strtoupper(substr($user['LastName'], 0, 1));
-$checkAdmin = $conn->prepare("SELECT ID FROM admins WHERE username = ?");
-$checkAdmin->bind_param("s", $adminUsername);
-$checkAdmin->execute();
-$checkAdmin->store_result();
-$isAdmin = $checkAdmin->num_rows > 0;
-
 $offices_result = $conn->query("SELECT OfficeName FROM Offices ORDER BY OfficeName");
 $offices_data = [];
 while ($row = $offices_result->fetch_assoc()) {
@@ -58,40 +50,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $jobTitle = trim($_POST['JobTitle']);
     $phone = trim($_POST['PhoneNumber']);
     $password = $_POST['Password'];
-    $makeAdmin = isset($_POST['MakeAdmin']);
     $enable2FA = isset($_POST['Enable2FA']) ? 1 : 0;
-    $recoveryCode = trim($_POST['RecoveryCode']);
 
     if ($firstName && $lastName && $email && $clockStatus && $office) {
         if (!empty($password)) {
+            require_once __DIR__ . '/../functions/password_policy.php';
+            $pwErrors = validatePassword($password, $conn);
+            if ($pwErrors) {
+                header('Location: ../error.php?code=400&message=' . urlencode(implode(' ', $pwErrors)));
+                exit;
+            }
             $hashed = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
-            $stmt = $conn->prepare("UPDATE users SET FirstName = ?, LastName = ?, Email = ?, TagID = ?, ClockStatus = ?, Office = ?, Pass = ?, JobTitle = ?, PhoneNumber = ?, TwoFAEnabled = ?, TwoFARecoveryCode = ? WHERE ID = ?");
-            $stmt->bind_param("ssssssssissi", $firstName, $lastName, $email, $tagID, $clockStatus, $office, $hashed, $jobTitle, $phone, $enable2FA, $recoveryCode, $id);
+            $stmt = $conn->prepare("UPDATE users SET FirstName = ?, LastName = ?, Email = ?, TagID = ?, ClockStatus = ?, Office = ?, Pass = ?, JobTitle = ?, PhoneNumber = ?, TwoFAEnabled = ? WHERE ID = ?");
+            $stmt->bind_param("sssssssssii", $firstName, $lastName, $email, $tagID, $clockStatus, $office, $hashed, $jobTitle, $phone, $enable2FA, $id);
         } else {
-            $stmt = $conn->prepare("UPDATE users SET FirstName = ?, LastName = ?, Email = ?, TagID = ?, ClockStatus = ?, Office = ?, JobTitle = ?, PhoneNumber = ?, TwoFAEnabled = ?, TwoFARecoveryCode = ? WHERE ID = ?");
-            $stmt->bind_param("sssssssissi", $firstName, $lastName, $email, $tagID, $clockStatus, $office, $jobTitle, $phone, $enable2FA, $recoveryCode, $id);
+            $stmt = $conn->prepare("UPDATE users SET FirstName = ?, LastName = ?, Email = ?, TagID = ?, ClockStatus = ?, Office = ?, JobTitle = ?, PhoneNumber = ?, TwoFAEnabled = ? WHERE ID = ?");
+            $stmt->bind_param("ssssssssii", $firstName, $lastName, $email, $tagID, $clockStatus, $office, $jobTitle, $phone, $enable2FA, $id);
         }
 
         $stmt->execute();
-
-        // Handle Admin switch
-        if ($makeAdmin) {
-            $check = $conn->prepare("SELECT ID FROM admins WHERE username = ?");
-            $check->bind_param("s", $adminUsername);
-            $check->execute();
-            $check->store_result();
-
-            if ($check->num_rows === 0) {
-                $adminPass = !empty($password) ? $hashed : $user['Pass'];
-                $insert = $conn->prepare("INSERT INTO admins (username, password) VALUES (?, ?)");
-                $insert->bind_param("ss", $adminUsername, $adminPass);
-                $insert->execute();
-            }
-        } else {
-            $delete = $conn->prepare("DELETE FROM admins WHERE username = ?");
-            $delete->bind_param("s", $adminUsername);
-            $delete->execute();
-        }
 
         header("Location: manage_users.php");
         exit;
@@ -157,26 +134,17 @@ require_once 'header.php';
             <input type="password" name="Password">
         </label>
 
-        <label>Recovery Code
-            <input type="text" name="RecoveryCode" value="<?= htmlspecialchars($user['TwoFARecoveryCode'] ?? '') ?>">
-        </label>
-
         <div class="switch-wrapper">
-    <span class="switch-label">Enable 2FA</span>
-    <label class="switch">
-        <input type="checkbox" name="Enable2FA" <?= $user['TwoFAEnabled'] ? 'checked' : '' ?>>
-        <span class="slider"></span>
-    </label>
-</div>
-
-<div class="switch-wrapper">
-    <span class="switch-label">Make Admin (<?= $adminUsername ?>)</span>
-    <label class="switch">
-        <input type="checkbox" name="MakeAdmin" <?= $isAdmin ? 'checked' : '' ?>>
-        <span class="slider"></span>
-    </label>
-</div>
-
+            <span class="switch-label">Require 2FA (emailed code at login)</span>
+            <label class="switch">
+                <input type="checkbox" name="Enable2FA" <?= $user['TwoFAEnabled'] ? 'checked' : '' ?>>
+                <span class="slider"></span>
+            </label>
+        </div>
+        <p style="color:#666; font-size:0.85em; margin:0.25rem 0 1rem;">
+            When on, this user must enter a one-time code emailed to <strong><?= htmlspecialchars($user['Email'] ?? '') ?: 'their address' ?></strong>
+            each time they sign in. Requires an email on file. Manage admin roles on the <a href="manage_admins.php">Admins</a> page.
+        </p>
 
         <div class="modal-actions">
             <a href="manage_users.php" class="btn danger">Cancel</a>

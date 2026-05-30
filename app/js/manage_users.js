@@ -37,6 +37,8 @@ document.getElementById('confirmResetBtn').addEventListener('click', () => {
 // 2FA Modal Logic
 function open2FAModal(userId) {
     document.getElementById('2faUserId').value = userId;
+    var codesField = document.getElementById('2faCodesUserId');
+    if (codesField) codesField.value = userId;
     document.getElementById('modal2FA').style.display = 'block';
 }
 function close2FAModal() {
@@ -44,10 +46,8 @@ function close2FAModal() {
 }
 function confirm2FA(action) {
     const labels = {
-        enable: 'Enable 2FA for this user?',
-        disable: 'Disable 2FA and remove all secrets for this user?',
-        lock: 'Lock user from managing 2FA?',
-        unlock: 'Allow user to manage their own 2FA?'
+        enable: 'Require email 2FA for this user? They will be emailed a code at each login.',
+        disable: 'Turn off 2FA and clear backup codes for this user?'
     };
     if (confirm(labels[action])) {
         const form = document.getElementById('form2FA');
@@ -68,16 +68,6 @@ function showArchiveModal(userId) {
 
 function closeArchiveModal() {
     document.getElementById('archiveModal').style.display = 'none';
-}
-
-// Delete User Modal
-function showDeleteModal(userId) {
-    document.getElementById('deleteUserId').value = userId;
-    document.getElementById('deleteModal').style.display = 'block';
-}
-
-function closeDeleteModal() {
-    document.getElementById('deleteModal').style.display = 'none';
 }
 
 function toggleActionsMenu(button) {

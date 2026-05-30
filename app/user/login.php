@@ -23,6 +23,7 @@ session_set_cookie_params([
 session_start();
 
 require '../auth/db.php';
+require_once __DIR__ . '/../functions/email_otp.php';
 
 /* ---------- Config ---------- */
 const MAX_LOGIN_ATTEMPTS_USER = 5;     // lock after this many failures
@@ -116,7 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($first !== '' && $last !== '') {
                 $stmt = $conn->prepare("
-                    SELECT ID, FirstName, LastName, Pass, TwoFAEnabled, LockOut, Role
+                    SELECT ID, FirstName, LastName, Email, Pass, TwoFAEnabled, LockOut, Role
                     FROM users
                     WHERE FirstName = ? AND LastName = ?
                     LIMIT 1
@@ -140,7 +141,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $firstChar = $compact[0] . '%';
                     $lastChar  = $compact[1] . '%';
                     $stmt = $conn->prepare("
-                        SELECT ID, FirstName, LastName, Pass, TwoFAEnabled, LockOut, Role
+                        SELECT ID, FirstName, LastName, Email, Pass, TwoFAEnabled, LockOut, Role
                           FROM users
                          WHERE FirstName LIKE ? AND LastName LIKE ?
                          LIMIT 2
@@ -190,16 +191,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                         $role = (string)($user['Role'] ?? 'employee');
 
-                        // 2FA flow — carry the role + admin-landing intent through verify_2fa.php
-                        if (!empty($user['TwoFAEnabled'])) {
+                        // 2FA flow — email a one-time code, then carry the role +
+                        // admin-landing intent through verify_2fa.php.
+                        $userEmail = trim((string)($user['Email'] ?? ''));
+                        if (!empty($user['TwoFAEnabled']) && $userEmail !== '') {
                             $_SESSION['temp_user_id']     = $uid;
                             $_SESSION['temp_first_name']  = (string)$user['FirstName'];
                             $_SESSION['temp_last_name']   = (string)$user['LastName'];
+                            $_SESSION['temp_email']       = $userEmail;
                             $_SESSION['temp_role']        = $role;
                             $_SESSION['temp_from_admin']  = $fromAdmin ? 1 : 0;
                             $_SESSION['user_2fa_pending'] = true;
+                            sendEmailOtp($conn, $uid, $userEmail, (string)$user['FirstName']);
                             header("Location: verify_2fa.php");
                             exit;
+                        }
+                        // If 2FA is enabled but no email is on file we cannot deliver a
+                        // code — log it and let them in rather than locking them out.
+                        if (!empty($user['TwoFAEnabled']) && $userEmail === '') {
+                            error_log("login: user {$uid} has 2FA enabled but no email on file — skipping OTP.");
                         }
 
                         // Normal login
@@ -285,7 +295,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <header class="topnav desktop-only">
   <div class="topnav-left">
     <img src="../images/D-Best.png" class="nav-logo" alt="Logo">
-    <span class="nav-title">D-BEST TimeSmart</span>
+    <span class="nav-title">D-Best TimeSmart</span>
   </div>
   <div class="topnav-right">
     <span class="nav-date"><?= htmlspecialchars(date('F j, Y'), ENT_QUOTES, 'UTF-8') ?></span>
@@ -303,7 +313,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <!-- 📱 Mobile Banner -->
 <div class="mobile-banner mobile-only">
   <img src="../images/D-Best.png" alt="Logo" class="nav-logo">
-  <span class="nav-title">D-BEST TimeSmart</span>
+  <span class="nav-title">D-Best TimeSmart</span>
 </div>
 
 <!-- 📱 Mobile Menu Trigger -->
@@ -373,12 +383,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
 
         <div class="field">
-          <label for="passInput">PIN / Password</label>
+          <label for="passInput">Password</label>
           <input
             type="password"
             name="password"
             id="passInput"
-            placeholder="PIN / Password"
+            placeholder="Password"
             required
             autocomplete="current-password">
         </div>
@@ -394,7 +404,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </div>
 
 <footer>
-  <p>D-BEST TimeSmart &copy; <?= htmlspecialchars(date('Y'), ENT_QUOTES, 'UTF-8') ?>. All rights reserved.</p>
+  <p>D-Best TimeSmart &copy; <?= htmlspecialchars(date('Y'), ENT_QUOTES, 'UTF-8') ?>. All rights reserved.</p>
   <p style="margin-top: 0.3rem;">
     <a href="/docs/privacy.php">Privacy Policy</a>
     <a href="/docs/terms.php">Terms of Use</a>

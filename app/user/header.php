@@ -47,7 +47,7 @@ foreach ($extensions as $ext) {
 <header class="topnav desktop-only">
   <div class="topnav-left">
     <img src="../images/D-Best-favicon.webp" class="nav-logo" alt="Logo">
-    <span class="nav-title">D-BEST TimeSmart</span>
+    <span class="nav-title">D-Best TimeSmart</span>
   </div>
   <div class="topnav-right">
     <span class="nav-date"><?= date('F j, Y') ?></span>

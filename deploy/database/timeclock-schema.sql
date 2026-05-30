@@ -29,6 +29,8 @@ CREATE TABLE `users` (
   `ClockStatus` varchar(255) DEFAULT NULL,
   `Office` varchar(100) DEFAULT NULL,
   `TwoFASecret` varchar(255) DEFAULT NULL,
+  `EmailOTPHash` varchar(255) DEFAULT NULL,
+  `EmailOTPExpires` datetime DEFAULT NULL,
   `TwoFAEnabled` tinyint(1) DEFAULT 0,
   `RecoveryCodeHash` varchar(255) DEFAULT NULL,
   `AdminOverride2FA` tinyint(1) DEFAULT 1,
@@ -74,6 +76,7 @@ CREATE TABLE `pending_edits` (
   `SubmittedAt` datetime NOT NULL,
   `ReviewedAt` datetime DEFAULT NULL,
   `ReviewedBy` varchar(100) DEFAULT NULL,
+  `AdminPrivateNote` text DEFAULT NULL,
   PRIMARY KEY (`ID`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
@@ -92,6 +95,7 @@ CREATE TABLE `time_off_requests` (
   `ReviewedAt` datetime DEFAULT NULL,
   `ReviewedBy` varchar(100) DEFAULT NULL,
   `ReviewNote` varchar(500) DEFAULT NULL,
+  `AdminPrivateNote` varchar(500) DEFAULT NULL,
   `AmendsRequestID` int(11) DEFAULT NULL,
   `M365EventId` varchar(255) DEFAULT NULL,
   `M365SyncStatus` varchar(255) DEFAULT NULL,

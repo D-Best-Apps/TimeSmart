@@ -5,9 +5,9 @@ require_once __DIR__ . '/../auth/db.php';
 header('Content-Type: application/json');
 
 $empID = $_POST['EmployeeID'] ?? '';
-$pin = $_POST['PIN'] ?? '';
+$password = $_POST['password'] ?? '';
 
-if (!$empID || !$pin) {
+if (!$empID || !$password) {
     echo json_encode(['success' => false, 'message' => 'Missing credentials.']);
     exit;
 }
@@ -19,7 +19,7 @@ $stmt->execute();
 $result = $stmt->get_result();
 
 if ($user = $result->fetch_assoc()) {
-    if (password_verify($pin, $user['Pass'])) {
+    if (password_verify($password, $user['Pass'])) {
 
         // Use a single optimized query for latest punch
         $punchStmt = $conn->prepare("
@@ -54,5 +54,5 @@ if ($user = $result->fetch_assoc()) {
 
 echo json_encode([
     'success' => false,
-    'message' => 'Invalid PIN.'
+    'message' => 'Invalid password.'
 ]);

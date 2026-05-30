@@ -46,6 +46,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->close();
     }
 
+    // Enforce password policy
+    require_once __DIR__ . '/../functions/password_policy.php';
+    $pwErrors = validatePassword($password, $conn);
+    if ($pwErrors) {
+        header('Location: ../error.php?code=400&message=' . urlencode(implode(' ', $pwErrors)));
+        exit;
+    }
+
     // Hash the password securely
    $hashed = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
 

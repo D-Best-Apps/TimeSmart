@@ -13,6 +13,7 @@ requirePermission('approve_edits');
 
 $admin = $_SESSION['admin'];
 $now = date('Y-m-d H:i:s');
+$canViewPrivate = canViewPrivateNotes($conn);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     foreach ($_POST['action'] as $editID => $fieldActions) {
@@ -45,8 +46,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             }
 
             // Update pending_edits status. This marks the entire request as processed.
-            $updateStatus = $conn->prepare("UPDATE pending_edits SET Status = ?, ReviewedAt = ?, ReviewedBy = ? WHERE ID = ?");
-            $updateStatus->bind_param("sssi", $decision, $now, $admin, $editID);
+            // Only admins who can view private notes may set AdminPrivateNote; others
+            // leave the column untouched.
+            if ($canViewPrivate) {
+                $priv = trim($_POST['private_note'][$editID] ?? '');
+                $privVal = $priv !== '' ? $priv : null;
+                $updateStatus = $conn->prepare("UPDATE pending_edits SET Status = ?, ReviewedAt = ?, ReviewedBy = ?, AdminPrivateNote = ? WHERE ID = ?");
+                $updateStatus->bind_param("ssssi", $decision, $now, $admin, $privVal, $editID);
+            } else {
+                $updateStatus = $conn->prepare("UPDATE pending_edits SET Status = ?, ReviewedAt = ?, ReviewedBy = ? WHERE ID = ?");
+                $updateStatus->bind_param("sssi", $decision, $now, $admin, $editID);
+            }
             $updateStatus->execute();
         }
     }

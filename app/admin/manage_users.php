@@ -13,22 +13,6 @@ require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('manage_users');
 
 /*
- * Handle GPS enforcement toggle first (POST-redirect-GET)
- */
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['toggle_gps'])) {
-    $newValue = isset($_POST['EnforceGPS']) ? '1' : '0';
-    $stmt = $conn->prepare("
-        INSERT INTO settings (SettingKey, SettingValue)
-        VALUES ('EnforceGPS', ?)
-        ON DUPLICATE KEY UPDATE SettingValue = VALUES(SettingValue)
-    ");
-    $stmt->bind_param("s", $newValue);
-    $stmt->execute();
-    header("Location: manage_users.php");
-    exit;
-}
-
-/*
  * Fetch data for page
  */
 $users_result = $conn->query("
@@ -42,9 +26,6 @@ while ($row = $users_result->fetch_assoc()) {
     $users_data[] = $row;
 }
 
-$gpsSetting   = $conn->query("SELECT SettingValue FROM settings WHERE SettingKey = 'EnforceGPS'")->fetch_assoc();
-$gpsEnforced  = isset($gpsSetting['SettingValue']) && $gpsSetting['SettingValue'] === '1';
-
 $offices_result = $conn->query("SELECT OfficeName FROM Offices ORDER BY OfficeName");
 $offices_data = [];
 while ($row = $offices_result->fetch_assoc()) {
@@ -57,41 +38,25 @@ require_once 'header.php';
 
 
 <div class="uman-container">
-    <div style="text-align: center; margin-bottom: 1rem;">
-        <form method="POST" action="generate_backup_codes.php" style="display:inline-block;">
-            <input type="hidden" name="mode" value="all">
-            <button type="submit" class="btn primary">🔐 Generate Codes for All Users</button>
-        </form>
-
-        <form method="POST" action="generate_backup_codes.php" style="display:inline-block; margin-left:1rem;">
-            <input type="hidden" name="mode" value="single">
-            <select name="userID" required style="padding: 0.5rem; border-radius: 6px; border: 1px solid #ccc;">
-                <option value="">Select User</option>
-                <?php foreach ($users_data as $user): ?>
-                    <option value="<?= (int)$user['ID'] ?>">
-                        <?= htmlspecialchars($user['FirstName'] . ' ' . $user['LastName']) ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
-            <button type="submit" class="btn warning">🔐 Generate for User ID</button>
-        </form>
-    </div>
-
     <div class="uman-header">
         <h2>User Management</h2>
-        <button class="btn primary" onclick="document.getElementById('addUserModal').style.display='block'">+ Add User</button>
-        <a href="archived_users.php" class="btn">View Archived Users</a>
+        <div class="toolbar" style="margin-bottom:0;">
+            <button class="btn primary" onclick="document.getElementById('addUserModal').style.display='block'">+ Add User</button>
+            <a href="archived_users.php" class="btn secondary">View Archived Users</a>
+        </div>
     </div>
 
-    <form method="POST" style="display: flex; justify-content: center; align-items: center; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
-        <input type="hidden" name="toggle_gps" value="1">
-        <label class="switch-label">Require GPS for All Punches</label>
-        <label class="switch">
-            <input type="checkbox" name="EnforceGPS" value="1" <?= $gpsEnforced ? 'checked' : '' ?>>
-            <span class="slider"></span>
-        </label>
-        <button type="submit" class="btn primary small">Save</button>
-    </form>
+    <div class="panel">
+        <h3>🔐 Two-Factor Backup Codes</h3>
+        <p style="margin:0 0 0.85rem; color:var(--muted-text); font-size:0.9rem;">
+            Generate one-time recovery codes an employee can use to sign in if they lose access to their authenticator app.
+            For a single employee, use <strong>Actions → 2FA Options</strong> in the table below.
+        </p>
+        <form method="POST" action="generate_backup_codes.php">
+            <input type="hidden" name="mode" value="all">
+            <button type="submit" class="btn primary">Generate for All Users</button>
+        </form>
+    </div>
 
     <table class="uman-table">
         <thead>
@@ -134,13 +99,12 @@ require_once 'header.php';
                 </td>
                 <td>
                     <div class="actions-menu">
-                        <button class="btn small primary" onclick="toggleActionsMenu(this)">Actions</button>
+                        <button class="btn small primary" onclick="toggleActionsMenu(this)">Actions ▾</button>
                         <div class="actions-menu-content">
                             <button class="btn" onclick="location.href='edit_user.php?id=<?= (int)$user['ID'] ?>'">Edit</button>
                             <button class="btn" onclick="showResetModal(<?= (int)$user['ID'] ?>)">Reset</button>
                             <button class="btn" onclick="open2FAModal(<?= (int)$user['ID'] ?>)">2FA Options</button>
                             <button class="btn" onclick="showArchiveModal(<?= (int)$user['ID'] ?>)">Archive</button>
-                            <button class="btn" onclick="showDeleteModal(<?= (int)$user['ID'] ?>)">Delete</button>
                         </div>
                     </div>
                 </td>
@@ -191,23 +155,32 @@ require_once 'header.php';
         <span class="close-btn" onclick="close2FAModal()">&times;</span>
         <h3 style="text-align: center; margin-bottom: 0.5rem;">🔐 2FA Management</h3>
         <p style="text-align: center; font-size: 0.95rem; color: #444;">
-            Choose an action for this user's two-factor authentication.
+            When enabled, this user must enter a one-time code emailed to them each time they sign in.
+            Requires an email address on file.
         </p>
 
         <form id="form2FA" method="POST" action="update_2fa_status.php">
             <input type="hidden" name="id" id="2faUserId">
 
             <div class="modal-actions" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; margin-top: 1.5rem;">
-                <button type="button" class="btn small primary" onclick="confirm2FA('enable')">✅ Enable 2FA</button>
-                <button type="button" class="btn small danger" onclick="confirm2FA('disable')">❌ Disable 2FA</button>
-                <button type="button" class="btn small warning" onclick="confirm2FA('lock')">🔒 Lock User 2FA Control</button>
-                <button type="button" class="btn small" style="background:#ddd;" onclick="confirm2FA('unlock')">🔓 Unlock User 2FA Control</button>
+                <button type="button" class="btn small primary" onclick="confirm2FA('enable')">✅ Require Email 2FA</button>
+                <button type="button" class="btn small danger" onclick="confirm2FA('disable')">❌ Turn Off 2FA</button>
             </div>
+        </form>
+
+        <hr style="margin:1.25rem 0;">
+        <p style="text-align:center; font-size:0.9rem; color:#444; margin-bottom:0.75rem;">
+            Backup codes let this user sign in if they lose their authenticator.
+        </p>
+        <form id="form2FACodes" method="POST" action="generate_backup_codes.php" style="text-align:center;">
+            <input type="hidden" name="mode" value="single">
+            <input type="hidden" name="userID" id="2faCodesUserId">
+            <button type="submit" class="btn small secondary" onclick="return confirm('Generate new backup codes for this user? Any existing codes will be replaced.');">🔑 Generate Backup Codes</button>
         </form>
     </div>
 </div>
 
-<script src="../js/manage_users.js?v=1.1"></script>
+<script src="../js/manage_users.js?v=1.4"></script>
 
 <!-- Archive User Modal -->
 <div id="archiveModal" class="modal">
@@ -219,21 +192,6 @@ require_once 'header.php';
             <form id="archiveForm" action="archive_user.php" method="POST" style="display:inline;">
                 <input type="hidden" name="ID" id="archiveUserId">
                 <button type="submit" class="btn primary">Yes, Archive</button>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- Delete User Modal -->
-<div id="deleteModal" class="modal">
-    <div class="modal-content">
-        <h3>Delete User</h3>
-        <p>Are you sure you want to permanently delete this user? This action cannot be undone.</p>
-        <div class="modal-actions">
-            <button class="btn" onclick="closeDeleteModal()">Cancel</button>
-            <form id="deleteForm" action="delete_user.php" method="POST" style="display:inline;">
-                <input type="hidden" name="ID" id="deleteUserId">
-                <button type="submit" class="btn danger">Yes, Delete</button>
             </form>
         </div>
     </div>

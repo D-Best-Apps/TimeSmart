@@ -20,6 +20,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST' || empty($_POST['action'])) {
 $admin = $_SESSION['admin'];
 $now   = date('Y-m-d H:i:s');
 $reviewNotes = $_POST['review_note'] ?? [];
+$privateNotes = $_POST['tor_private_note'] ?? [];
+$canViewPrivate = canViewPrivateNotes($conn);
 $m365Failures = [];
 
 function formatDateRange(string $start, string $end): string {
@@ -60,13 +62,33 @@ foreach ($_POST['action'] as $requestID => $action) {
     }
     $noteVal = $note !== '' ? $note : null;
 
-    // Mark the (amendment or normal) request row decided
-    $update = $conn->prepare("
-        UPDATE time_off_requests
-           SET Status = ?, ReviewedAt = ?, ReviewedBy = ?, ReviewNote = ?
-         WHERE ID = ? AND Status = 'Pending'
-    ");
-    $update->bind_param("ssssi", $decision, $now, $admin, $noteVal, $requestID);
+    // Admin-only private note (never emailed). Only writable by permitted admins.
+    $privVal = null;
+    if ($canViewPrivate) {
+        $priv = trim($privateNotes[$requestID] ?? '');
+        if ($priv !== '' && mb_strlen($priv) > 500) {
+            $priv = mb_substr($priv, 0, 500);
+        }
+        $privVal = $priv !== '' ? $priv : null;
+    }
+
+    // Mark the (amendment or normal) request row decided. Admins without
+    // private-note access leave AdminPrivateNote untouched.
+    if ($canViewPrivate) {
+        $update = $conn->prepare("
+            UPDATE time_off_requests
+               SET Status = ?, ReviewedAt = ?, ReviewedBy = ?, ReviewNote = ?, AdminPrivateNote = ?
+             WHERE ID = ? AND Status = 'Pending'
+        ");
+        $update->bind_param("sssssi", $decision, $now, $admin, $noteVal, $privVal, $requestID);
+    } else {
+        $update = $conn->prepare("
+            UPDATE time_off_requests
+               SET Status = ?, ReviewedAt = ?, ReviewedBy = ?, ReviewNote = ?
+             WHERE ID = ? AND Status = 'Pending'
+        ");
+        $update->bind_param("ssssi", $decision, $now, $admin, $noteVal, $requestID);
+    }
     if (!$update->execute() || $update->affected_rows === 0) {
         continue; // Race — another tab already decided this one
     }
@@ -75,17 +97,33 @@ foreach ($_POST['action'] as $requestID => $action) {
     // 1. Copy the amendment's new values onto the original row
     // 2. Delete the old M365 event, create a new one against the original row
     if ($decision === 'Approved' && $isAmendment && $originalID !== null) {
-        $copy = $conn->prepare("
-            UPDATE time_off_requests
-               SET Category=?, StartDate=?, EndDate=?, StartTime=?, EndTime=?, Notes=?
-             WHERE ID = ? AND Status = 'Approved'
-        ");
-        $copy->bind_param(
-            "ssssssi",
-            $req['Category'], $req['StartDate'], $req['EndDate'],
-            $req['StartTime'], $req['EndTime'], $req['Notes'],
-            $originalID
-        );
+        if ($canViewPrivate) {
+            // Also carry the private note onto the original row so it stays visible
+            // in the "Recent Approved Time-Off" list and the edit page.
+            $copy = $conn->prepare("
+                UPDATE time_off_requests
+                   SET Category=?, StartDate=?, EndDate=?, StartTime=?, EndTime=?, Notes=?, AdminPrivateNote=?
+                 WHERE ID = ? AND Status = 'Approved'
+            ");
+            $copy->bind_param(
+                "sssssssi",
+                $req['Category'], $req['StartDate'], $req['EndDate'],
+                $req['StartTime'], $req['EndTime'], $req['Notes'], $privVal,
+                $originalID
+            );
+        } else {
+            $copy = $conn->prepare("
+                UPDATE time_off_requests
+                   SET Category=?, StartDate=?, EndDate=?, StartTime=?, EndTime=?, Notes=?
+                 WHERE ID = ? AND Status = 'Approved'
+            ");
+            $copy->bind_param(
+                "ssssssi",
+                $req['Category'], $req['StartDate'], $req['EndDate'],
+                $req['StartTime'], $req['EndTime'], $req['Notes'],
+                $originalID
+            );
+        }
         $copy->execute();
 
         // Reload the (now updated) original to get its current M365EventId

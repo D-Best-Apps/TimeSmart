@@ -30,6 +30,7 @@ header {
     padding: 1.5rem 1rem;
     text-align: center;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    position: relative;
 }
 
 .logo {
@@ -52,6 +53,98 @@ nav a {
 
 nav a:hover {
     text-decoration: underline;
+}
+
+/* Settings dropdown within the nav */
+.nav-dropdown {
+    display: inline-block;
+    position: relative;
+}
+.nav-dropdown-toggle {
+    background: none;
+    border: none;
+    color: #FFFFFF;
+    font-weight: bold;
+    font-size: inherit;
+    font-family: inherit;
+    margin: 0 1rem;
+    padding: 0;
+    cursor: pointer;
+}
+.nav-dropdown-toggle:hover,
+.nav-dropdown-toggle.active {
+    text-decoration: underline;
+}
+
+/* Shared dropdown menu styling (Settings dropdown + profile corner menu) */
+.nav-dropdown-menu {
+    position: absolute;
+    top: 100%;
+    margin-top: 0.5rem;
+    min-width: 210px;
+    background: #0a4a6b;
+    border-radius: 8px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+    padding: 0.4rem 0;
+    z-index: 1000;
+    text-align: left;
+}
+.nav-dropdown .nav-dropdown-menu {
+    left: 50%;
+    transform: translateX(-50%);
+}
+.nav-dropdown-menu a {
+    display: block;
+    color: #FFFFFF;
+    text-decoration: none;
+    padding: 0.6rem 1.1rem;
+    margin: 0;
+    font-weight: 500;
+    white-space: nowrap;
+}
+.nav-dropdown-menu a:hover {
+    background: rgba(255, 255, 255, 0.12);
+    text-decoration: none;
+}
+.nav-dropdown-menu a.active {
+    background: rgba(255, 255, 255, 0.18);
+}
+.nav-dropdown-menu.hidden {
+    display: none;
+}
+
+/* Profile corner menu (top-right, mirrors the employee section) */
+.admin-profile {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+}
+.admin-profile-trigger {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    color: #FFFFFF;
+    font-weight: bold;
+    font-family: inherit;
+    font-size: 0.95rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: 999px;
+    cursor: pointer;
+}
+.admin-profile-trigger:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+.admin-profile-avatar {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: #fff;
+}
+.admin-profile .nav-dropdown-menu {
+    right: 0;
 }
 
 .status-badge {
@@ -138,12 +231,25 @@ nav a:hover {
 }
 
 input[type="text"],
-select {
+input[type="email"],
+input[type="number"],
+input[type="password"],
+input[type="date"],
+input[type="time"],
+input[type="search"],
+select,
+textarea {
     width: 100%;
     padding: 0.75rem;
     font-size: 1rem;
     border: 1px solid #ccc;
     border-radius: 6px;
+    font-family: inherit;
+}
+
+textarea {
+    resize: vertical;
+    min-height: 70px;
 }
 
 /* FORM BUTTONS */
@@ -179,6 +285,148 @@ select {
 .btn-reset:hover {
     background-color: #999;
     color: white;
+}
+
+/* ===== Unified button system (used across all admin pages) ===== */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    padding: 0.55rem 1.1rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    line-height: 1.2;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background-color: #e9edf1;
+    color: #1f2d3d;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color 0.15s ease, box-shadow 0.15s ease;
+    white-space: nowrap;
+}
+.btn:hover { background-color: #dce2e8; }
+
+.btn.primary { background-color: var(--primary-color); color: #fff; }
+.btn.primary:hover { background-color: var(--primary-hover); }
+
+.btn.secondary { background-color: #fff; color: var(--primary-color); border-color: var(--primary-color); }
+.btn.secondary:hover { background-color: #eef3f6; }
+
+.btn.warning { background-color: #e0a800; color: #fff; }
+.btn.warning:hover { background-color: #c69500; }
+
+.btn.danger { background-color: #dc3545; color: #fff; }
+.btn.danger:hover { background-color: #bb2d3b; }
+
+.btn.small { padding: 0.35rem 0.75rem; font-size: 0.85rem; min-width: 0; }
+.btn:disabled, .btn[disabled] { opacity: 0.6; cursor: not-allowed; }
+
+/* A consistent toolbar row for page-top action clusters */
+.toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+.toolbar .spacer { flex: 1; }
+
+/* Group box for a labeled cluster of related controls */
+.panel {
+    border: 1px solid #e3e8ee;
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.5rem;
+    background: #fbfcfd;
+}
+.panel > h3 {
+    margin: 0 0 0.75rem;
+    font-size: 1rem;
+    color: var(--primary-color);
+}
+
+/* ===== Settings / generic forms ===== */
+.settings-form { max-width: 640px; }
+.settings-form h2 {
+    margin: 2rem 0 1rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 2px solid #eef1f4;
+    font-size: 1.2rem;
+    color: var(--primary-color);
+}
+.settings-form h2:first-child { margin-top: 0; }
+.settings-form .field { margin-bottom: 1.1rem; }
+.settings-form .field > label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 0.35rem;
+    color: #444;
+}
+/* checkbox rows: keep label inline with the box */
+.settings-form .field > label > input[type="checkbox"] { width: auto; margin-right: 0.4rem; }
+.settings-form .field p { color: var(--muted-text); font-size: 0.85rem; margin: 0.3rem 0 0; }
+.settings-form .buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+}
+.settings-form .buttons button { /* style bare submit buttons like .btn.primary */
+    padding: 0.55rem 1.1rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 6px;
+    background-color: var(--primary-color);
+    color: #fff;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+.settings-form .buttons button:hover { background-color: var(--primary-hover); }
+
+.alert { padding: 0.75rem 1rem; border-radius: 6px; margin-bottom: 1rem; }
+.alert-success { background: #e6f4ea; border: 1px solid #b7e0c2; color: #1e7e34; }
+.alert-danger  { background: #fdecea; border: 1px solid #f5c2c0; color: #b02a37; }
+
+/* ===== User / Offices / Admins management layout ===== */
+.uman-container {
+    max-width: 1100px;
+    margin: 2rem auto;
+    background: var(--card-bg);
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    padding: 2rem;
+}
+.uman-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+.uman-header h2 { margin: 0; }
+.uman-table {
+    width: 100%;
+    border-collapse: collapse;
+    background-color: #fff;
+}
+.uman-table th,
+.uman-table td {
+    padding: 0.85rem 1rem;
+    text-align: left;
+    border-bottom: 1px solid #e6e9ee;
+    font-size: 0.95rem;
+    vertical-align: middle;
+}
+.uman-table th { background-color: var(--bg-color); font-weight: 700; }
+.uman-table tr:nth-child(even) { background-color: #fafbfc; }
+
+@media (max-width: 768px) {
+    .uman-header { flex-direction: column; align-items: flex-start; }
+    .uman-table th, .uman-table td { font-size: 0.9rem; padding: 0.6rem; }
 }
 
 /* TABLE STYLING */

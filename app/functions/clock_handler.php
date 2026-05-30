@@ -17,7 +17,7 @@ if (!$action || !$empID) {
     exit;
 }
 
-// 🔐 Step 1: PIN verification (used for "verify" and all actions)
+// 🔐 Step 1: Password verification (used for "verify" and all actions)
 $user = $conn->query("SELECT * FROM users WHERE ID = '$empID' AND Pass = '$pass'");
 if ($action === "verify") {
     if ($user && $user->num_rows === 1) {
@@ -39,7 +39,7 @@ if ($action === "verify") {
     exit;
 }
 
-// Validate PIN again for actions
+// Validate password again for actions
 if (!$user || $user->num_rows !== 1) {
     echo json_encode(["success" => false, "error" => "Invalid credentials"]);
     exit;

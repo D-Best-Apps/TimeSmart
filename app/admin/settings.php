@@ -79,7 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $settingsToUpdate = [
         'mail_server', 'mail_port', 'mail_username',
         'mail_from_address', 'mail_from_name', 'mail_encryption', 'mail_admin_address',
-        'm365_tenant_id', 'm365_client_id', 'm365_group_id', 'm365_calendar_mailbox', 'm365_timezone'
+        'm365_tenant_id', 'm365_client_id', 'm365_calendar_mailbox', 'm365_timezone'
     ];
 
     foreach ($settingsToUpdate as $key) {
@@ -99,6 +99,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $stmt->bind_param("sss", $key, $m365EnabledVal, $m365EnabledVal);
     $stmt->execute();
     $settings['m365_enabled'] = $m365EnabledVal;
+
+    // Security & punch policy checkboxes
+    $enforceGpsVal = !empty($_POST['EnforceGPS']) ? '1' : '0';
+    $stmt = $conn->prepare("INSERT INTO settings (SettingKey, SettingValue) VALUES (?, ?) ON DUPLICATE KEY UPDATE SettingValue = ?");
+    $key = 'EnforceGPS';
+    $stmt->bind_param("sss", $key, $enforceGpsVal, $enforceGpsVal);
+    $stmt->execute();
+    $settings['EnforceGPS'] = $enforceGpsVal;
+
+    $pwModeVal = !empty($_POST['PasswordHigh']) ? 'high' : 'low';
+    $stmt = $conn->prepare("INSERT INTO settings (SettingKey, SettingValue) VALUES (?, ?) ON DUPLICATE KEY UPDATE SettingValue = ?");
+    $key = 'PasswordSecurityMode';
+    $stmt->bind_param("sss", $key, $pwModeVal, $pwModeVal);
+    $stmt->execute();
+    $settings['PasswordSecurityMode'] = $pwModeVal;
 
     // Handle mail_password separately for encryption
     if (isset($_POST['mail_password']) && !empty($_POST['mail_password'])) {
@@ -171,13 +186,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $pageTitle = "Settings";
 require_once 'header.php';
 ?>
-<link rel="stylesheet" href="../css/settings.css" />
 
 
 <div class="dashboard-container">
     <div class="container">
         <?= $message ?>
         <form method="POST" class="settings-form">
+            <h2>Security &amp; Punch Policy</h2>
+            <div class="field">
+                <label>
+                    <input type="checkbox" name="EnforceGPS" value="1" <?= ($settings['EnforceGPS'] ?? '') === '1' ? 'checked' : '' ?>>
+                    Require GPS for all punches
+                </label>
+                <p style="color:#666; font-size:0.85em; margin:0.25rem 0 0;">
+                    When on, employees must share location to clock in/out.
+                </p>
+            </div>
+            <div class="field">
+                <label>
+                    <input type="checkbox" name="PasswordHigh" value="1" <?= ($settings['PasswordSecurityMode'] ?? '') === 'high' ? 'checked' : '' ?>>
+                    High-security passwords
+                </label>
+                <p style="color:#666; font-size:0.85em; margin:0.25rem 0 0;">
+                    On: at least 7 characters and 3 of 4 character types — uppercase, lowercase, number, symbol (recommended for online installs).
+                    Off: at least 2 characters, any (for offline / air-gapped installs).
+                </p>
+            </div>
+            <div class="buttons">
+                <button type="submit">Save Settings</button>
+            </div>
+            <hr style="margin: 2rem 0;">
+
             <h2>Mail Server Settings</h2>
             <div class="field">
                 <label for="mail_server">Mail Server (SMTP Host):</label>
@@ -214,14 +253,20 @@ require_once 'header.php';
                 <label for="mail_admin_address">Admin Email Address (for notifications):</label>
                 <input type="email" id="mail_admin_address" name="mail_admin_address" value="<?= htmlspecialchars($settings['mail_admin_address'] ?? '') ?>">
             </div>
+            <div class="buttons">
+                <button type="submit">Save Settings</button>
+                <button type="submit" name="test_email" value="1">Save &amp; Send Test Email</button>
+            </div>
             <hr style="margin: 2rem 0;">
 
             <h2 id="m365">M365 PTO Calendar Sync</h2>
             <p style="color:#555; font-size:0.9em;">
-                When a time-off request is approved, an event is posted to the configured Microsoft 365
-                <strong>Group</strong> calendar. Requires an Azure AD app registration with the
-                <code>Group.ReadWrite.All</code> application permission (admin consent granted).
-                See <a href="../../docs/M365_SETUP.md" target="_blank">docs/M365_SETUP.md</a> for setup steps.
+                When a time-off request is approved, an event is posted to a Microsoft 365
+                <strong>shared mailbox</strong> calendar. Requires an Azure AD app registration with the
+                <code>Calendars.ReadWrite</code> application permission (admin consent granted), plus an
+                Exchange Application Access Policy and RBAC role scoped to that mailbox.
+                See <a href="../../docs/M365_SETUP.md" target="_blank">docs/M365_SETUP.md</a> for the full setup.
+                <br><em>Note: Unified Group calendars are not supported here — use a shared mailbox.</em>
             </p>
 
             <div class="field">
@@ -253,23 +298,12 @@ require_once 'header.php';
             </div>
 
             <div class="field">
-                <label for="m365_calendar_mailbox">PTO Calendar Mailbox (UPN) <em>— recommended</em>:</label>
+                <label for="m365_calendar_mailbox">PTO Calendar Mailbox (UPN):</label>
                 <input type="text" id="m365_calendar_mailbox" name="m365_calendar_mailbox"
                        value="<?= htmlspecialchars($settings['m365_calendar_mailbox'] ?? '') ?>"
                        placeholder="e.g. ptocalendar@yourdomain.com">
                 <p style="color:#666; font-size:0.85em; margin:0.25rem 0 0;">
-                    The shared mailbox whose calendar receives PTO events. <strong>Use this OR the Group ID below — not both.</strong>
-                    Shared mailbox is the recommended path; Unified Group calendars often fail with app-only auth.
-                </p>
-            </div>
-
-            <div class="field">
-                <label for="m365_group_id">PTO Calendar Group ID <em>— legacy fallback</em>:</label>
-                <input type="text" id="m365_group_id" name="m365_group_id"
-                       value="<?= htmlspecialchars($settings['m365_group_id'] ?? '') ?>"
-                       placeholder="Object ID of the M365 group whose calendar holds PTO events">
-                <p style="color:#666; font-size:0.85em; margin:0.25rem 0 0;">
-                    Only used if the Mailbox UPN above is empty.
+                    The shared mailbox whose calendar receives PTO events (primary SMTP address).
                 </p>
             </div>
 
@@ -281,7 +315,6 @@ require_once 'header.php';
 
             <div class="buttons">
                 <button type="submit">Save Settings</button>
-                <button type="submit" name="test_email" value="1">Save &amp; Send Test Email</button>
                 <button type="submit" name="test_m365" value="1">Save &amp; Test M365 Connection</button>
             </div>
         </form>
