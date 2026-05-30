@@ -718,6 +718,30 @@ footer {
     margin: 0;
 }
 
+/* User-management pages provide their own .uman-container card, but it was being
+   squeezed inside the 900px .container (so the wide table wrapped names onto two
+   lines). Widen the wrapper and let .uman-container be the card. */
+.page-manage_users .dashboard-container,
+.page-manage_admins .dashboard-container,
+.page-manage_offices .dashboard-container,
+.page-archived_users .dashboard-container,
+.page-edit_user .dashboard-container {
+    max-width: 1400px;
+}
+.page-manage_users .container,
+.page-manage_admins .container,
+.page-manage_offices .container,
+.page-archived_users .container,
+.page-edit_user .container {
+    max-width: 100%;
+    background: none;
+    box-shadow: none;
+    padding: 0;
+    margin: 0;
+}
+/* Keep employee names on one line in the user table */
+.page-manage_users .uman-table td:nth-child(3) { white-space: nowrap; }
+
 /* Horizontal-scroll wrapper for wide tables so they stay inside the card on
    narrow viewports rather than pushing the layout sideways. */
 .table-scroll {

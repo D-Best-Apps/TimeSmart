@@ -67,7 +67,7 @@ $currentPage = basename($_SERVER['PHP_SELF']);
     <link rel="icon" type="image/png" href="../images/D-Best-favicon.png">
     <link rel="apple-touch-icon" href="../images/D-Best-favicon.png">
     <link rel="icon" type="image/webp" href="../images/D-Best-favicon.webp">
-    <link rel="stylesheet" href="../css/admin.css?v=4">
+    <link rel="stylesheet" href="../css/admin.css?v=5">
     <style>
         /* Fallback so the new nav elements are never unstyled if admin.css is cached */
         .admin-profile-avatar { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; }
