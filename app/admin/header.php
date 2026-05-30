@@ -131,6 +131,9 @@ $showSettingsMenu = checkPermission('manage_settings') || checkPermission('manag
             <a href="../user/timesheet.php">✏️ Edit Timesheet</a>
             <a href="../user/time_off.php">🏖️ Request Time Off</a>
             <?php endif; ?>
+            <?php if (!empty($_SESSION['admin_role'])): ?>
+            <a href="reports.php">🛡️ Admin Portal</a>
+            <?php endif; ?>
             <a href="../logout.php">↩️ Logout</a>
         </div>
     </div>
