@@ -64,9 +64,34 @@
             margin-bottom: 20px;
         }
 
+        /* Single-line filter row: From / To / Employee / actions */
+        .att-filter {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: flex-end;
+            justify-content: center;
+            gap: 14px;
+        }
+        .att-field {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 4px;
+        }
+        .att-field label {
+            font-weight: 600;
+            font-size: 0.82rem;
+            color: #444;
+        }
+        .att-actions {
+            flex-direction: row;
+            align-items: flex-end;
+            gap: 8px;
+        }
+
         select, input[type="date"], button {
             padding: 6px;
-            margin: 4px;
+            margin: 0;
             font-size: 14px;
         }
 

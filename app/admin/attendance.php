@@ -174,7 +174,7 @@ if ($exportPDF) {
     exit;
 }
 $pageTitle = "Attendance Report";
-$extraCSS = ["https://cdn.jsdelivr.net/npm/litepicker/dist/css/litepicker.css", "../css/attendance.css"];
+$extraCSS = ["https://cdn.jsdelivr.net/npm/litepicker/dist/css/litepicker.css", "../css/attendance.css?v=2"];
 require_once 'header.php';
 ?>
 
@@ -189,20 +189,28 @@ require_once 'header.php';
 
 <div class="container">
 
-    <form method="get">
-        <label>From:</label>
-        <input type="date" name="start" value="<?= $startDate ?>">
-        <label>To:</label>
-        <input type="date" name="end" value="<?= $endDate ?>">
-        <label>Employee:</label>
-        <select name="emp">
-            <option value="all">All Employees</option>
-            <?php foreach ($employees as $id => $name): ?>
-                <option value="<?= $id ?>" <?= $selectedEmp == $id ? 'selected' : '' ?>><?= $name ?></option>
-            <?php endforeach; ?>
-        </select>
-        <button type="submit">Filter</button>
-        <button type="submit" name="export" value="pdf">📄 Export PDF</button>
+    <form method="get" class="att-filter">
+        <div class="att-field">
+            <label>From</label>
+            <input type="date" name="start" value="<?= $startDate ?>">
+        </div>
+        <div class="att-field">
+            <label>To</label>
+            <input type="date" name="end" value="<?= $endDate ?>">
+        </div>
+        <div class="att-field">
+            <label>Employee</label>
+            <select name="emp">
+                <option value="all">All Employees</option>
+                <?php foreach ($employees as $id => $name): ?>
+                    <option value="<?= $id ?>" <?= $selectedEmp == $id ? 'selected' : '' ?>><?= $name ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="att-field att-actions">
+            <button type="submit">Filter</button>
+            <button type="submit" name="export" value="pdf">📄 Export PDF</button>
+        </div>
     </form>
 
     <div class="status-cards">

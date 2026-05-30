@@ -97,9 +97,6 @@ $showSettingsMenu = checkPermission('manage_settings') || checkPermission('manag
         <?php if (checkPermission('approve_edits')): ?>
         <a href="edits_timesheet.php"<?= $currentPage == 'edits_timesheet.php' ? ' class="active"' : '' ?>>Pending Approvals<?php if ($pendingCount > 0): ?> (<?= $pendingCount ?>)<?php endif; ?></a>
         <?php endif; ?>
-        <?php if (checkPermission('view_attendance')): ?>
-        <a href="attendance.php"<?= $currentPage == 'attendance.php' ? ' class="active"' : '' ?>>Attendance</a>
-        <?php endif; ?>
 
         <?php if ($showSettingsMenu): ?>
         <div class="nav-dropdown">
