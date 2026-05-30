@@ -102,6 +102,21 @@ if git diff HEAD@{1} --name-only | grep -q "composer.json\|composer.lock"; then
     echo -e "${GREEN}✓ Composer dependencies updated${NC}"
 fi
 
+# Run any pending database migrations (idempotent; tracked in schema_migrations)
+if docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+    echo -e "\n${YELLOW}\xf0\x9f\x97\x84  Applying database migrations...${NC}"
+    docker cp deploy/database/migrations "$CONTAINER_NAME":/tmp/ts_migrations
+    docker cp deploy/scripts/run_migrations.php "$CONTAINER_NAME":/tmp/run_migrations.php
+    if docker exec "$CONTAINER_NAME" php /tmp/run_migrations.php /tmp/ts_migrations; then
+        echo -e "${GREEN}\xe2\x9c\x93 Migrations up to date${NC}"
+    else
+        echo -e "${RED}\xe2\x9c\x97 Migration failed - see output above. Resolve before using the app.${NC}"
+    fi
+    docker exec "$CONTAINER_NAME" rm -rf /tmp/ts_migrations /tmp/run_migrations.php
+else
+    echo -e "${YELLOW}\xe2\x9a\xa0 Container not running - skipping migrations. Re-run update once it is up.${NC}"
+fi
+
 # Volume mounts mean changes are immediately reflected!
 echo -e "\n${GREEN}✓ Application files updated via volume mount${NC}"
 
@@ -149,6 +164,6 @@ echo -e "${GREEN}╚════════════════════
 echo ""
 echo -e "${BLUE}Next steps:${NC}"
 echo "1. Test the application at http://$CONTAINER_IP"
-echo "2. Check for any database migrations needed"
+echo "2. Database migrations were applied automatically"
 echo "3. Clear browser cache if CSS/JS doesn't update"
 echo ""
