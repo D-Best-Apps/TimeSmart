@@ -35,7 +35,7 @@ $quickDefault = getSettingValue('QuickDefaultField', $conn) ?: 'none';
 <html>
 <head>
     <title>D-Best TimeClock</title>
-    <link rel="stylesheet" href="css/style.css?v=6">
+    <link rel="stylesheet" href="css/style.css?v=7">
     <link rel="icon" type="image/png" href="/images/D-Best.png">
     <link rel="apple-touch-icon" href="/images/D-Best.png">
     <link rel="icon" type="image/png" href="images/D-Best-favicon.png">
@@ -116,15 +116,17 @@ $quickDefault = getSettingValue('QuickDefaultField', $conn) ?: 'none';
             <div class="quick-clock-inner">
                 <?php if ($quickPin): ?>
                 <form class="qc-form" data-method="pin" autocomplete="off">
-                    <label for="qcPin">Enter PIN &amp; press Enter</label>
+                    <label for="qcPin">PIN Login</label>
                     <input type="password" id="qcPin" name="value" inputmode="numeric" pattern="\d*"
-                           maxlength="6" autocomplete="off" placeholder="••••">
+                           maxlength="6" placeholder="Enter PIN, then Enter"
+                           autocomplete="new-password" data-1p-ignore="true" data-lpignore="true">
                 </form>
                 <?php endif; ?>
                 <?php if ($quickBadge): ?>
                 <form class="qc-form" data-method="badge" autocomplete="off">
-                    <label for="qcBadge">Scan badge</label>
-                    <input type="text" id="qcBadge" name="value" autocomplete="off" placeholder="Scan or type badge…">
+                    <label for="qcBadge">Badge Login</label>
+                    <input type="text" id="qcBadge" name="value" placeholder="Scan badge"
+                           autocomplete="off" data-1p-ignore="true" data-lpignore="true">
                 </form>
                 <?php endif; ?>
             </div>

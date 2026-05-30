@@ -139,11 +139,11 @@ require_once 'header.php';
         </label>
 
         <label>Badge ID <small>(scannable barcode value)</small>
-            <input type="text" name="BadgeID" value="<?= htmlspecialchars($user['BadgeID'] ?? '') ?>">
+            <input type="text" name="BadgeID" value="<?= htmlspecialchars($user['BadgeID'] ?? '') ?>" autocomplete="off" data-1p-ignore="true" data-lpignore="true">
         </label>
 
         <label>PIN <small>(4-6 digits for quick clock; leave blank for none)</small>
-            <input type="text" name="PIN" value="<?= htmlspecialchars($user['PIN'] ?? '') ?>" inputmode="numeric" pattern="\d{4,6}" maxlength="6" autocomplete="off">
+            <input type="text" name="PIN" value="<?= htmlspecialchars($user['PIN'] ?? '') ?>" inputmode="numeric" pattern="\d{4,6}" maxlength="6" autocomplete="off" data-1p-ignore="true" data-lpignore="true">
         </label>
 
         <label>Clock Status

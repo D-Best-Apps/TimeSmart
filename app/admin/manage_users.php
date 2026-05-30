@@ -129,8 +129,8 @@ require_once 'header.php';
             <h3>Add New User</h3>
             <input type="text" name="FirstName" placeholder="First Name" required>
             <input type="text" name="LastName" placeholder="Last Name" required>
-            <input type="text" name="BadgeID" placeholder="Badge ID (optional)">
-            <input type="text" name="PIN" placeholder="PIN — 4-6 digits (optional)" inputmode="numeric" pattern="\d{4,6}" maxlength="6">
+            <input type="text" name="BadgeID" placeholder="Badge ID (optional)" autocomplete="off" data-1p-ignore="true" data-lpignore="true">
+            <input type="text" name="PIN" placeholder="PIN — 4-6 digits (optional)" inputmode="numeric" pattern="\d{4,6}" maxlength="6" autocomplete="off" data-1p-ignore="true" data-lpignore="true">
             <select name="Office" required>
                 <option value="">Select Office</option>
                 <?php foreach ($offices_data as $office): ?>

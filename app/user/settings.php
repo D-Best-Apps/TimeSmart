@@ -114,8 +114,8 @@ $logs = $logStmt->get_result();
                 <div><label>First Name</label><input type="text" name="FirstName" value="<?= htmlspecialchars($user['FirstName'] ?? '') ?>" required></div>
                 <div><label>Last Name</label><input type="text" name="LastName" value="<?= htmlspecialchars($user['LastName'] ?? '') ?>" required></div>
                 <div><label>Email</label><input type="email" name="Email" value="<?= htmlspecialchars($user['Email'] ?? '') ?>"></div>
-                <div><label>Badge ID</label><input type="text" name="BadgeID" value="<?= htmlspecialchars($user['BadgeID'] ?? '') ?>"></div>
-                <div><label>Quick-Clock PIN <small>(4-6 digits)</small></label><input type="text" name="PIN" value="<?= htmlspecialchars($user['PIN'] ?? '') ?>" inputmode="numeric" pattern="\d{4,6}" maxlength="6" autocomplete="off"></div>
+                <div><label>Badge ID</label><input type="text" name="BadgeID" value="<?= htmlspecialchars($user['BadgeID'] ?? '') ?>" autocomplete="off" data-1p-ignore="true" data-lpignore="true"></div>
+                <div><label>Quick-Clock PIN</label><input type="text" name="PIN" value="<?= htmlspecialchars($user['PIN'] ?? '') ?>" inputmode="numeric" pattern="\d{4,6}" maxlength="6" placeholder="4-6 digits" autocomplete="off" data-1p-ignore="true" data-lpignore="true"></div>
                 <div><label>Job Title</label><input type="text" name="JobTitle" value="<?= htmlspecialchars($user['JobTitle'] ?? '') ?>"></div>
                 <div><label>Phone Number</label><input type="text" name="PhoneNumber" value="<?= htmlspecialchars($user['PhoneNumber'] ?? '') ?>"></div>
                 <div>

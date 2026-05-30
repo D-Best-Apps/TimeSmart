@@ -286,13 +286,13 @@ a.nav-date {
 
 .qc-form input {
   padding: 12px 14px;
-  font-size: 20px;
-  letter-spacing: 2px;
+  font-size: 18px;
   border: 2px solid #ced4da;
   border-radius: 8px;
   width: 100%;
   max-width: none;
   margin: 0;
+  box-sizing: border-box;
 }
 
 .qc-form input:focus {
