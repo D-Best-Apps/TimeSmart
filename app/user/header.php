@@ -35,7 +35,7 @@ foreach ($extensions as $ext) {
 <html>
 <head>
     <title>User Dashboard</title>
-    <link rel="stylesheet" href="../css/user.css">
+    <link rel="stylesheet" href="../css/user.css?v=2">
     <link rel="stylesheet" href="../css/style.css">
     <link rel="icon" type="image/webp" href="../images/D-Best-favicon.webp">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -54,7 +54,7 @@ foreach ($extensions as $ext) {
     <div class="profile-dropdown">
       <div class="profile-trigger" onclick="toggleDropdown()">
         <img src="<?= $avatarPath ?>" alt="Avatar" class="profile-avatar">
-        <span class="profile-name"><?= htmlspecialchars($name) ?></span>
+        <span class="profile-name"><?= htmlspecialchars($name) ?></span> ▾
       </div>
       <div id="profileMenu" class="dropdown-menu hidden">
         <a href="dashboard.php">🏠 User Home</a>
