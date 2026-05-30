@@ -406,9 +406,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <footer>
   <p>D-Best TimeSmart &copy; <?= htmlspecialchars(date('Y'), ENT_QUOTES, 'UTF-8') ?>. All rights reserved.</p>
   <p style="margin-top: 0.3rem;">
-    <a href="/docs/privacy.php">Privacy Policy</a>
-    <a href="/docs/terms.php">Terms of Use</a>
-    <a href="/docs/report.php">Report Issues</a>
+    <a href="/privacy.php">Privacy Policy</a>
+    <a href="/terms.php">Terms of Use</a>
+    <a href="/report.php">Report Issues</a>
   </p>
 </footer>
 

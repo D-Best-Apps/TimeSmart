@@ -38,7 +38,7 @@ $quickDefault = getSettingValue('QuickDefaultField', $conn) ?: 'none';
 <html>
 <head>
     <title>D-Best TimeClock</title>
-    <link rel="stylesheet" href="css/style.css?v=9">
+    <link rel="stylesheet" href="css/style.css?v=10">
     <link rel="icon" type="image/png" href="/images/D-Best.png">
     <link rel="apple-touch-icon" href="/images/D-Best.png">
     <link rel="icon" type="image/png" href="images/D-Best-favicon.png">
@@ -58,7 +58,6 @@ $quickDefault = getSettingValue('QuickDefaultField', $conn) ?: 'none';
   </div>
   <div class="topnav-right">
     <span class="nav-date"><?= date('F j, Y') ?></span>
-    <a href="index.php">🏠 Home</a>
     <a href="./user/login.php">🔐 Login</a>
   </div>
 </header>
@@ -71,7 +70,6 @@ $quickDefault = getSettingValue('QuickDefaultField', $conn) ?: 'none';
 
 <!-- 📱 Mobile Menu -->
 <nav class="mobile-nav mobile-only">
-  <a href="index.php">🏠 Home</a>
   <a href="./user/login.php">🔐 Login</a>
 </nav>
 
@@ -221,9 +219,9 @@ $quickDefault = getSettingValue('QuickDefaultField', $conn) ?: 'none';
 <footer>
   <p>D-Best TimeSmart &copy; <?= date('Y') ?>. All rights reserved.</p>
   <p style="margin-top: 0.3rem;">
-    <a href="/docs/privacy.php" style="color:#e0e0e0; text-decoration:none; margin-right:15px;">Privacy Policy</a>
-    <a href="/docs/terms.php" style="color:#e0e0e0; text-decoration:none;">Terms of Use</a>
-    <a href="/docs/report.php" style="color:#e0e0e0; text-decoration:none;">Report Issues</a>
+    <a href="/privacy.php" style="color:#e0e0e0; text-decoration:none; margin-right:15px;">Privacy Policy</a>
+    <a href="/terms.php" style="color:#e0e0e0; text-decoration:none;">Terms of Use</a>
+    <a href="/report.php" style="color:#e0e0e0; text-decoration:none;">Report Issues</a>
   </p>
 </footer>
 

@@ -301,11 +301,11 @@ a.nav-date {
 }
 
 .qc-feedback {
-  margin-top: 12px;
   font-size: 15px;
-  min-height: 1.2em;
 }
 
+/* only take vertical space once there's a message, so the box isn't padded out */
+.qc-feedback:not(:empty) { margin-top: 10px; }
 .qc-feedback.ok { color: #1d7a36; font-weight: 600; }
 .qc-feedback.err { color: #c0392b; font-weight: 600; }
 
