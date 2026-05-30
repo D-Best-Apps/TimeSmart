@@ -1,12 +1,18 @@
         .reports-container {
             padding: 2rem;
-            display: flex;
-            flex-wrap: wrap;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr); /* two per row: pairs stay together */
             gap: 1.5rem;
         }
 
+        /* Stack to a single column on narrow screens (phones/tablets) */
+        @media (max-width: 700px) {
+            .reports-container {
+                grid-template-columns: 1fr;
+            }
+        }
+
         .report-card {
-            flex: 1 1 300px;
             background: #ffffff;
             border: 1px solid #ddd;
             border-radius: 12px;

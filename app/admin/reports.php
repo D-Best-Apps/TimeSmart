@@ -1,6 +1,6 @@
 <?php
 $pageTitle = "Reports Dashboard";
-$extraCSS = ["../css/reports.css"];
+$extraCSS = ["../css/reports.css?v=2"];
 require_once 'header.php';
 ?>
 
@@ -14,9 +14,9 @@ require_once 'header.php';
             </div>
 
             <div class="report-card">
-                <h3>Overtime Report</h3>
-                <p>Per-employee overtime by week (Friday week endings) for the selected period. Defaults to last month.</p>
-                <a href="overtime.php">Open Overtime</a>
+                <h3>Timesheet Report</h3>
+                <p>View detailed punch times including clock in/out and lunch periods for all employees.</p>
+                <a href="timesheet_report.php">Open Timesheet Report</a>
             </div>
 
             <div class="report-card">
@@ -38,9 +38,9 @@ require_once 'header.php';
             </div>
 
             <div class="report-card">
-                <h3>Timesheet Report</h3>
-                <p>View detailed punch times including clock in/out and lunch periods for all employees.</p>
-                <a href="timesheet_report.php">Open Timesheet Report</a>
+                <h3>Overtime Report</h3>
+                <p>Per-employee overtime by week (Friday week endings) for the selected period. Defaults to last month.</p>
+                <a href="overtime.php">Open Overtime</a>
             </div>
         </div>
 
