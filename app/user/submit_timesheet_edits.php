@@ -22,6 +22,7 @@ if ($sessionEmpID != $postEmpID || empty($entries)) {
 }
 
 $inserted = 0;
+$notesSaved = 0;
 
 foreach ($entries as $entry) {
     $date = $entry['Date'];
@@ -50,8 +51,33 @@ foreach ($entries as $entry) {
         }
     }
 
+    $noteNew = trim($entry['Note'] ?? '');
+    $noteOld = (string) ($original['Note'] ?? '');
+
+    // No time change requested: if the employee edited the note, save it
+    // straight to their punch. A note doesn't alter hours, so it needs no
+    // approval — it should just stick (e.g. "clocked out late because…").
+    if (empty($changes)) {
+        if ($noteNew !== $noteOld) {
+            $upd = $conn->prepare("UPDATE timepunches SET Note = ? WHERE EmployeeID = ? AND Date = ?");
+            $upd->bind_param("sis", $noteNew, $sessionEmpID, $date);
+            $upd->execute();
+
+            // Audit trail
+            $log = $conn->prepare("INSERT INTO punch_changelog (EmployeeID, Date, ChangedBy, FieldChanged, OldValue, NewValue, Reason) VALUES (?, ?, ?, ?, ?, ?, ?)");
+            $changedBy = 'Employee (self note)';
+            $fieldName = 'Note';
+            $logReason = 'Employee note — no approval required';
+            $log->bind_param("issssss", $sessionEmpID, $date, $changedBy, $fieldName, $noteOld, $noteNew, $logReason);
+            $log->execute();
+
+            $notesSaved++;
+        }
+        continue;
+    }
+
     if (!empty($changes)) {
-        $note = trim($entry['Note'] ?? '');
+        $note = $noteNew;
         $reason = trim($entry['Reason'] ?? '');
 
         if ($reason === '') continue; // Skip if reason not provided
@@ -159,6 +185,7 @@ if ($inserted > 0) {
     }
 }
 
-header("Location: timesheet.php?status=" . ($inserted ? "submitted" : "nochange") . "&email_status=" . urlencode($emailStatus));
+$status = $inserted ? 'submitted' : ($notesSaved ? 'note_saved' : 'nochange');
+header("Location: timesheet.php?status=" . $status . "&email_status=" . urlencode($emailStatus));
 exit;
 ?>

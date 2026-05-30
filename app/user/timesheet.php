@@ -7,6 +7,8 @@ $statusMessage = '';
 if (isset($_GET['status'])) {
     if ($_GET['status'] === 'submitted') {
         $statusMessage = '<div class="alert alert-success">Your time adjustment request has been submitted for approval.</div>';
+    } elseif ($_GET['status'] === 'note_saved') {
+        $statusMessage = '<div class="alert alert-success">Your note was saved. (Notes don\'t change your hours, so they\'re saved right away — no approval needed.)</div>';
     } elseif ($_GET['status'] === 'nochange') {
         $statusMessage = '<div class="alert alert-info">No changes were submitted.</div>';
     }
@@ -123,7 +125,7 @@ function tsFmtRange(string $s, string $e): string {
               <th>Lunch Out</th>
               <th>Lunch In</th>
               <th>Clock Out</th>
-              <th>Note</th>
+              <th>Note <span style="font-weight:normal; font-size:0.78em; color:#888;">(saved without approval)</span></th>
               <th>Reason for Change</th>
             </tr>
           </thead>
