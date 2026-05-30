@@ -44,13 +44,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $firstName = trim($_POST['FirstName']);
     $lastName = trim($_POST['LastName']);
     $email = trim($_POST['Email']);
-    $tagID = trim($_POST['TagID']);
+    $badgeID = trim($_POST['BadgeID'] ?? '');
+    $pin = trim($_POST['PIN'] ?? '');
     $clockStatus = trim($_POST['ClockStatus']);
     $office = trim($_POST['Office']);
     $jobTitle = trim($_POST['JobTitle']);
     $phone = trim($_POST['PhoneNumber']);
     $password = $_POST['Password'];
     $enable2FA = isset($_POST['Enable2FA']) ? 1 : 0;
+
+    // PIN, if given, must be 4-6 digits
+    if ($pin !== '' && !preg_match('/^\d{4,6}$/', $pin)) {
+        header('Location: ../error.php?code=400&message=' . urlencode('PIN must be 4 to 6 digits.'));
+        exit;
+    }
+
+    // Uniqueness checks (excluding this same user)
+    if ($badgeID !== '') {
+        $chk = $conn->prepare("SELECT ID FROM users WHERE BadgeID = ? AND ID <> ?");
+        $chk->bind_param("si", $badgeID, $id);
+        $chk->execute();
+        $chk->store_result();
+        if ($chk->num_rows > 0) {
+            $chk->close();
+            header('Location: ../error.php?code=400&message=' . urlencode('Badge ID already exists.'));
+            exit;
+        }
+        $chk->close();
+    }
+    if ($pin !== '') {
+        $chk = $conn->prepare("SELECT ID FROM users WHERE PIN = ? AND ID <> ?");
+        $chk->bind_param("si", $pin, $id);
+        $chk->execute();
+        $chk->store_result();
+        if ($chk->num_rows > 0) {
+            $chk->close();
+            header('Location: ../error.php?code=400&message=' . urlencode('PIN already in use.'));
+            exit;
+        }
+        $chk->close();
+    }
+
+    // Blank Badge ID / PIN stored as NULL so they don't collide on the UNIQUE keys
+    $badgeID = $badgeID !== '' ? $badgeID : null;
+    $pin     = $pin !== '' ? $pin : null;
 
     if ($firstName && $lastName && $email && $clockStatus && $office) {
         if (!empty($password)) {
@@ -61,11 +98,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit;
             }
             $hashed = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
-            $stmt = $conn->prepare("UPDATE users SET FirstName = ?, LastName = ?, Email = ?, TagID = ?, ClockStatus = ?, Office = ?, Pass = ?, JobTitle = ?, PhoneNumber = ?, TwoFAEnabled = ? WHERE ID = ?");
-            $stmt->bind_param("sssssssssii", $firstName, $lastName, $email, $tagID, $clockStatus, $office, $hashed, $jobTitle, $phone, $enable2FA, $id);
+            $stmt = $conn->prepare("UPDATE users SET FirstName = ?, LastName = ?, Email = ?, BadgeID = ?, PIN = ?, ClockStatus = ?, Office = ?, Pass = ?, JobTitle = ?, PhoneNumber = ?, TwoFAEnabled = ? WHERE ID = ?");
+            $stmt->bind_param("ssssssssssii", $firstName, $lastName, $email, $badgeID, $pin, $clockStatus, $office, $hashed, $jobTitle, $phone, $enable2FA, $id);
         } else {
-            $stmt = $conn->prepare("UPDATE users SET FirstName = ?, LastName = ?, Email = ?, TagID = ?, ClockStatus = ?, Office = ?, JobTitle = ?, PhoneNumber = ?, TwoFAEnabled = ? WHERE ID = ?");
-            $stmt->bind_param("ssssssssii", $firstName, $lastName, $email, $tagID, $clockStatus, $office, $jobTitle, $phone, $enable2FA, $id);
+            $stmt = $conn->prepare("UPDATE users SET FirstName = ?, LastName = ?, Email = ?, BadgeID = ?, PIN = ?, ClockStatus = ?, Office = ?, JobTitle = ?, PhoneNumber = ?, TwoFAEnabled = ? WHERE ID = ?");
+            $stmt->bind_param("sssssssssii", $firstName, $lastName, $email, $badgeID, $pin, $clockStatus, $office, $jobTitle, $phone, $enable2FA, $id);
         }
 
         $stmt->execute();
@@ -101,8 +138,12 @@ require_once 'header.php';
             <input type="text" name="Email" value="<?= htmlspecialchars($user['Email'] ?? '') ?>" required>
         </label>
 
-        <label>Tag ID
-            <input type="text" name="TagID" value="<?= htmlspecialchars($user['TagID'] ?? '') ?>">
+        <label>Badge ID <small>(scannable barcode value)</small>
+            <input type="text" name="BadgeID" value="<?= htmlspecialchars($user['BadgeID'] ?? '') ?>">
+        </label>
+
+        <label>PIN <small>(4-6 digits for quick clock; leave blank for none)</small>
+            <input type="text" name="PIN" value="<?= htmlspecialchars($user['PIN'] ?? '') ?>" inputmode="numeric" pattern="\d{4,6}" maxlength="6" autocomplete="off">
         </label>
 
         <label>Clock Status

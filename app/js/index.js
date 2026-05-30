@@ -35,6 +35,51 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // 🕒 Quick clock (PIN / Badge) above the employee status board
+  const quickClock = document.getElementById('quickClock');
+  if (quickClock) {
+    const feedback = document.getElementById('qcFeedback');
+
+    const focusDefault = () => {
+      const def = quickClock.dataset.default;
+      const el = def === 'pin' ? document.getElementById('qcPin')
+               : def === 'badge' ? document.getElementById('qcBadge')
+               : null;
+      if (el) el.focus();
+    };
+    focusDefault();
+
+    quickClock.querySelectorAll('.qc-form').forEach((form) => {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const input = form.querySelector('input[name="value"]');
+        const value = (input.value || '').trim();
+        if (!value) return;
+        try {
+          const res = await fetch('functions/clock_action.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ mode: 'quickclock', method: form.dataset.method, value })
+          });
+          const data = await res.json();
+          feedback.textContent = data.message || (data.success ? 'Done.' : 'Something went wrong.');
+          feedback.className = 'qc-feedback ' + (data.success ? 'ok' : 'err');
+          input.value = '';
+          if (data.success) {
+            // Refresh the board, then the cursor returns on reload for the next person
+            setTimeout(() => location.reload(), 1600);
+          } else {
+            input.focus();
+          }
+        } catch (err) {
+          feedback.textContent = '⚠️ Network error — please try again.';
+          feedback.className = 'qc-feedback err';
+          input.focus();
+        }
+      });
+    });
+  }
+
   // ❌ Click outside to close overlays/popups
   window.addEventListener('click', (e) => {
     if (e.target === modal && modal) modal.classList.add('hidden');

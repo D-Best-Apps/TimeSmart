@@ -26,8 +26,21 @@ while ($row = $empResult->fetch_assoc()) {
     $employees[$row['ID']] = $row['FirstName'] . ' ' . $row['LastName'];
 }
 
-$query = "SELECT EmployeeID, Date, TimeIN, TimeOUT, LunchStart, LunchEnd FROM timepunches WHERE Date BETWEEN ? AND ?";
+// Aggregate per employee per day so multiple sessions (multiple punch rows on the
+// same date) collapse into one row: first clock-in, last clock-out, summed hours.
+$query = "SELECT EmployeeID, Date,
+                 MIN(TimeIN)  AS TimeIN,
+                 MAX(TimeOUT) AS TimeOUT,
+                 COUNT(TimeOUT) AS Completed,
+                 SUM(
+                     CASE WHEN TimeIN IS NOT NULL AND TimeOUT IS NOT NULL
+                          THEN TIME_TO_SEC(TIMEDIFF(TimeOUT, TimeIN))
+                               - TIME_TO_SEC(TIMEDIFF(IFNULL(LunchEnd,'00:00:00'), IFNULL(LunchStart,'00:00:00')))
+                          ELSE 0 END
+                 ) AS WorkSec
+          FROM timepunches WHERE Date BETWEEN ? AND ?";
 if ($selectedEmp !== 'all') $query .= " AND EmployeeID = ?";
+$query .= " GROUP BY EmployeeID, Date";
 $stmt = $conn->prepare($query);
 if ($selectedEmp !== 'all') $stmt->bind_param("ssi", $startDate, $endDate, $selectedEmp);
 else $stmt->bind_param("ss", $startDate, $endDate);
@@ -40,15 +53,11 @@ while ($row = $result->fetch_assoc()) {
     $date = $row['Date'];
     $in = $row['TimeIN'];
     $out = $row['TimeOUT'];
-    $lunchStart = $row['LunchStart'];
-    $lunchEnd   = $row['LunchEnd'];
     $status = 'Absent';
     $hours = '';
-    if ($in && $out) {
+    if ((int) $row['Completed'] > 0) {
         $status = 'Present';
-        $workSec  = strtotime($out) - strtotime($in);
-        $lunchSec = ($lunchStart && $lunchEnd) ? (strtotime($lunchEnd) - strtotime($lunchStart)) : 0;
-        $hours = round(max(0, $workSec - $lunchSec) / 3600, 2);
+        $hours = round(max(0, (int) $row['WorkSec']) / 3600, 2);
     } elseif ($in || $out) {
         $status = 'Incomplete';
     }

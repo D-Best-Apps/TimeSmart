@@ -229,8 +229,8 @@ function logPendingEdit($conn, $empID, $date, $field, $newTime, $note) {
 if (!empty($_POST['mode']) && $_POST['mode'] === 'kiosk_status' && !empty($_POST['TagID'])) {
     $tagID = trim($_POST['TagID']);
 
-    // Lookup user
-    $stmt = $conn->prepare("SELECT ID, FirstName FROM users WHERE TagID = ?");
+    // Lookup user (badge value is stored in BadgeID, formerly TagID)
+    $stmt = $conn->prepare("SELECT ID, FirstName FROM users WHERE BadgeID = ?");
     if (!$stmt) send_json_response(false, "DB prepare error", 500, $conn->error);
     $stmt->bind_param("s", $tagID);
     $stmt->execute();
@@ -285,8 +285,8 @@ if (!empty($_POST['mode']) && $_POST['mode'] === 'kiosk' && !empty($_POST['TagID
     $date  = date("Y-m-d");
     $ip    = get_client_ip();
 
-    // Lookup user by tag
-    $stmt = $conn->prepare("SELECT ID, FirstName FROM users WHERE TagID = ?");
+    // Lookup user by badge (stored in BadgeID, formerly TagID)
+    $stmt = $conn->prepare("SELECT ID, FirstName FROM users WHERE BadgeID = ?");
     if (!$stmt) send_json_response(false, "DB prepare error (kiosk lookup)", 500, $conn->error);
     $stmt->bind_param("s", $tagID);
     if (!$stmt->execute()) send_json_response(false, "DB execute error (kiosk lookup)", 500, $stmt->error);
@@ -384,6 +384,93 @@ if (!empty($_POST['mode']) && $_POST['mode'] === 'kiosk' && !empty($_POST['TagID
 
         default:
             send_json_response(false, "Unknown punch state", 500);
+    }
+}
+
+// --- Main-screen Quick Clock (PIN or Badge, single binary toggle) ---
+// Public, shared-device path (no login, like the kiosk). Records IP but does not
+// enforce GPS/IP policy. Toggle rule, by open punch (TimeOUT IS NULL):
+//   on lunch (LunchStart set, no LunchEnd) -> end lunch, back to In
+//   otherwise open                          -> clock out (close shift)
+//   no open punch                           -> clock in (new shift row)
+if (!empty($_POST['mode']) && $_POST['mode'] === 'quickclock') {
+    $method = $_POST['method'] ?? '';
+    $value  = trim($_POST['value'] ?? '');
+    $now    = date("H:i:s");
+    $date   = date("Y-m-d");
+    $ip     = get_client_ip();
+
+    if ($method === 'pin') {
+        if (getSettingValue('QuickPinEnabled', $conn) !== '1') {
+            send_json_response(false, "PIN clock-in is turned off.", 403);
+        }
+        if ($value === '') { send_json_response(false, "Enter your PIN.", 400); }
+        if (!preg_match('/^\d{4,6}$/', $value)) { send_json_response(false, "PIN must be 4-6 digits.", 400); }
+        $col = 'PIN';
+    } elseif ($method === 'badge') {
+        if (getSettingValue('QuickBadgeEnabled', $conn) !== '1') {
+            send_json_response(false, "Badge clock-in is turned off.", 403);
+        }
+        if ($value === '') { send_json_response(false, "Scan your badge.", 400); }
+        $col = 'BadgeID';
+    } else {
+        send_json_response(false, "Invalid request.", 400);
+    }
+
+    // Lookup employee by PIN or BadgeID
+    $stmt = $conn->prepare("SELECT ID, FirstName FROM users WHERE $col = ?");
+    if (!$stmt) { send_json_response(false, "DB prepare error (quickclock)", 500, $conn->error); }
+    $stmt->bind_param("s", $value);
+    $stmt->execute();
+    $stmt->store_result();
+    $stmt->bind_result($empID, $firstName);
+    if (!$stmt->fetch()) {
+        $stmt->close();
+        send_json_response(false, $method === 'pin' ? "❌ PIN not recognized." : "❌ Badge not recognized.", 404);
+    }
+    $stmt->close();
+
+    // Current open punch, if any
+    $punch = $conn->prepare("SELECT ID, TimeIN, LunchStart, LunchEnd FROM timepunches WHERE EmployeeID = ? AND TimeOUT IS NULL ORDER BY Date DESC, TimeIN DESC LIMIT 1");
+    $punch->bind_param("i", $empID);
+    $punch->execute();
+    $punch->store_result();
+    $hasOpen = $punch->num_rows > 0;
+    $punchID = $timeIn = $lunchStart = $lunchEnd = null;
+    if ($hasOpen) {
+        $punch->bind_result($punchID, $timeIn, $lunchStart, $lunchEnd);
+        $punch->fetch();
+    }
+    $punch->close();
+
+    if ($hasOpen && !empty($lunchStart) && empty($lunchEnd)) {
+        // LUNCH -> IN: resume work on the same shift row
+        $stmt = $conn->prepare("UPDATE timepunches SET LunchEnd = ?, IPAddressLunchEnd = INET_ATON(?) WHERE ID = ?");
+        $stmt->bind_param("ssi", $now, $ip, $punchID);
+        if (!$stmt->execute()) { send_json_response(false, "DB error (lunch end)", 500, $stmt->error); }
+        $stmt->close();
+        setClockStatus($conn, $empID, 'In');
+        send_json_response(true, "✅ Welcome back, {$firstName} — Clocked IN at " . date("g:i A", strtotime($now)),
+            200, null, ['firstName' => $firstName, 'action' => 'in']);
+    } elseif ($hasOpen) {
+        // IN -> OUT: close the shift (preserve any completed lunch)
+        $total = calculateTotalHours($timeIn, $lunchStart, $lunchEnd, $now);
+        $stmt = $conn->prepare("UPDATE timepunches SET TimeOUT = ?, LunchEnd = ?, TotalHours = ?, IPAddressOut = INET_ATON(?) WHERE ID = ?");
+        $stmt->bind_param("ssdsi", $now, $lunchEnd, $total, $ip, $punchID);
+        if (!$stmt->execute()) { send_json_response(false, "DB error (clock out)", 500, $stmt->error); }
+        $stmt->close();
+        setClockStatus($conn, $empID, 'Out');
+        send_json_response(true, "👋 Goodbye, {$firstName} — Clocked OUT at " . date("g:i A", strtotime($now)) . " (" . number_format((float) $total, 2) . " hrs)",
+            200, null, ['firstName' => $firstName, 'action' => 'out']);
+    } else {
+        // OUT -> IN: start a new shift row
+        $stmt = $conn->prepare("INSERT INTO timepunches (EmployeeID, Date, TimeIN, IPAddressIN) VALUES (?, ?, ?, INET_ATON(?))");
+        $stmt->bind_param("isss", $empID, $date, $now, $ip);
+        if (!$stmt->execute()) { send_json_response(false, "DB error (clock in)", 500, $stmt->error); }
+        $stmt->close();
+        setClockStatus($conn, $empID, 'In');
+        send_json_response(true, "✅ Welcome, {$firstName} — Clocked IN at " . date("g:i A", strtotime($now)),
+            200, null, ['firstName' => $firstName, 'action' => 'in']);
     }
 }
 

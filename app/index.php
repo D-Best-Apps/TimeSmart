@@ -22,6 +22,12 @@ $gpsQuery->close();
 require_once __DIR__ . '/functions/weather.php';
 $weather = getWeatherData($conn);
 $xkcd = $weather ? getXkcdComic() : null; // ride along under the weather panel
+
+// Main-screen quick-clock (PIN / Badge) toggles
+require_once __DIR__ . '/functions/settings_helper.php';
+$quickPin     = getSettingValue('QuickPinEnabled', $conn) === '1';
+$quickBadge   = getSettingValue('QuickBadgeEnabled', $conn) === '1';
+$quickDefault = getSettingValue('QuickDefaultField', $conn) ?: 'none';
 ?>
 
 
@@ -29,7 +35,7 @@ $xkcd = $weather ? getXkcdComic() : null; // ride along under the weather panel
 <html>
 <head>
     <title>D-Best TimeClock</title>
-    <link rel="stylesheet" href="css/style.css?v=5">
+    <link rel="stylesheet" href="css/style.css?v=6">
     <link rel="icon" type="image/png" href="/images/D-Best.png">
     <link rel="apple-touch-icon" href="/images/D-Best.png">
     <link rel="icon" type="image/png" href="images/D-Best-favicon.png">
@@ -105,6 +111,26 @@ $xkcd = $weather ? getXkcdComic() : null; // ride along under the weather panel
         </aside>
         <?php endif; ?>
         <div class="status-col">
+        <?php if ($quickPin || $quickBadge): ?>
+        <div class="quick-clock" id="quickClock" data-default="<?= htmlspecialchars($quickDefault) ?>">
+            <div class="quick-clock-inner">
+                <?php if ($quickPin): ?>
+                <form class="qc-form" data-method="pin" autocomplete="off">
+                    <label for="qcPin">Enter PIN &amp; press Enter</label>
+                    <input type="password" id="qcPin" name="value" inputmode="numeric" pattern="\d*"
+                           maxlength="6" autocomplete="off" placeholder="••••">
+                </form>
+                <?php endif; ?>
+                <?php if ($quickBadge): ?>
+                <form class="qc-form" data-method="badge" autocomplete="off">
+                    <label for="qcBadge">Scan badge</label>
+                    <input type="text" id="qcBadge" name="value" autocomplete="off" placeholder="Scan or type badge…">
+                </form>
+                <?php endif; ?>
+            </div>
+            <div class="qc-feedback" id="qcFeedback" aria-live="polite"></div>
+        </div>
+        <?php endif; ?>
         <h2>Employee Status</h2>
         <table>
             <tr>

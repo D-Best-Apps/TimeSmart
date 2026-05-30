@@ -255,6 +255,60 @@ a.nav-date {
   margin-top: 6px;
 }
 
+/* 🕒 Quick clock (PIN / Badge) */
+.quick-clock {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
+  padding: 18px 20px;
+  margin-bottom: 20px;
+}
+
+.quick-clock-inner {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.qc-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 220px;
+  margin: 0;
+}
+
+.qc-form label {
+  font-weight: 600;
+  color: #1f5a78;
+  font-size: 14px;
+}
+
+.qc-form input {
+  padding: 12px 14px;
+  font-size: 20px;
+  letter-spacing: 2px;
+  border: 2px solid #ced4da;
+  border-radius: 8px;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+
+.qc-form input:focus {
+  border-color: #0078D7;
+  outline: none;
+}
+
+.qc-feedback {
+  margin-top: 12px;
+  font-size: 15px;
+  min-height: 1.2em;
+}
+
+.qc-feedback.ok { color: #1d7a36; font-weight: 600; }
+.qc-feedback.err { color: #c0392b; font-weight: 600; }
+
 /* 📊 Table */
 table {
   width: 100%;

@@ -20,7 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ID'])) {
 
         try {
             // Copy user from user-archive back to users table
-            $conn->query("INSERT INTO users (ID, LastName, Email, FirstName, Pass, TagID, ProfilePhoto, ClockStatus, Office, TwoFASecret, TwoFAEnabled, RecoveryCodeHash, AdminOverride2FA, JobTitle, PhoneNumber, ThemePref, TwoFARecoveryCode, LockOut) SELECT ID, LastName, Email, FirstName, Pass, TagID, ProfilePhoto, ClockStatus, Office, TwoFASecret, TwoFAEnabled, RecoveryCodeHash, AdminOverride2FA, JobTitle, PhoneNumber, ThemePref, TwoFARecoveryCode, LockOut FROM `user-archive` WHERE ID = $id");
+            $conn->query("INSERT INTO users (ID, LastName, Email, FirstName, Pass, BadgeID, PIN, ProfilePhoto, ClockStatus, Office, TwoFASecret, TwoFAEnabled, RecoveryCodeHash, AdminOverride2FA, JobTitle, PhoneNumber, ThemePref, TwoFARecoveryCode, LockOut) SELECT ID, LastName, Email, FirstName, Pass, BadgeID, PIN, ProfilePhoto, ClockStatus, Office, TwoFASecret, TwoFAEnabled, RecoveryCodeHash, AdminOverride2FA, JobTitle, PhoneNumber, ThemePref, TwoFARecoveryCode, LockOut FROM `user-archive` WHERE ID = $id");
 
             // Delete user from user-archive table
             $conn->query("DELETE FROM `user-archive` WHERE ID = $id");

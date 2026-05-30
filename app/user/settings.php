@@ -9,7 +9,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $firstName = trim($_POST['FirstName']);
     $lastName = trim($_POST['LastName']);
     $email = trim($_POST['Email']);
-    $tagID = trim($_POST['TagID']);
+    $badgeID = trim($_POST['BadgeID'] ?? '');
+    $pin = trim($_POST['PIN'] ?? '');
     $jobTitle = trim($_POST['JobTitle']);
     $phone = trim($_POST['PhoneNumber']);
     $theme = $_POST['ThemePref'];
@@ -17,6 +18,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$firstName || !$lastName) {
         $errors[] = "First and Last Name are required.";
     }
+
+    if ($pin !== '' && !preg_match('/^\d{4,6}$/', $pin)) {
+        $errors[] = "PIN must be 4 to 6 digits.";
+    }
+
+    // Uniqueness (excluding self) for Badge ID and PIN
+    if ($badgeID !== '') {
+        $chk = $conn->prepare("SELECT ID FROM users WHERE BadgeID = ? AND ID <> ?");
+        $chk->bind_param("si", $badgeID, $empID);
+        $chk->execute();
+        $chk->store_result();
+        if ($chk->num_rows > 0) { $errors[] = "That Badge ID is already in use."; }
+        $chk->close();
+    }
+    if ($pin !== '' && !in_array("PIN must be 4 to 6 digits.", $errors, true)) {
+        $chk = $conn->prepare("SELECT ID FROM users WHERE PIN = ? AND ID <> ?");
+        $chk->bind_param("si", $pin, $empID);
+        $chk->execute();
+        $chk->store_result();
+        if ($chk->num_rows > 0) { $errors[] = "That PIN is already in use."; }
+        $chk->close();
+    }
+    $badgeIDVal = $badgeID !== '' ? $badgeID : null;
+    $pinVal     = $pin !== '' ? $pin : null;
 
     if (!empty($_POST['NewPassword']) || !empty($_POST['ConfirmPassword'])) {
         if ($_POST['NewPassword'] !== $_POST['ConfirmPassword']) {
@@ -49,8 +74,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (empty($errors)) {
-        $stmt = $conn->prepare("UPDATE users SET FirstName=?, LastName=?, Email=?, TagID=?, JobTitle=?, PhoneNumber=?, ThemePref=? WHERE ID=?");
-        $stmt->bind_param("sssssssi", $firstName, $lastName, $email, $tagID, $jobTitle, $phone, $theme, $empID);
+        $stmt = $conn->prepare("UPDATE users SET FirstName=?, LastName=?, Email=?, BadgeID=?, PIN=?, JobTitle=?, PhoneNumber=?, ThemePref=? WHERE ID=?");
+        $stmt->bind_param("ssssssssi", $firstName, $lastName, $email, $badgeIDVal, $pinVal, $jobTitle, $phone, $theme, $empID);
         $stmt->execute();
         $msg = "Profile updated successfully.";
     }
@@ -89,7 +114,8 @@ $logs = $logStmt->get_result();
                 <div><label>First Name</label><input type="text" name="FirstName" value="<?= htmlspecialchars($user['FirstName'] ?? '') ?>" required></div>
                 <div><label>Last Name</label><input type="text" name="LastName" value="<?= htmlspecialchars($user['LastName'] ?? '') ?>" required></div>
                 <div><label>Email</label><input type="email" name="Email" value="<?= htmlspecialchars($user['Email'] ?? '') ?>"></div>
-                <div><label>Tag ID</label><input type="text" name="TagID" value="<?= htmlspecialchars($user['TagID'] ?? '') ?>"></div>
+                <div><label>Badge ID</label><input type="text" name="BadgeID" value="<?= htmlspecialchars($user['BadgeID'] ?? '') ?>"></div>
+                <div><label>Quick-Clock PIN <small>(4-6 digits)</small></label><input type="text" name="PIN" value="<?= htmlspecialchars($user['PIN'] ?? '') ?>" inputmode="numeric" pattern="\d{4,6}" maxlength="6" autocomplete="off"></div>
                 <div><label>Job Title</label><input type="text" name="JobTitle" value="<?= htmlspecialchars($user['JobTitle'] ?? '') ?>"></div>
                 <div><label>Phone Number</label><input type="text" name="PhoneNumber" value="<?= htmlspecialchars($user['PhoneNumber'] ?? '') ?>"></div>
                 <div>

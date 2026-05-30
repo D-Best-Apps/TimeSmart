@@ -16,7 +16,7 @@ requirePermission('manage_users');
  * Fetch data for page
  */
 $users_result = $conn->query("
-    SELECT ID, FirstName, LastName, TagID, ClockStatus, Office, TwoFAEnabled, LockOut
+    SELECT ID, FirstName, LastName, BadgeID, PIN, ClockStatus, Office, TwoFAEnabled, LockOut
     FROM users
     ORDER BY LastName
 ");
@@ -43,6 +43,12 @@ require_once 'header.php';
         <div class="toolbar" style="margin-bottom:0;">
             <button class="btn primary" onclick="document.getElementById('addUserModal').style.display='block'">+ Add User</button>
             <a href="archived_users.php" class="btn secondary">View Archived Users</a>
+            <?php
+            require_once __DIR__ . '/../functions/settings_helper.php';
+            if (getSettingValue('QuickBadgeEnabled', $conn) === '1'):
+            ?>
+            <a href="badges.php" target="_blank" class="btn secondary">🪪 Print Badges</a>
+            <?php endif; ?>
         </div>
     </div>
 
@@ -61,7 +67,8 @@ require_once 'header.php';
     <table class="uman-table">
         <thead>
         <tr>
-            <th>Tag ID</th>
+            <th>Badge ID</th>
+            <th>PIN</th>
             <th>Full Name</th>
             <th>Clock Status</th>
             <th>Office</th>
@@ -80,7 +87,8 @@ require_once 'header.php';
         <tbody>
         <?php foreach ($users_data as $user): ?>
             <tr>
-                <td><?= htmlspecialchars($user['TagID'] ?? '') ?></td>
+                <td><?= htmlspecialchars($user['BadgeID'] ?? '') ?></td>
+                <td><?= !empty($user['PIN']) ? '••••' : '' ?></td>
                 <td><?= htmlspecialchars(($user['FirstName'] ?? '') . ' ' . ($user['LastName'] ?? '')) ?></td>
                 <td><?= htmlspecialchars($user['ClockStatus'] ?? 'Out') ?></td>
                 <td><?= htmlspecialchars($user['Office'] ?? 'N/A') ?></td>
@@ -121,7 +129,8 @@ require_once 'header.php';
             <h3>Add New User</h3>
             <input type="text" name="FirstName" placeholder="First Name" required>
             <input type="text" name="LastName" placeholder="Last Name" required>
-            <input type="text" name="TagID" placeholder="Tag ID">
+            <input type="text" name="BadgeID" placeholder="Badge ID (optional)">
+            <input type="text" name="PIN" placeholder="PIN — 4-6 digits (optional)" inputmode="numeric" pattern="\d{4,6}" maxlength="6">
             <select name="Office" required>
                 <option value="">Select Office</option>
                 <?php foreach ($offices_data as $office): ?>

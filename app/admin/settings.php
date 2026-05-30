@@ -80,7 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'mail_server', 'mail_port', 'mail_username',
         'mail_from_address', 'mail_from_name', 'mail_encryption', 'mail_admin_address',
         'm365_tenant_id', 'm365_client_id', 'm365_calendar_mailbox', 'm365_timezone',
-        'WeatherZip'
+        'WeatherZip', 'QuickDefaultField'
     ];
 
     foreach ($settingsToUpdate as $key) {
@@ -122,6 +122,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $stmt->bind_param("sss", $key, $pwModeVal, $pwModeVal);
     $stmt->execute();
     $settings['PasswordSecurityMode'] = $pwModeVal;
+
+    // Main-screen quick-clock toggles
+    $quickPinVal = !empty($_POST['QuickPinEnabled']) ? '1' : '0';
+    $stmt = $conn->prepare("INSERT INTO settings (SettingKey, SettingValue) VALUES (?, ?) ON DUPLICATE KEY UPDATE SettingValue = ?");
+    $key = 'QuickPinEnabled';
+    $stmt->bind_param("sss", $key, $quickPinVal, $quickPinVal);
+    $stmt->execute();
+    $settings['QuickPinEnabled'] = $quickPinVal;
+
+    $quickBadgeVal = !empty($_POST['QuickBadgeEnabled']) ? '1' : '0';
+    $stmt = $conn->prepare("INSERT INTO settings (SettingKey, SettingValue) VALUES (?, ?) ON DUPLICATE KEY UPDATE SettingValue = ?");
+    $key = 'QuickBadgeEnabled';
+    $stmt->bind_param("sss", $key, $quickBadgeVal, $quickBadgeVal);
+    $stmt->execute();
+    $settings['QuickBadgeEnabled'] = $quickBadgeVal;
 
     // Handle mail_password separately for encryption
     if (isset($_POST['mail_password']) && !empty($_POST['mail_password'])) {
@@ -232,6 +247,45 @@ require_once 'header.php';
                     Off: at least 2 characters, any (for offline / air-gapped installs).
                 </p>
             </div>
+            <div class="buttons">
+                <button type="submit">Save Settings</button>
+            </div>
+            <hr style="margin: 2rem 0;">
+
+            <h2>Main Screen Quick Clock</h2>
+            <p style="color:#555; font-size:0.9em;">
+                Show fast clock in/out boxes above the employee status board on the public main screen.
+                An employee enters their PIN or scans their badge and presses Enter to toggle in/out.
+                Set each person's PIN / Badge ID on the <a href="manage_users.php">Users</a> page.
+            </p>
+            <div class="field">
+                <label>
+                    <input type="checkbox" name="QuickPinEnabled" value="1" <?= ($settings['QuickPinEnabled'] ?? '') === '1' ? 'checked' : '' ?>>
+                    Enable PIN entry on the main screen
+                </label>
+            </div>
+            <div class="field">
+                <label>
+                    <input type="checkbox" name="QuickBadgeEnabled" value="1" <?= ($settings['QuickBadgeEnabled'] ?? '') === '1' ? 'checked' : '' ?>>
+                    Enable badge scanning on the main screen
+                </label>
+            </div>
+            <div class="field">
+                <label for="QuickDefaultField">Default focus when the page loads:</label>
+                <select id="QuickDefaultField" name="QuickDefaultField">
+                    <option value="none" <?= ($settings['QuickDefaultField'] ?? 'none') === 'none' ? 'selected' : '' ?>>None</option>
+                    <option value="pin" <?= ($settings['QuickDefaultField'] ?? '') === 'pin' ? 'selected' : '' ?>>PIN box</option>
+                    <option value="badge" <?= ($settings['QuickDefaultField'] ?? '') === 'badge' ? 'selected' : '' ?>>Badge box</option>
+                </select>
+                <p style="color:#666; font-size:0.85em; margin:0.25rem 0 0;">
+                    Puts the cursor in this box on load/refresh — handy for a dedicated iPad. Only applies if that box is enabled.
+                </p>
+            </div>
+            <?php if (($settings['QuickBadgeEnabled'] ?? '') === '1'): ?>
+            <div class="field">
+                <a href="badges.php" target="_blank" class="button" style="display:inline-block; padding:0.6rem 1.2rem; background:#0078D7; color:#fff; border-radius:8px; text-decoration:none;">🪪 Print Badges (PDF)</a>
+            </div>
+            <?php endif; ?>
             <div class="buttons">
                 <button type="submit">Save Settings</button>
             </div>

@@ -24,7 +24,8 @@ CREATE TABLE `users` (
   `Email` varchar(255) DEFAULT NULL,
   `FirstName` varchar(255) NOT NULL,
   `Pass` varchar(255) DEFAULT NULL,
-  `TagID` varchar(50) DEFAULT NULL,
+  `BadgeID` varchar(50) DEFAULT NULL,
+  `PIN` varchar(6) DEFAULT NULL,
   `ProfilePhoto` varchar(255) DEFAULT NULL,
   `ClockStatus` varchar(255) DEFAULT NULL,
   `Office` varchar(100) DEFAULT NULL,
@@ -41,7 +42,8 @@ CREATE TABLE `users` (
   `LockOut` TINYINT(1) NOT NULL DEFAULT 0,
   `Role` enum('employee','reports_only','super_admin') NOT NULL DEFAULT 'employee',
   PRIMARY KEY (`ID`),
-  UNIQUE KEY `TagID` (`TagID`)
+  UNIQUE KEY `BadgeID` (`BadgeID`),
+  UNIQUE KEY `PIN` (`PIN`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE `admins` (
@@ -175,7 +177,8 @@ CREATE TABLE `user-archive` (
   `Email` varchar(255) DEFAULT NULL,
   `FirstName` varchar(255) NOT NULL,
   `Pass` varchar(255) DEFAULT NULL,
-  `TagID` varchar(50) DEFAULT NULL,
+  `BadgeID` varchar(50) DEFAULT NULL,
+  `PIN` varchar(6) DEFAULT NULL,
   `ProfilePhoto` varchar(255) DEFAULT NULL,
   `ClockStatus` varchar(255) DEFAULT NULL,
   `Office` varchar(100) DEFAULT NULL,
