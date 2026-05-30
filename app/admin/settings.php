@@ -138,6 +138,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $stmt->execute();
     $settings['QuickBadgeEnabled'] = $quickBadgeVal;
 
+    // Home-page widget toggles
+    $weatherEnabledVal = !empty($_POST['WeatherEnabled']) ? '1' : '0';
+    $stmt = $conn->prepare("INSERT INTO settings (SettingKey, SettingValue) VALUES (?, ?) ON DUPLICATE KEY UPDATE SettingValue = ?");
+    $key = 'WeatherEnabled';
+    $stmt->bind_param("sss", $key, $weatherEnabledVal, $weatherEnabledVal);
+    $stmt->execute();
+    $settings['WeatherEnabled'] = $weatherEnabledVal;
+
+    $comicEnabledVal = !empty($_POST['ComicEnabled']) ? '1' : '0';
+    $stmt = $conn->prepare("INSERT INTO settings (SettingKey, SettingValue) VALUES (?, ?) ON DUPLICATE KEY UPDATE SettingValue = ?");
+    $key = 'ComicEnabled';
+    $stmt->bind_param("sss", $key, $comicEnabledVal, $comicEnabledVal);
+    $stmt->execute();
+    $settings['ComicEnabled'] = $comicEnabledVal;
+
     // Handle mail_password separately for encryption
     if (isset($_POST['mail_password']) && !empty($_POST['mail_password'])) {
         $encrypted_password = encrypt_data($_POST['mail_password']);
@@ -291,15 +306,30 @@ require_once 'header.php';
             </div>
             <hr style="margin: 2rem 0;">
 
-            <h2>Home Page Weather</h2>
+            <h2>Home Page Widgets</h2>
+            <div class="field">
+                <label>
+                    <input type="checkbox" name="WeatherEnabled" value="1" <?= ($settings['WeatherEnabled'] ?? '') === '1' ? 'checked' : '' ?>>
+                    Show the weather panel
+                </label>
+            </div>
             <div class="field">
                 <label for="WeatherZip">Weather ZIP Code:</label>
                 <input type="text" id="WeatherZip" name="WeatherZip" inputmode="numeric" maxlength="5"
                        value="<?= htmlspecialchars($settings['WeatherZip'] ?? '') ?>"
                        placeholder="e.g. 60601">
                 <p style="color:#666; font-size:0.85em; margin:0.25rem 0 0;">
-                    Shows current conditions and a short forecast on the public home page.
-                    Enter a 5-digit US ZIP code, or leave blank to hide the weather panel.
+                    Current conditions and a short forecast on the public home page.
+                    Requires a 5-digit US ZIP code (and the weather panel enabled above).
+                </p>
+            </div>
+            <div class="field">
+                <label>
+                    <input type="checkbox" name="ComicEnabled" value="1" <?= ($settings['ComicEnabled'] ?? '') === '1' ? 'checked' : '' ?>>
+                    Show the daily XKCD comic
+                </label>
+                <p style="color:#666; font-size:0.85em; margin:0.25rem 0 0;">
+                    A thumbnail of the latest <a href="https://xkcd.com" target="_blank" rel="noopener">xkcd</a> comic, shown above the weather.
                 </p>
             </div>
             <div class="buttons">

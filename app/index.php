@@ -18,13 +18,16 @@ if ($gpsQuery->fetch()) {
 }
 $gpsQuery->close();
 
-// Home-page weather panel (null when no ZIP configured / lookup fails)
+require_once __DIR__ . '/functions/settings_helper.php';
 require_once __DIR__ . '/functions/weather.php';
-$weather = getWeatherData($conn);
-$xkcd = $weather ? getXkcdComic() : null; // ride along under the weather panel
+
+// Home-page widgets — each independently toggleable in admin settings.
+$weatherOn = getSettingValue('WeatherEnabled', $conn) === '1';
+$comicOn   = getSettingValue('ComicEnabled', $conn) === '1';
+$weather = $weatherOn ? getWeatherData($conn) : null; // also null if no ZIP / fetch fails
+$xkcd    = $comicOn ? getXkcdComic() : null;
 
 // Main-screen quick-clock (PIN / Badge) toggles
-require_once __DIR__ . '/functions/settings_helper.php';
 $quickPin     = getSettingValue('QuickPinEnabled', $conn) === '1';
 $quickBadge   = getSettingValue('QuickBadgeEnabled', $conn) === '1';
 $quickDefault = getSettingValue('QuickDefaultField', $conn) ?: 'none';
@@ -35,7 +38,7 @@ $quickDefault = getSettingValue('QuickDefaultField', $conn) ?: 'none';
 <html>
 <head>
     <title>D-Best TimeClock</title>
-    <link rel="stylesheet" href="css/style.css?v=7">
+    <link rel="stylesheet" href="css/style.css?v=8">
     <link rel="icon" type="image/png" href="/images/D-Best.png">
     <link rel="apple-touch-icon" href="/images/D-Best.png">
     <link rel="icon" type="image/png" href="images/D-Best-favicon.png">
@@ -54,7 +57,7 @@ $quickDefault = getSettingValue('QuickDefaultField', $conn) ?: 'none';
     <span class="nav-title">D-Best TimeSmart</span>
   </div>
   <div class="topnav-right">
-    <a class="nav-date" href="https://xkcd.com" target="_blank" rel="noopener" title="Today's comic 😉"><?= date('F j, Y') ?></a>
+    <span class="nav-date"><?= date('F j, Y') ?></span>
     <a href="index.php">🏠 Home</a>
     <a href="./user/login.php">🔐 Login</a>
   </div>
@@ -79,8 +82,16 @@ $quickDefault = getSettingValue('QuickDefaultField', $conn) ?: 'none';
 <div class="wrapper">
     <div class="main">
       <div class="home-layout">
-        <?php if ($weather): ?>
-        <aside class="weather-col" aria-label="Local weather">
+        <?php if ($weather || $xkcd): ?>
+        <aside class="weather-col" aria-label="Weather and comic">
+            <?php if ($xkcd): ?>
+            <a class="xkcd-card" href="<?= htmlspecialchars($xkcd['link']) ?>" target="_blank" rel="noopener" title="<?= htmlspecialchars($xkcd['alt']) ?>">
+                <div class="xkcd-head">xkcd #<?= htmlspecialchars($xkcd['num']) ?> &middot; <?= htmlspecialchars($xkcd['title']) ?></div>
+                <img class="xkcd-img" src="<?= htmlspecialchars($xkcd['img']) ?>" alt="<?= htmlspecialchars($xkcd['title']) ?>" loading="lazy">
+                <div class="xkcd-foot">click to view full comic →</div>
+            </a>
+            <?php endif; ?>
+            <?php if ($weather): ?>
             <div class="weather-card">
                 <div class="weather-place"><?= htmlspecialchars($weather['place']) ?></div>
                 <div class="weather-now">
@@ -101,12 +112,6 @@ $quickDefault = getSettingValue('QuickDefaultField', $conn) ?: 'none';
                     <?php endforeach; ?>
                 </div>
             </div>
-            <?php if ($xkcd): ?>
-            <a class="xkcd-card" href="<?= htmlspecialchars($xkcd['link']) ?>" target="_blank" rel="noopener" title="<?= htmlspecialchars($xkcd['alt']) ?>">
-                <div class="xkcd-head">xkcd #<?= htmlspecialchars($xkcd['num']) ?> &middot; <?= htmlspecialchars($xkcd['title']) ?></div>
-                <img class="xkcd-img" src="<?= htmlspecialchars($xkcd['img']) ?>" alt="<?= htmlspecialchars($xkcd['title']) ?>" loading="lazy">
-                <div class="xkcd-foot">click to view full comic →</div>
-            </a>
             <?php endif; ?>
         </aside>
         <?php endif; ?>
