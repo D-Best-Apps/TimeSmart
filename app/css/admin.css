@@ -694,6 +694,38 @@ footer {
     border-top: 1px solid #e0e0e0;
 }
 
+/* ===== Wide data pages (timesheets, approvals) ===== */
+/* These pages carry many-column tables; let them use the full width and let
+   wide tables scroll horizontally instead of overflowing the page. */
+/* The outer .dashboard-container caps width at 1200px by default; widen it on
+   these pages so the inner card/content can use the extra room without the card
+   itself spilling past its parent and off the side of the page. */
+.page-view_punches .dashboard-container,
+.page-edits_timesheet .dashboard-container {
+    max-width: 1400px;
+}
+
+/* edits_timesheet keeps a single card, just wider */
+.page-edits_timesheet .container {
+    max-width: 100%;
+}
+/* view_punches manages its own cards, so the wrapper is transparent + wide */
+.page-view_punches .container {
+    max-width: 100%;
+    background: none;
+    box-shadow: none;
+    padding: 0;
+    margin: 0;
+}
+
+/* Horizontal-scroll wrapper for wide tables so they stay inside the card on
+   narrow viewports rather than pushing the layout sideways. */
+.table-scroll {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
 .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); }
 .modal-content { background: white; padding: 2rem; border-radius: 10px; width: 400px; max-width: 90%; margin: 10% auto; position: relative; }
 .modal-content h3 { margin-top: 0; }

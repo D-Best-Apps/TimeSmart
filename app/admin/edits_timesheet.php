@@ -119,10 +119,10 @@ foreach ($timeOffRequests as $tor) {
 $pageTitle = "Pending Approvals";
 require_once 'header.php';
 ?>
-<link rel="stylesheet" href="../css/edits_timesheet.css" />
+<link rel="stylesheet" href="../css/edits_timesheet.css?v=2" />
 
 
-<div class="dashboard-container">
+<div class="edits-page">
     <?php if (($_GET['m365_sync'] ?? '') === 'failed'): ?>
         <div style="background-color:#fff3cd; border:1px solid #ffeeba; color:#856404; padding:0.75rem 1rem; border-radius:4px; margin-bottom:1rem;">
             <strong>M365 calendar sync failed for one or more approvals.</strong><br>
@@ -136,6 +136,7 @@ require_once 'header.php';
         <p class="no-edits">✅ No pending time edits to review at the moment.</p>
     <?php else: ?>
         <form method="POST" action="process_edits.php">
+            <div class="table-scroll">
             <table class="approval-table">
                 <thead>
                     <tr>
@@ -173,6 +174,7 @@ require_once 'header.php';
                     <?php endforeach; ?>
                 </tbody>
             </table>
+            </div>
         </form>
     <?php endif; ?>
 
@@ -181,6 +183,7 @@ require_once 'header.php';
         <p class="no-edits">✅ No pending time-off requests at the moment.</p>
     <?php else: ?>
         <form method="POST" action="process_time_off.php">
+            <div class="table-scroll">
             <table class="approval-table">
                 <thead>
                     <tr>
@@ -277,6 +280,7 @@ require_once 'header.php';
                     <?php endforeach; ?>
                 </tbody>
             </table>
+            </div>
         </form>
     <?php endif; ?>
 
@@ -284,6 +288,7 @@ require_once 'header.php';
     <?php if (count($recentApprovedTimeOff) === 0): ?>
         <p class="no-edits">No approved time-off in the last 60 days.</p>
     <?php else: ?>
+        <div class="table-scroll">
         <table class="approval-table">
             <thead>
                 <tr>
@@ -316,6 +321,7 @@ require_once 'header.php';
                 <?php endforeach; ?>
             </tbody>
         </table>
+        </div>
     <?php endif; ?>
 </div>
 

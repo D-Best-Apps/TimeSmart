@@ -117,6 +117,10 @@ function addNewPunch() {
                     dateValue.getDate().toString().padStart(2, '0') + '/' +
                     dateValue.getFullYear();
 
+    // Location columns are only present when GPS capture is enabled
+    const showLoc = (typeof window.VP_SHOW_LOCATIONS === 'undefined') ? true : window.VP_SHOW_LOCATIONS;
+    const locCell = showLoc ? '<td></td>' : '';
+
     // Create new row
     const newRow = document.createElement('tr');
     newRow.innerHTML = `
@@ -124,13 +128,13 @@ function addNewPunch() {
             <input type="date" name="date[${newId}]" value="${dateValue.toISOString().split('T')[0]}" required class="date-input">
         </td>
         <td><input type="time" name="clockin[${newId}]" value="" step="60"></td>
-        <td></td>
+        ${locCell}
         <td><input type="time" name="lunchout[${newId}]" value="" step="60"></td>
-        <td></td>
+        ${locCell}
         <td><input type="time" name="lunchin[${newId}]" value="" step="60"></td>
-        <td></td>
+        ${locCell}
         <td><input type="time" name="clockout[${newId}]" value="" step="60"></td>
-        <td></td>
+        ${locCell}
         <td class="total-cell">0.00</td>
         <td>
             <select name="reason[${newId}]" class="reason-dropdown">

@@ -1,21 +1,149 @@
-        .dashboard-container {
-            max-width: 1400px;
-        }
-        .btn-view {
-            background-color: #0078D7;
-            color: white;
-            padding: 8px 12px;
-            text-decoration: none;
-            border-radius: 4px;
-            font-size: 14px;
-        }
-        .btn-view:hover {
-            background-color: #005fa3;
-        }
-        select.reason-dropdown {
-            width: 100%;
-            padding: 0.5rem;
-            border-radius: 6px;
-            border: 1px solid #ccc;
-            font-size: 1rem;
-        }
+/* view_punches.php — timesheet view / edit grid
+   Loaded after admin.css; relies on its :root tokens and .btn system. */
+
+/* Distinct cards so the filter controls read as separate from the timesheet */
+.vp-card {
+    background: var(--card-bg);
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+.vp-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin: 0 0 1rem;
+}
+.vp-card-header h2 {
+    margin: 0;
+    font-size: 1.15rem;
+    color: var(--primary-color);
+}
+.vp-card-header .vp-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+/* ----- Filter form (employee + date range) ----- */
+.vp-filter {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 1rem;
+}
+.vp-filter .field { flex: 1; min-width: 200px; }
+.vp-filter label {
+    display: block;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #444;
+    margin-bottom: 0.4rem;
+}
+.vp-filter input[type="text"],
+.vp-filter select {
+    width: 100%;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 1rem;
+    box-sizing: border-box;
+}
+.vp-filter .vp-filter-buttons {
+    display: flex;
+    gap: 0.6rem;
+}
+
+/* ----- Timesheet table ----- */
+.timesheet-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.92rem;
+    min-width: 720px; /* keeps columns legible; .table-scroll handles overflow */
+}
+.timesheet-table th,
+.timesheet-table td {
+    padding: 0.6rem 0.7rem;
+    border-bottom: 1px solid #eee;
+    text-align: center;
+    white-space: nowrap;
+}
+.timesheet-table thead th {
+    background-color: #e9edf5;
+    color: #333;
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+}
+.timesheet-table tbody tr:hover { background-color: #f7f9fc; }
+.timesheet-table input[type="time"],
+.timesheet-table input[type="date"] {
+    padding: 0.35rem 0.4rem;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    font-size: 0.9rem;
+}
+.timesheet-table .total-cell { font-weight: 600; }
+.timesheet-table .empty-day td {
+    color: var(--muted-text);
+    font-style: italic;
+    background: #fafafa;
+}
+
+select.reason-dropdown {
+    padding: 0.4rem;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    font-size: 0.9rem;
+    max-width: 170px;
+}
+
+/* Read-only display values */
+.vp-ro { color: #222; }
+.vp-ro.empty { color: var(--muted-text); }
+
+/* Map link */
+.btn-view {
+    background-color: var(--primary-color);
+    color: #fff;
+    padding: 0.3rem 0.6rem;
+    text-decoration: none;
+    border-radius: 5px;
+    font-size: 0.8rem;
+}
+.btn-view:hover { background-color: var(--primary-hover); }
+
+/* Row action buttons */
+.confirm-btn,
+.delete-btn {
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.95rem;
+    padding: 0.4rem 0.7rem;
+    line-height: 1;
+}
+.confirm-btn { background-color: #28a745; color: #fff; }
+.confirm-btn:hover { background-color: #1e7e34; }
+.delete-btn { background-color: #dc3545; color: #fff; }
+.delete-btn:hover { background-color: #b02a37; }
+
+/* Totals footer */
+.totals {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 2px solid #eee;
+    font-size: 1rem;
+    color: #333;
+}
+.totals strong { color: var(--primary-color); }
+
+/* Empty state when no employee chosen */
+.vp-empty {
+    text-align: center;
+    color: var(--muted-text);
+    padding: 2.5rem 1rem;
+}

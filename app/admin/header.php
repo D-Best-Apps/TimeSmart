@@ -74,7 +74,7 @@ $currentPage = basename($_SERVER['PHP_SELF']);
     <link rel="icon" type="image/png" href="../images/D-Best-favicon.png">
     <link rel="apple-touch-icon" href="../images/D-Best-favicon.png">
     <link rel="icon" type="image/webp" href="../images/D-Best-favicon.webp">
-    <link rel="stylesheet" href="../css/admin.css?v=3">
+    <link rel="stylesheet" href="../css/admin.css?v=4">
     <style>
         /* Fallback so the new nav elements are never unstyled if admin.css is cached */
         .admin-profile-avatar { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; }
@@ -84,7 +84,7 @@ $currentPage = basename($_SERVER['PHP_SELF']);
     <link rel="stylesheet" href="<?= $css ?>" />
     <?php endforeach; ?>
 </head>
-<body>
+<body class="admin-page page-<?= htmlspecialchars(basename($currentPage, '.php')) ?>">
 
 <?php
 // Pages that live under the Settings dropdown — used for active-state highlight
