@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../auth/db.php';
+require_once __DIR__ . '/../functions/hours.php';
 require_once __DIR__ . '/../functions/time_off_hours.php';
 
 if (!isset($_SESSION['admin'])) {
@@ -8,9 +9,9 @@ if (!isset($_SESSION['admin'])) {
     exit;
 }
 
-// Default to current week's Monday to Sunday
-$defaultStart = date('Y-m-d', strtotime('monday this week'));
-$defaultEnd = date('Y-m-d', strtotime('sunday this week'));
+// Default to the current Wed–Tue pay period
+$defaultStart = payPeriodStart(date('Y-m-d'));
+$defaultEnd = payPeriodEnd(date('Y-m-d'));
 
 // Parse the 'dates' parameter
 if (isset($_GET['dates']) && strpos($_GET['dates'], ' - ') !== false) {
@@ -32,10 +33,7 @@ $employeeList = $conn->query("SELECT ID, FirstName, LastName FROM users ORDER BY
 // Build SQL query
 $sql = "
     SELECT u.FirstName, u.LastName, tp.EmployeeID, tp.Date,
-        SEC_TO_TIME(SUM(
-            TIME_TO_SEC(TIMEDIFF(tp.TimeOUT, tp.TimeIN)) - 
-            TIME_TO_SEC(TIMEDIFF(IFNULL(tp.LunchEnd, '00:00:00'), IFNULL(tp.LunchStart, '00:00:00')))
-        )) AS TotalHours
+        SUM(GREATEST(COALESCE(tp.TotalHours, 0), 0)) AS TotalHours
     FROM timepunches tp
     JOIN users u ON u.ID = tp.EmployeeID
     WHERE tp.TimeIN IS NOT NULL AND tp.TimeOUT IS NOT NULL
@@ -63,27 +61,12 @@ $stmt->bind_param($types, ...$params);
 $stmt->execute();
 $result = $stmt->get_result();
 
-// Helpers
-function hmsToDecimal($hms) {
-    list($h, $m, $s) = explode(':', $hms);
-    return round($h + ($m / 60) + ($s / 3600), 2);
-}
-function roundToNearestMinutes($decimalHours, $interval = 0) {
-    if ($interval <= 0) return $decimalHours;
-    $totalMinutes = $decimalHours * 60;
-    $roundedMinutes = round($totalMinutes / $interval) * $interval;
-    return round($roundedMinutes / 60, 2);
-}
-function decimalToHM($decimalHours) {
-    $totalMinutes = (int) round($decimalHours * 60);
-    $h = intdiv($totalMinutes, 60);
-    $m = $totalMinutes % 60;
-    return sprintf('%d:%02d', $h, $m);
-}
+// Helpers (hmsToDecimal / roundToNearestMinutes / decimalToHM) come from functions/hours.php
 
 $rows = [];
 while ($row = $result->fetch_assoc()) {
-    $decimal = hmsToDecimal($row['TotalHours']);
+    // TotalHours is now the stored decimal column (canonical), not an HH:MM:SS string
+    $decimal = (float) $row['TotalHours'];
     $rounded = roundToNearestMinutes($decimal, $rounding);
     $row['DecimalHours'] = $rounded;
     $rows[] = $row;
@@ -93,8 +76,7 @@ while ($row = $result->fetch_assoc()) {
 $employeeWeeklyHours = [];
 foreach ($rows as $row) {
     $empID = $row['EmployeeID'];
-    $date = new DateTime($row['Date']);
-    $weekStart = (clone $date)->modify('monday this week')->format('Y-m-d');
+    $weekStart = payPeriodStart($row['Date']); // Wed–Tue pay period
 
     if (!isset($employeeWeeklyHours[$empID])) {
         $employeeWeeklyHours[$empID] = [];

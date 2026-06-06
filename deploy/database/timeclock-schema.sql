@@ -74,6 +74,7 @@ CREATE TABLE `pending_edits` (
   `TimeOut` time DEFAULT NULL,
   `Note` text DEFAULT NULL,
   `Reason` text NOT NULL,
+  `Source` varchar(32) NOT NULL DEFAULT 'employee',
   `Status` enum('Pending','Approved','Rejected') DEFAULT 'Pending',
   `SubmittedAt` datetime NOT NULL,
   `ReviewedAt` datetime DEFAULT NULL,

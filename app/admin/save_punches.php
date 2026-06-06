@@ -13,26 +13,8 @@ requirePermission('edit_timesheets');
 
 date_default_timezone_set('America/Chicago');
 
-// Helper to calculate total hours
-function calculateTotalHours($clockIn, $lunchOut, $lunchIn, $clockOut) {
-    if (!$clockIn || !$clockOut) return null;
-
-    $start = strtotime($clockIn);
-    $end = strtotime($clockOut);
-    if ($end <= $start) return null;
-
-    $total = ($end - $start) / 3600;
-
-    if ($lunchOut && $lunchIn) {
-        $lStart = strtotime($lunchOut);
-        $lEnd = strtotime($lunchIn);
-        if ($lEnd > $lStart) {
-            $total -= ($lEnd - $lStart) / 3600;
-        }
-    }
-
-    return round($total, 2);
-}
+// Canonical worked-hours / period / OT helpers (single source of truth).
+require_once __DIR__ . '/../functions/hours.php';
 
 // Validate input
 if (!isset($_POST['employeeID'], $_POST['from'], $_POST['to'])) {
@@ -45,6 +27,7 @@ $from = $_POST['from'];
 $to = $_POST['to'];
 
 try {
+    $conn->begin_transaction();
     // Handle deletions first
     if (isset($_POST['delete']) && is_array($_POST['delete'])) {
         foreach ($_POST['delete'] as $punchId) {
@@ -197,12 +180,15 @@ try {
         }
     }
 
+    $conn->commit();
+
     // Success
     header("Location: view_punches.php?emp=" . urlencode($employeeID) . "&from=" . urlencode($from) . "&to=" . urlencode($to) . "&success=1&mode=edit");
     exit;
 
 } catch (Exception $e) {
     // Log or debug as needed
+    if ($conn instanceof mysqli) { @$conn->rollback(); }
     error_log("Error in save_punches.php: " . $e->getMessage());
     header("Location: view_punches.php?emp=" . urlencode($employeeID) . "&from=" . urlencode($from) . "&to=" . urlencode($to) . "&success=0&error=exception");
     exit;

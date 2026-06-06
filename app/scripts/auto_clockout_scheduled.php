@@ -13,12 +13,13 @@
  */
 
 require_once __DIR__ . '/../auth/db.php';
+require_once __DIR__ . '/../functions/hours.php'; // canonical calculateTotalHours / reconcileClockStatus
 date_default_timezone_set('America/Chicago');
 
 // Configuration
 define('AUTO_CLOCKOUT_BASE_TIME', '16:30:00');
 define('AUTO_CLOCKOUT_VARY_MINUTES', 30);
-define('AUTO_CLOCKOUT_NOTE', '*');
+define('AUTO_CLOCKOUT_NOTE', 'Auto clock-out (owner schedule)'); // changelog audit only; not shown on the punch
 define('EMPLOYEE_FIRST_NAME', 'Gareth');
 define('EMPLOYEE_LAST_NAME', 'Pereira');
 
@@ -29,34 +30,6 @@ function randomizeTime($baseTime, $maxMinutes) {
     $offset = random_int(0, $maxMinutes * 60);
     $timestamp = strtotime($baseTime) + $offset;
     return date('H:i:s', $timestamp);
-}
-
-/**
- * Calculate total hours between clock in and clock out, minus lunch time
- */
-function calculateTotalHours($clockIn, $lunchOut, $lunchIn, $clockOut) {
-    if (empty($clockIn) || empty($clockOut)) {
-        return null;
-    }
-
-    $start = strtotime($clockIn);
-    $end = strtotime($clockOut);
-
-    if ($end <= $start) {
-        return 0.0;
-    }
-
-    $totalSeconds = ($end - $start);
-
-    if (!empty($lunchOut) && !empty($lunchIn)) {
-        $lStart = strtotime($lunchOut);
-        $lEnd = strtotime($lunchIn);
-        if ($lEnd > $lStart) {
-            $totalSeconds -= ($lEnd - $lStart);
-        }
-    }
-
-    return round($totalSeconds / 3600, 2);
 }
 
 /**
@@ -148,11 +121,8 @@ function scheduledClockOut($conn) {
     $punchStmt->close();
 
     if (!$punch) {
-        echo "WARNING: No open punch record found. Updating ClockStatus only.\n";
-        $updateStatusStmt = $conn->prepare("UPDATE users SET ClockStatus = 'Out' WHERE ID = ?");
-        $updateStatusStmt->bind_param("i", $employeeID);
-        $updateStatusStmt->execute();
-        $updateStatusStmt->close();
+        echo "WARNING: No open punch record found. Reconciling ClockStatus.\n";
+        reconcileClockStatus($conn, $employeeID);
         return true;
     }
 
@@ -162,48 +132,41 @@ function scheduledClockOut($conn) {
     $lunchOut = $punch['LunchStart'];
     $lunchIn = $punch['LunchEnd'];
 
-    // Generate randomized clock-out time
+    // Generate randomized clock-out time (TIME-only — stored directly in TimeOUT)
     $clockOutTime = randomizeTime(AUTO_CLOCKOUT_BASE_TIME, AUTO_CLOCKOUT_VARY_MINUTES);
-    $clockOutDateTime = $date . ' ' . $clockOutTime;
 
-    // Calculate total hours
-    $totalHours = calculateTotalHours($clockIn, $lunchOut, $lunchIn, $clockOutDateTime);
+    // Calculate total hours via the canonical shared function
+    $totalHours = calculateTotalHours($clockIn, $lunchOut, $lunchIn, $clockOutTime);
 
     if ($totalHours === null) {
         echo "ERROR: Failed to calculate hours (invalid times)\n";
         return false;
     }
 
-    // Update the punch record
-    $updateStmt = $conn->prepare("
-        UPDATE timepunches
-        SET TimeOUT = ?,
-            TotalHours = ?
-        WHERE ID = ? AND EmployeeID = ?
-    ");
+    try {
+        $conn->begin_transaction();
 
-    $updateStmt->bind_param("sdii", $clockOutDateTime, $totalHours, $punchID, $employeeID);
-
-    if (!$updateStmt->execute()) {
-        echo "ERROR: Failed to update punch record: " . $updateStmt->error . "\n";
+        $updateStmt = $conn->prepare("
+            UPDATE timepunches
+            SET TimeOUT = ?, TotalHours = ?
+            WHERE ID = ? AND EmployeeID = ?
+        ");
+        $updateStmt->bind_param("sdii", $clockOutTime, $totalHours, $punchID, $employeeID);
+        $updateStmt->execute();
         $updateStmt->close();
+
+        // Log to changelog (audit), then reconcile the denormalized status -> 'Out'
+        logAutoClockout($conn, $employeeID, $date, $clockOutTime);
+        reconcileClockStatus($conn, $employeeID);
+
+        $conn->commit();
+    } catch (Throwable $e) {
+        @$conn->rollback();
+        echo "ERROR: " . $e->getMessage() . "\n";
         return false;
     }
-    $updateStmt->close();
 
-    // Update ClockStatus to 'Out'
-    $statusStmt = $conn->prepare("UPDATE users SET ClockStatus = 'Out' WHERE ID = ?");
-    $statusStmt->bind_param("i", $employeeID);
-
-    if (!$statusStmt->execute()) {
-        echo "WARNING: Failed to update ClockStatus: " . $statusStmt->error . "\n";
-    }
-    $statusStmt->close();
-
-    // Log to changelog
-    logAutoClockout($conn, $employeeID, $date, $clockOutDateTime);
-
-    echo "SUCCESS: Clocked out $employeeName at $clockOutDateTime with $totalHours hours\n";
+    echo "SUCCESS: Clocked out $employeeName at $clockOutTime with $totalHours hours\n";
     echo "\n[" . date('Y-m-d H:i:s') . "] Scheduled clock-out complete.\n";
 
     return true;

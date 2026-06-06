@@ -5,6 +5,7 @@ error_reporting(E_ALL);
 
 require_once '../auth/db.php';
 require_once __DIR__ . '/tcpdf/tcpdf.php';
+require_once __DIR__ . '/../functions/hours.php';
 
 $start = $_POST['start'] ?? '';
 $end = $_POST['end'] ?? '';
@@ -16,36 +17,11 @@ if (!$start || !$end) {
     exit;
 }
 
-function hmsToDecimal($hms) {
-    list($h, $m, $s) = explode(':', $hms);
-    return $h + ($m / 60) + ($s / 3600);
-}
-function roundToNearestMinutes($decimalHours, $interval = 0) {
-    if ($interval <= 0) return round($decimalHours, 2);
-    $totalMinutes = $decimalHours * 60;
-    $roundedMinutes = round($totalMinutes / $interval) * $interval;
-    return round($roundedMinutes / 60, 2);
-}
-function decimalToHM($decimalHours) {
-    $totalMinutes = (int) round($decimalHours * 60);
-    $h = intdiv($totalMinutes, 60);
-    $m = $totalMinutes % 60;
-    return sprintf('%d:%02d', $h, $m);
-}
-function weekEndingFriday($dateStr) {
-    $d = new DateTime($dateStr);
-    $dow = (int) $d->format('N');
-    $daysUntilFriday = (5 - $dow + 7) % 7;
-    $d->modify("+{$daysUntilFriday} days");
-    return $d->format('Y-m-d');
-}
+// hmsToDecimal / roundToNearestMinutes / decimalToHM / payPeriodStart come from functions/hours.php
 
 $sql = "
     SELECT u.ID AS EmpID, u.FirstName, u.LastName, tp.Date,
-        SEC_TO_TIME(SUM(
-            TIME_TO_SEC(TIMEDIFF(tp.TimeOUT, tp.TimeIN)) -
-            TIME_TO_SEC(TIMEDIFF(IFNULL(tp.LunchEnd, '00:00:00'), IFNULL(tp.LunchStart, '00:00:00')))
-        )) AS DailyHours
+        SUM(GREATEST(COALESCE(tp.TotalHours, 0), 0)) AS DailyHours
     FROM timepunches tp
     JOIN users u ON u.ID = tp.EmployeeID
     WHERE tp.TimeIN IS NOT NULL AND tp.TimeOUT IS NOT NULL
@@ -68,16 +44,16 @@ $byEmployee = [];
 while ($row = $result->fetch_assoc()) {
     $empId = (int) $row['EmpID'];
     $name = $row['FirstName'] . ' ' . $row['LastName'];
-    $weekEnd = weekEndingFriday($row['Date']);
-    $hours = roundToNearestMinutes(hmsToDecimal($row['DailyHours']), $rounding);
+    $weekStart = payPeriodStart($row['Date']); // Wed–Tue pay period
+    $hours = roundToNearestMinutes((float) $row['DailyHours'], $rounding);
 
     if (!isset($byEmployee[$empId])) {
         $byEmployee[$empId] = ['name' => $name, 'weeks' => []];
     }
-    if (!isset($byEmployee[$empId]['weeks'][$weekEnd])) {
-        $byEmployee[$empId]['weeks'][$weekEnd] = 0;
+    if (!isset($byEmployee[$empId]['weeks'][$weekStart])) {
+        $byEmployee[$empId]['weeks'][$weekStart] = 0;
     }
-    $byEmployee[$empId]['weeks'][$weekEnd] += $hours;
+    $byEmployee[$empId]['weeks'][$weekStart] += $hours;
 }
 
 foreach ($byEmployee as $empId => &$data) {
@@ -122,23 +98,23 @@ if (empty($byEmployee)) {
         $html = '<h2 style="text-align:center; color:#0078D7;">Overtime Report</h2>';
         $html .= "<p><strong>Employee:</strong> {$name}<br>";
         $html .= "<strong>Date Range:</strong> {$rangeLabelHeader}<br>";
-        $html .= "<em>Weeks end Friday. Overtime = hours over 40 per week. Hours counted only for days within the period.</em></p>";
+        $html .= "<em>Pay periods run Wednesday–Tuesday. Overtime = hours over 40 per pay period. Hours counted only for days within the range.</em></p>";
 
         $html .= '<table border="1" cellpadding="5" cellspacing="0" style="width:100%; border-collapse: collapse;">
                     <thead style="background-color: #e6f0ff;">
                         <tr>
-                            <th><b>Week Ending</b></th>
+                            <th><b>Pay Period (Wed start)</b></th>
                             <th><b>Total Hours</b></th>
                             <th><b>Overtime</b></th>
                         </tr>
                     </thead>
                     <tbody>';
 
-        foreach ($data['weeks'] as $weekEnd => $hours) {
+        foreach ($data['weeks'] as $weekStart => $hours) {
             $ot = max(0, $hours - 40);
             $rowBg = $ot > 0 ? "style='background-color:#fff3cd;'" : '';
             $html .= "<tr $rowBg>
-                        <td>" . date('m/d/Y', strtotime($weekEnd)) . "</td>
+                        <td>" . date('m/d/Y', strtotime($weekStart)) . "</td>
                         <td style='text-align:right;'>" . decimalToHM($hours) . "</td>
                         <td style='text-align:right;'>" . decimalToHM($ot) . "</td>
                       </tr>";

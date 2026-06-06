@@ -11,12 +11,13 @@
  */
 
 require_once __DIR__ . '/../auth/db.php';
+require_once __DIR__ . '/../functions/hours.php'; // reconcileClockStatus
 date_default_timezone_set('America/Chicago');
 
 // Configuration
 define('AUTO_CLOCKIN_BASE_TIME', '06:50:00');
 define('AUTO_CLOCKIN_VARY_MINUTES', 20);
-define('AUTO_CLOCKIN_NOTE', '*');
+define('AUTO_CLOCKIN_REASON', 'Auto clock-in (owner schedule)'); // changelog audit only; no note on the punch
 define('EMPLOYEE_FIRST_NAME', 'Gareth');
 define('EMPLOYEE_LAST_NAME', 'Pereira');
 
@@ -43,7 +44,7 @@ function logAutoClockIn($conn, $employeeID, $date, $clockInTime) {
     $field = 'TimeIN';
     $oldValue = 'NULL';
     $newValue = date('H:i:s', strtotime($clockInTime));
-    $reason = AUTO_CLOCKIN_NOTE;
+    $reason = AUTO_CLOCKIN_REASON;
 
     $stmt->bind_param("issssss", $employeeID, $date, $changedBy, $field, $oldValue, $newValue, $reason);
     $result = $stmt->execute();
@@ -114,39 +115,33 @@ function autoClockInEmployee($conn) {
         return true;
     }
 
-    // Create the clock-in datetime with randomization
+    // Create the clock-in time with randomization (TIME-only — no date component, no '*' note)
     $clockInTime = randomizeTime(AUTO_CLOCKIN_BASE_TIME, AUTO_CLOCKIN_VARY_MINUTES);
-    $clockInDateTime = $today . ' ' . $clockInTime;
 
-    // Insert new punch record
-    $insertStmt = $conn->prepare("
-        INSERT INTO timepunches (EmployeeID, Date, TimeIN, Note)
-        VALUES (?, ?, ?, ?)
-    ");
+    try {
+        $conn->begin_transaction();
 
-    $note = AUTO_CLOCKIN_NOTE;
-    $insertStmt->bind_param("isss", $employeeID, $today, $clockInDateTime, $note);
-
-    if (!$insertStmt->execute()) {
-        echo "ERROR: Failed to create punch record: " . $insertStmt->error . "\n";
+        // Insert new punch record (no Note — the owner's auto punch is unmarked)
+        $insertStmt = $conn->prepare("
+            INSERT INTO timepunches (EmployeeID, Date, TimeIN)
+            VALUES (?, ?, ?)
+        ");
+        $insertStmt->bind_param("iss", $employeeID, $today, $clockInTime);
+        $insertStmt->execute();
         $insertStmt->close();
+
+        // Log to changelog (audit), then reconcile the denormalized status -> 'In'
+        logAutoClockIn($conn, $employeeID, $today, $clockInTime);
+        reconcileClockStatus($conn, $employeeID);
+
+        $conn->commit();
+    } catch (Throwable $e) {
+        @$conn->rollback();
+        echo "ERROR: Failed to create punch record: " . $e->getMessage() . "\n";
         return false;
     }
-    $insertStmt->close();
 
-    // Update ClockStatus to 'In'
-    $statusStmt = $conn->prepare("UPDATE users SET ClockStatus = 'In' WHERE ID = ?");
-    $statusStmt->bind_param("i", $employeeID);
-
-    if (!$statusStmt->execute()) {
-        echo "WARNING: Failed to update ClockStatus: " . $statusStmt->error . "\n";
-    }
-    $statusStmt->close();
-
-    // Log to changelog for audit trail
-    logAutoClockIn($conn, $employeeID, $today, $clockInDateTime);
-
-    echo "SUCCESS: Clocked in $employeeName at $clockInDateTime\n";
+    echo "SUCCESS: Clocked in $employeeName at $clockInTime\n";
     echo "\n[" . date('Y-m-d H:i:s') . "] Auto clock-in complete.\n";
 
     return true;

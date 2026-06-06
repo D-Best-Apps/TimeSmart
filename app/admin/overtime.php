@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../auth/db.php';
+require_once __DIR__ . '/../functions/hours.php';
 
 if (!isset($_SESSION['admin'])) {
     header("Location: login.php");
@@ -25,39 +26,12 @@ $rounding = isset($_GET['rounding']) ? (int)$_GET['rounding'] : 0;
 
 $employeeList = $conn->query("SELECT ID, FirstName, LastName FROM users ORDER BY LastName");
 
-// Helpers
-function hmsToDecimal($hms) {
-    list($h, $m, $s) = explode(':', $hms);
-    return $h + ($m / 60) + ($s / 3600);
-}
-function roundToNearestMinutes($decimalHours, $interval = 0) {
-    if ($interval <= 0) return round($decimalHours, 2);
-    $totalMinutes = $decimalHours * 60;
-    $roundedMinutes = round($totalMinutes / $interval) * $interval;
-    return round($roundedMinutes / 60, 2);
-}
-function decimalToHM($decimalHours) {
-    $totalMinutes = (int) round($decimalHours * 60);
-    $h = intdiv($totalMinutes, 60);
-    $m = $totalMinutes % 60;
-    return sprintf('%d:%02d', $h, $m);
-}
-// Week ending Friday for a given date (Y-m-d). Friday=5 in date('N').
-function weekEndingFriday($dateStr) {
-    $d = new DateTime($dateStr);
-    $dow = (int) $d->format('N');
-    $daysUntilFriday = (5 - $dow + 7) % 7;
-    $d->modify("+{$daysUntilFriday} days");
-    return $d->format('Y-m-d');
-}
+// Helpers (hmsToDecimal / roundToNearestMinutes / decimalToHM / payPeriodStart) come from functions/hours.php
 
-// Fetch per-day totals within the selected period only
+// Fetch per-day totals within the selected period only (read the canonical stored column)
 $sql = "
     SELECT u.ID AS EmpID, u.FirstName, u.LastName, tp.Date,
-        SEC_TO_TIME(SUM(
-            TIME_TO_SEC(TIMEDIFF(tp.TimeOUT, tp.TimeIN)) -
-            TIME_TO_SEC(TIMEDIFF(IFNULL(tp.LunchEnd, '00:00:00'), IFNULL(tp.LunchStart, '00:00:00')))
-        )) AS DailyHours
+        SUM(GREATEST(COALESCE(tp.TotalHours, 0), 0)) AS DailyHours
     FROM timepunches tp
     JOIN users u ON u.ID = tp.EmployeeID
     WHERE tp.TimeIN IS NOT NULL AND tp.TimeOUT IS NOT NULL
@@ -86,16 +60,16 @@ $byEmployee = [];
 while ($row = $result->fetch_assoc()) {
     $empId = (int) $row['EmpID'];
     $name = $row['FirstName'] . ' ' . $row['LastName'];
-    $weekEnd = weekEndingFriday($row['Date']);
-    $hours = roundToNearestMinutes(hmsToDecimal($row['DailyHours']), $rounding);
+    $weekStart = payPeriodStart($row['Date']); // Wed–Tue pay period
+    $hours = roundToNearestMinutes((float) $row['DailyHours'], $rounding);
 
     if (!isset($byEmployee[$empId])) {
         $byEmployee[$empId] = ['name' => $name, 'weeks' => []];
     }
-    if (!isset($byEmployee[$empId]['weeks'][$weekEnd])) {
-        $byEmployee[$empId]['weeks'][$weekEnd] = 0;
+    if (!isset($byEmployee[$empId]['weeks'][$weekStart])) {
+        $byEmployee[$empId]['weeks'][$weekStart] = 0;
     }
-    $byEmployee[$empId]['weeks'][$weekEnd] += $hours;
+    $byEmployee[$empId]['weeks'][$weekStart] += $hours;
 }
 
 // Compute OT, period totals
@@ -171,13 +145,13 @@ require_once 'header.php';
 
         <h2>Overtime Report (<?= date('m/d/Y', strtotime($startDate)) ?> to <?= date('m/d/Y', strtotime($endDate)) ?>)</h2>
         <p style="color:#555; font-size:0.9em; margin-top:-10px;">
-            Weeks end Friday. Overtime = hours over 40 per week. Hours are counted only for days within the selected period.
+            Pay periods run Wednesday–Tuesday. Overtime = hours over 40 per pay period. Hours are counted only for days within the selected range.
         </p>
         <table>
             <thead>
                 <tr>
                     <th>Employee</th>
-                    <th>Week Ending</th>
+                    <th>Pay Period (Wed start)</th>
                     <th>Total Hours</th>
                     <th>Overtime</th>
                 </tr>
@@ -192,11 +166,11 @@ require_once 'header.php';
                         <tr class="employee-spacer"><td colspan="4" style="height:18px; border-left:none; border-right:none; background-color:#fafafa;"></td></tr>
                     <?php endif; ?>
                     <?php $isFirstEmployee = false; ?>
-                    <?php foreach ($data['weeks'] as $weekEnd => $hours): ?>
+                    <?php foreach ($data['weeks'] as $weekStart => $hours): ?>
                         <?php $ot = max(0, $hours - 40); ?>
                         <tr<?= $ot > 0 ? ' style="background-color:#fff3cd;"' : '' ?>>
                             <td><?= htmlspecialchars($data['name']) ?></td>
-                            <td><?= date('m/d/Y', strtotime($weekEnd)) ?></td>
+                            <td><?= date('m/d/Y', strtotime($weekStart)) ?></td>
                             <td><?= decimalToHM($hours) ?></td>
                             <td><?= decimalToHM($ot) ?></td>
                         </tr>

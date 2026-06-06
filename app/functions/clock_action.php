@@ -177,32 +177,9 @@ function setClockStatus($conn, $empID, $status) {
     $stmt->close();
 }
 
-/**
- * Calculates total work hours, excluding lunch.
- * @param string|null $clockIn
- * @param string|null $lunchOut
- * @param string|null $lunchIn
- * @param string|null $clockOut
- * @return float|null
- */
-function calculateTotalHours($clockIn, $lunchOut, $lunchIn, $clockOut) {
-    if (empty($clockIn) || empty($clockOut)) { return null; }
-    
-    $start = strtotime($clockIn);
-    $end = strtotime($clockOut);
-    if ($end <= $start) { return 0.0; } // Return 0 if end time is before start time
-
-    $totalSeconds = ($end - $start);
-
-    if (!empty($lunchOut) && !empty($lunchIn)) {
-        $lStart = strtotime($lunchOut);
-        $lEnd = strtotime($lunchIn);
-        if ($lEnd > $lStart) {
-            $totalSeconds -= ($lEnd - $lStart);
-        }
-    }
-    return round($totalSeconds / 3600, 2);
-}
+// Worked-hours math comes from the single canonical source of truth so the
+// punch screens, admin edits, and every report compute hours identically.
+require_once __DIR__ . '/hours.php'; // calculateTotalHours(), reconcileClockStatus(), etc.
 
 /**
  * Logs a pending edit when a punch time is adjusted.

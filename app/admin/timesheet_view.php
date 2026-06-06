@@ -3,7 +3,8 @@ error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
 // Include necessary files (e.g., database connection)
-include_once '../auth/db.php'; 
+include_once '../auth/db.php';
+require_once __DIR__ . '/../functions/hours.php';
 
 // Get parameters from URL
 $employeeID = isset($_GET['emp']) ? $_GET['emp'] : null;
@@ -38,23 +39,10 @@ if (!$employeeID || !$from || !$to) {
     exit();
 }
 
+// Per-punch display total — delegates to the canonical calculation (functions/hours.php)
+// so the displayed value matches what gets stored on save and shown in every report.
 function calculatePunchTotalHours($timeIn, $lunchStart, $lunchEnd, $timeOut) {
-    $totalMinutes = 0;
-
-    $in = $timeIn ? strtotime($timeIn) : null;
-    $out = $timeOut ? strtotime($timeOut) : null;
-    $ls = $lunchStart ? strtotime($lunchStart) : null;
-    $le = $lunchEnd ? strtotime($lunchEnd) : null;
-
-    if ($in && $out) {
-        $totalMinutes = ($out - $in) / 60; // Difference in minutes
-        if ($ls && $le) {
-            $lunchDuration = ($le - $ls) / 60;
-            $totalMinutes -= $lunchDuration;
-        }
-    }
-    $hours = $totalMinutes / 60;
-    return number_format($hours, 2); // Convert to hours and format
+    return number_format(calculateTotalHours($timeIn, $lunchStart, $lunchEnd, $timeOut) ?? 0, 2);
 }
 
         $totalWeeklyHours = 0;

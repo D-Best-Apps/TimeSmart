@@ -16,13 +16,22 @@ requirePermission('approve_edits');
 // Whether this admin may see/write admin-only private notes
 $canViewPrivate = canViewPrivateNotes($conn);
 
-// Fetch all pending edits with user info
-$stmt = $conn->prepare("SELECT pe.*, u.FirstName, u.LastName FROM pending_edits pe 
-                        JOIN users u ON pe.EmployeeID = u.ID 
-                        WHERE pe.Status = 'Pending' 
+// Fetch employee-requested pending edits (exclude system forced-outs, shown separately below)
+$stmt = $conn->prepare("SELECT pe.*, u.FirstName, u.LastName FROM pending_edits pe
+                        JOIN users u ON pe.EmployeeID = u.ID
+                        WHERE pe.Status = 'Pending' AND pe.Source <> 'auto_clockout'
                         ORDER BY pe.SubmittedAt DESC");
 $stmt->execute();
 $result = $stmt->get_result();
+
+// System forced-outs / incomplete punches needing review (auto_clockout).
+// These are surfaced as-is (not diffed against the punch, which is already updated).
+$forcedStmt = $conn->prepare("SELECT pe.*, u.FirstName, u.LastName FROM pending_edits pe
+                              JOIN users u ON pe.EmployeeID = u.ID
+                              WHERE pe.Status = 'Pending' AND pe.Source = 'auto_clockout'
+                              ORDER BY pe.Date DESC, pe.SubmittedAt DESC");
+$forcedStmt->execute();
+$forcedOuts = $forcedStmt->get_result()->fetch_all(MYSQLI_ASSOC);
 
 $edits = [];
 while ($row = $result->fetch_assoc()) {
@@ -177,6 +186,42 @@ require_once 'header.php';
                             <td class="action-buttons">
                                 <button type="submit" class="approve-btn" name="action[<?= $edit['ID'] ?>][<?= $edit['Field'] ?>]" value="approve">Approve</button>
                                 <button type="submit" class="reject-btn" name="action[<?= $edit['ID'] ?>][<?= $edit['Field'] ?>]" value="reject">Reject</button>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+            </div>
+        </form>
+    <?php endif; ?>
+
+    <h2 style="margin-top:2rem;">System Forced-Outs / Incomplete Punches</h2>
+    <?php if (count($forcedOuts) === 0): ?>
+        <p class="no-edits">✅ No system forced-outs awaiting review.</p>
+    <?php else: ?>
+        <p style="color:#555; font-size:0.9em;">These punches were auto-closed at 5:00 PM because the employee never clocked out. Review and Approve (accept the recorded time) or Reject (you'll fix the punch manually). Incomplete punches (e.g. open lunch) have no hours and need a manual time entry.</p>
+        <form method="POST" action="process_edits.php">
+            <div class="table-scroll">
+            <table class="approval-table">
+                <thead>
+                    <tr>
+                        <th>Employee</th>
+                        <th>Date</th>
+                        <th>Recorded Clock-Out</th>
+                        <th>Reason</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($forcedOuts as $fo): ?>
+                        <tr>
+                            <td><?= htmlspecialchars($fo['FirstName'] . ' ' . $fo['LastName']) ?></td>
+                            <td><?= htmlspecialchars($fo['Date']) ?></td>
+                            <td><?= $fo['TimeOut'] ? htmlspecialchars(date('g:i a', strtotime($fo['TimeOut']))) : '—' ?></td>
+                            <td class="note-box"><?= htmlspecialchars($fo['Reason']) ?></td>
+                            <td class="action-buttons">
+                                <button type="submit" class="approve-btn" name="action[<?= (int) $fo['ID'] ?>][__forced]" value="approve">Approve</button>
+                                <button type="submit" class="reject-btn" name="action[<?= (int) $fo['ID'] ?>][__forced]" value="reject">Reject</button>
                             </td>
                         </tr>
                     <?php endforeach; ?>

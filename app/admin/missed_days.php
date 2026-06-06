@@ -1,4 +1,6 @@
 <?php
+require_once __DIR__ . '/../functions/hours.php'; // payPeriodStart/End, generatePayPeriods, helpers
+
 // Default to current month
 $defaultStart = date('Y-m-d', strtotime('first day of this month'));
 $defaultEnd = date('Y-m-d', strtotime('last day of this month'));
@@ -15,58 +17,7 @@ if (isset($_GET['dates']) && strpos($_GET['dates'], ' - ') !== false) {
 
 $employeeID = (isset($_GET['emp']) && is_numeric($_GET['emp'])) ? (int)$_GET['emp'] : '';
 
-// Helper function to convert HH:MM:SS to decimal hours
-function hmsToDecimal($hms) {
-    if (empty($hms)) return 0;
-    list($h, $m, $s) = explode(':', $hms);
-    return round($h + ($m / 60) + ($s / 3600), 2);
-}
-
-// Helper function to get pay period start (Wednesday) for a given date
-function getPayPeriodStart($date) {
-    $dt = new DateTime($date);
-    $dayOfWeek = (int)$dt->format('w');
-
-    if ($dayOfWeek >= 3) {
-        $dt->modify('wednesday this week');
-    } else {
-        $dt->modify('wednesday last week');
-    }
-
-    return $dt->format('Y-m-d');
-}
-
-// Helper function to get pay period end (Tuesday) for a given start date
-function getPayPeriodEnd($startDate) {
-    $dt = new DateTime($startDate);
-    $dt->modify('+6 days');
-    return $dt->format('Y-m-d');
-}
-
-// Generate all complete pay periods in the date range
-function generatePayPeriods($startDate, $endDate) {
-    $periods = [];
-    $today = date('Y-m-d');
-    
-    $currentPeriodStart = getPayPeriodStart($startDate);
-    
-    while ($currentPeriodStart <= $endDate) {
-        $currentPeriodEnd = getPayPeriodEnd($currentPeriodStart);
-        
-        if ($currentPeriodEnd <= $today) {
-            $periods[] = [
-                'start' => $currentPeriodStart,
-                'end' => $currentPeriodEnd
-            ];
-        }
-        
-        $dt = new DateTime($currentPeriodStart);
-        $dt->modify('+7 days');
-        $currentPeriodStart = $dt->format('Y-m-d');
-    }
-    
-    return $periods;
-}
+// Pay-period helpers (getPayPeriodStart/End, generatePayPeriods) come from functions/hours.php
 
 $pageTitle = "Missed Days Report";
 $extraCSS = ["https://cdn.jsdelivr.net/npm/litepicker/dist/css/litepicker.css", "../css/summary.css"];
@@ -106,25 +57,21 @@ foreach ($employeeListData as $emp) {
         $periodEnd = $period['end'];
         
         $sql = "
-            SELECT 
-                SEC_TO_TIME(SUM(
-                    TIME_TO_SEC(TIMEDIFF(tp.TimeOUT, tp.TimeIN)) -
-                    TIME_TO_SEC(TIMEDIFF(IFNULL(tp.LunchEnd, '00:00:00'), IFNULL(tp.LunchStart, '00:00:00')))
-                )) AS TotalHours
+            SELECT SUM(GREATEST(COALESCE(tp.TotalHours, 0), 0)) AS TotalHours
             FROM timepunches tp
             WHERE tp.EmployeeID = ?
-              AND tp.TimeIN IS NOT NULL 
+              AND tp.TimeIN IS NOT NULL
               AND tp.TimeOUT IS NOT NULL
               AND tp.Date BETWEEN ? AND ?
         ";
-        
+
         $stmt = $conn->prepare($sql);
         $stmt->bind_param("iss", $empID, $periodStart, $periodEnd);
         $stmt->execute();
         $result = $stmt->get_result();
         $row = $result->fetch_assoc();
-        
-        $hoursWorked = $row['TotalHours'] ? hmsToDecimal($row['TotalHours']) : 0;
+
+        $hoursWorked = (float) ($row['TotalHours'] ?? 0);
         $daysWorked = floor($hoursWorked / 8);
         $missedDays = max(0, 5 - $daysWorked);
         

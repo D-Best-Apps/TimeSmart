@@ -4,9 +4,11 @@
  * Accessible to reports_only role (requires view_reports permission)
  */
 
-// Default to current week's Monday to Sunday
-$defaultStart = date('Y-m-d', strtotime('monday this week'));
-$defaultEnd = date('Y-m-d', strtotime('sunday this week'));
+require_once __DIR__ . '/../functions/hours.php';
+
+// Default to the current Wed–Tue pay period
+$defaultStart = payPeriodStart(date('Y-m-d'));
+$defaultEnd = payPeriodEnd(date('Y-m-d'));
 
 // Parse the 'dates' parameter
 if (isset($_GET['dates']) && strpos($_GET['dates'], ' - ') !== false) {

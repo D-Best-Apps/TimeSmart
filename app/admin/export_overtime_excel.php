@@ -1,6 +1,7 @@
 <?php
 require_once '../auth/db.php';
 require_once '../vendor/autoload.php';
+require_once __DIR__ . '/../functions/hours.php';
 
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -18,36 +19,11 @@ if (!$startDate || !$endDate) {
     exit;
 }
 
-function hmsToDecimal($hms) {
-    list($h, $m, $s) = explode(':', $hms);
-    return $h + ($m / 60) + ($s / 3600);
-}
-function roundToNearestMinutes($decimalHours, $interval = 0) {
-    if ($interval <= 0) return round($decimalHours, 2);
-    $totalMinutes = $decimalHours * 60;
-    $roundedMinutes = round($totalMinutes / $interval) * $interval;
-    return round($roundedMinutes / 60, 2);
-}
-function decimalToHM($decimalHours) {
-    $totalMinutes = (int) round($decimalHours * 60);
-    $h = intdiv($totalMinutes, 60);
-    $m = $totalMinutes % 60;
-    return sprintf('%d:%02d', $h, $m);
-}
-function weekEndingFriday($dateStr) {
-    $d = new DateTime($dateStr);
-    $dow = (int) $d->format('N');
-    $daysUntilFriday = (5 - $dow + 7) % 7;
-    $d->modify("+{$daysUntilFriday} days");
-    return $d->format('Y-m-d');
-}
+// hmsToDecimal / roundToNearestMinutes / decimalToHM / payPeriodStart come from functions/hours.php
 
 $sql = "
     SELECT u.ID AS EmpID, u.FirstName, u.LastName, tp.Date,
-        SEC_TO_TIME(SUM(
-            TIME_TO_SEC(TIMEDIFF(tp.TimeOUT, tp.TimeIN)) -
-            TIME_TO_SEC(TIMEDIFF(IFNULL(tp.LunchEnd, '00:00:00'), IFNULL(tp.LunchStart, '00:00:00')))
-        )) AS DailyHours
+        SUM(GREATEST(COALESCE(tp.TotalHours, 0), 0)) AS DailyHours
     FROM timepunches tp
     JOIN users u ON u.ID = tp.EmployeeID
     WHERE tp.TimeIN IS NOT NULL AND tp.TimeOUT IS NOT NULL
@@ -70,16 +46,16 @@ $byEmployee = [];
 while ($row = $result->fetch_assoc()) {
     $empId = (int) $row['EmpID'];
     $name = $row['FirstName'] . ' ' . $row['LastName'];
-    $weekEnd = weekEndingFriday($row['Date']);
-    $hours = roundToNearestMinutes(hmsToDecimal($row['DailyHours']), $rounding);
+    $weekStart = payPeriodStart($row['Date']); // Wed–Tue pay period
+    $hours = roundToNearestMinutes((float) $row['DailyHours'], $rounding);
 
     if (!isset($byEmployee[$empId])) {
         $byEmployee[$empId] = ['name' => $name, 'weeks' => []];
     }
-    if (!isset($byEmployee[$empId]['weeks'][$weekEnd])) {
-        $byEmployee[$empId]['weeks'][$weekEnd] = 0;
+    if (!isset($byEmployee[$empId]['weeks'][$weekStart])) {
+        $byEmployee[$empId]['weeks'][$weekStart] = 0;
     }
-    $byEmployee[$empId]['weeks'][$weekEnd] += $hours;
+    $byEmployee[$empId]['weeks'][$weekStart] += $hours;
 }
 
 foreach ($byEmployee as $empId => &$data) {
@@ -104,7 +80,7 @@ $spreadsheet = new Spreadsheet();
 $sheet = $spreadsheet->getActiveSheet();
 $sheet->setTitle('Overtime');
 
-$headers = ['Employee', 'Week Ending', 'Total Hours', 'Total (H:MM)', 'Overtime', 'OT (H:MM)'];
+$headers = ['Employee', 'Pay Period (Wed start)', 'Total Hours', 'Total (H:MM)', 'Overtime', 'OT (H:MM)'];
 $sheet->fromArray($headers, null, 'A1');
 $sheet->getStyle('A1:F1')->applyFromArray([
     'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '0078D7']],
@@ -117,10 +93,10 @@ foreach (range('A', 'F') as $col) {
 
 $rowNum = 2;
 foreach ($byEmployee as $data) {
-    foreach ($data['weeks'] as $weekEnd => $hours) {
+    foreach ($data['weeks'] as $weekStart => $hours) {
         $ot = max(0, $hours - 40);
         $sheet->setCellValue("A{$rowNum}", $data['name']);
-        $sheet->setCellValue("B{$rowNum}", date('m/d/Y', strtotime($weekEnd)));
+        $sheet->setCellValue("B{$rowNum}", date('m/d/Y', strtotime($weekStart)));
         $sheet->setCellValue("C{$rowNum}", $hours);
         $sheet->setCellValueExplicit("D{$rowNum}", decimalToHM($hours), DataType::TYPE_STRING);
         $sheet->setCellValue("E{$rowNum}", $ot);

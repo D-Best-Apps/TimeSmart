@@ -3,6 +3,8 @@
 // Used by the summary report (HTML + PDF), per-employee detail pages, and the
 // employee timesheet view to surface approved Sick/PTO hours within a date range.
 
+require_once __DIR__ . '/hours.php'; // canonical payPeriodStart/End + read-stored-hours conventions
+
 /**
  * Compute hours for a single approved time-off request, intersected with [periodStart, periodEnd].
  * Full-day requests count as $defaultDayHours per day (default 8).
@@ -83,16 +85,16 @@ function timeOffTotalsByEmployee(mysqli $conn, string $periodStart, string $peri
 }
 
 /**
- * For each Mon–Sun week overlapping [periodStart, periodEnd], compute how many
+ * For each Wed–Tue pay period overlapping [periodStart, periodEnd], compute how many
  * hours of time-off would need to be trimmed to keep the weekly total at 40
  * or under. This is the bookkeeper's "adjust this down" signal on the summary
  * report — it directly answers "how much PTO/Sick do I need to cut?"
  *
- * For each week: allowable_TO = max(0, 40 - clocked); excess = max(0, TO - allowable).
+ * For each period: allowable_TO = max(0, 40 - clocked); excess = max(0, TO - allowable).
  * If clocked is already at/over 40 from work, the entire TO is excess (because
  * TO can't legitimately push past 40).
  *
- * Returns weeks where excess > 0:
+ * Returns periods where excess > 0:
  *   [['weekStart' => 'YYYY-MM-DD', 'clocked' => float, 'timeOff' => float, 'excess' => float], ...]
  */
 function weeklyTimeOffExcess(mysqli $conn, int $empID, string $periodStart, string $periodEnd, int $defaultDayHours = 8): array {
@@ -101,28 +103,21 @@ function weeklyTimeOffExcess(mysqli $conn, int $empID, string $periodStart, stri
     $cursor = new DateTime($periodStart);
     $endDt  = new DateTime($periodEnd);
     while ($cursor <= $endDt) {
-        $ws = (clone $cursor)->modify('monday this week');
-        $we = (clone $ws)->modify('+6 days');
-        $wsStr = $ws->format('Y-m-d');
+        $wsStr = payPeriodStart($cursor->format('Y-m-d')); // Wed–Tue pay period
+        $weStr = payPeriodEnd($cursor->format('Y-m-d'));
         if (isset($seen[$wsStr])) { $cursor->modify('+7 days'); continue; }
         $seen[$wsStr] = true;
-        $weStr = $we->format('Y-m-d');
 
-        // Clocked hours that week
+        // Clocked hours that period (canonical stored column)
         $stmt = $conn->prepare("
-            SELECT COALESCE(SEC_TO_TIME(SUM(
-                       TIME_TO_SEC(TIMEDIFF(TimeOut, TimeIN))
-                     - TIME_TO_SEC(TIMEDIFF(IFNULL(LunchEnd,'00:00:00'), IFNULL(LunchStart,'00:00:00')))
-                   )), '00:00:00') AS Hms
+            SELECT COALESCE(SUM(GREATEST(COALESCE(TotalHours, 0), 0)), 0) AS Total
               FROM timepunches
              WHERE EmployeeID = ? AND TimeIN IS NOT NULL AND TimeOut IS NOT NULL
                AND Date BETWEEN ? AND ?
         ");
         $stmt->bind_param("iss", $empID, $wsStr, $weStr);
         $stmt->execute();
-        $hms = $stmt->get_result()->fetch_assoc()['Hms'] ?? '00:00:00';
-        $p = explode(':', $hms);
-        $clocked = $p[0] + ($p[1] / 60) + ($p[2] / 3600);
+        $clocked = (float) ($stmt->get_result()->fetch_assoc()['Total'] ?? 0);
 
         // Approved time-off that week
         $rows = fetchApprovedTimeOff($conn, $wsStr, $weStr, $empID);
@@ -186,39 +181,32 @@ function projectedWeeklyHours(
         'EndTime'   => $reqEndTime   ?: null,
     ];
 
-    // Determine the set of Mon–Sun weeks the request spans
+    // Determine the set of Wed–Tue pay periods the request spans
     $weeks = [];
     $d = new DateTime($reqStartDate);
     $end = new DateTime($reqEndDate);
     while ($d <= $end) {
-        $weekStart = (clone $d)->modify('monday this week');
-        $weekEnd   = (clone $weekStart)->modify('+6 days');
-        $key = $weekStart->format('Y-m-d');
+        $key = payPeriodStart($d->format('Y-m-d'));
         if (!isset($weeks[$key])) {
             $weeks[$key] = [
-                'weekStart' => $weekStart->format('Y-m-d'),
-                'weekEnd'   => $weekEnd->format('Y-m-d'),
+                'weekStart' => $key,
+                'weekEnd'   => payPeriodEnd($d->format('Y-m-d')),
             ];
         }
         $d->modify('+1 day');
     }
 
     foreach ($weeks as &$w) {
-        // 1. Clocked hours that week
+        // 1. Clocked hours that period (canonical stored column)
         $stmt = $conn->prepare("
-            SELECT COALESCE(SEC_TO_TIME(SUM(
-                       TIME_TO_SEC(TIMEDIFF(TimeOut, TimeIN))
-                     - TIME_TO_SEC(TIMEDIFF(IFNULL(LunchEnd,'00:00:00'), IFNULL(LunchStart,'00:00:00')))
-                   )), '00:00:00') AS Hms
+            SELECT COALESCE(SUM(GREATEST(COALESCE(TotalHours, 0), 0)), 0) AS Total
               FROM timepunches
              WHERE EmployeeID = ? AND TimeIN IS NOT NULL AND TimeOut IS NOT NULL
                AND Date BETWEEN ? AND ?
         ");
         $stmt->bind_param("iss", $empID, $w['weekStart'], $w['weekEnd']);
         $stmt->execute();
-        $hms = $stmt->get_result()->fetch_assoc()['Hms'] ?? '00:00:00';
-        $parts = explode(':', $hms);
-        $w['clocked'] = $parts[0] + ($parts[1] / 60) + ($parts[2] / 3600);
+        $w['clocked'] = (float) ($stmt->get_result()->fetch_assoc()['Total'] ?? 0);
 
         // 2. Prior approved Sick/PTO that week (excluding $excludeRequestID if given)
         $sql = "

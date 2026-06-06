@@ -5,6 +5,7 @@ error_reporting(E_ALL);
 
 require_once '../auth/db.php';
 require_once __DIR__ . '/tcpdf/tcpdf.php';
+require_once __DIR__ . '/../functions/hours.php';
 require_once __DIR__ . '/../functions/time_off_hours.php';
 
 $start = $_POST['start'] ?? '';
@@ -18,21 +19,7 @@ if (!$start || !$end) {
     exit;
 }
 
-function hmsToDecimal($time, $rounding = 0) {
-    list($h, $m, $s) = explode(':', $time);
-    $minutes = $h * 60 + $m + ($s / 60);
-    if ($rounding > 0) {
-        $minutes = round($minutes / $rounding) * $rounding;
-    }
-    return round($minutes / 60, 2);
-}
-
-function decimalToHM($decimalHours) {
-    $totalMinutes = (int) round($decimalHours * 60);
-    $h = intdiv($totalMinutes, 60);
-    $m = $totalMinutes % 60;
-    return sprintf('%d:%02d', $h, $m);
-}
+// decimalToHM() + roundToNearestMinutes() come from functions/hours.php
 
 function fmtTime($t) {
     if (!$t || $t === '00:00:00') return '&mdash;';
@@ -43,10 +30,7 @@ function fmtTime($t) {
 $sql = "
     SELECT u.FirstName, u.LastName, tp.EmployeeID, tp.Date,
            tp.TimeIN, tp.TimeOUT, tp.LunchStart, tp.LunchEnd,
-           SEC_TO_TIME(
-               TIME_TO_SEC(TIMEDIFF(tp.TimeOUT, tp.TimeIN)) -
-               TIME_TO_SEC(TIMEDIFF(IFNULL(tp.LunchEnd, '00:00:00'), IFNULL(tp.LunchStart, '00:00:00')))
-           ) AS TotalHours
+           GREATEST(COALESCE(tp.TotalHours, 0), 0) AS TotalHours
     FROM timepunches tp
     JOIN users u ON u.ID = tp.EmployeeID
     WHERE tp.TimeIN IS NOT NULL AND tp.TimeOUT IS NOT NULL
@@ -69,7 +53,7 @@ $result = $stmt->get_result();
 $grouped = [];
 while ($row = $result->fetch_assoc()) {
     $eid = (int) $row['EmployeeID'];
-    $row['RoundedHours'] = hmsToDecimal($row['TotalHours'], $rounding);
+    $row['RoundedHours'] = roundToNearestMinutes((float) $row['TotalHours'], $rounding);
     if (!isset($grouped[$eid])) {
         $grouped[$eid] = ['name' => $row['FirstName'] . ' ' . $row['LastName'], 'rows' => []];
     }
@@ -82,8 +66,7 @@ $perEmpOT = [];
 foreach ($grouped as $eid => $data) {
     $weekTotals = [];
     foreach ($data['rows'] as $r) {
-        $d = new DateTime($r['Date']);
-        $weekStart = (clone $d)->modify('monday this week')->format('Y-m-d');
+        $weekStart = payPeriodStart($r['Date']); // Wed–Tue pay period
         $weekTotals[$weekStart] = ($weekTotals[$weekStart] ?? 0) + $r['RoundedHours'];
     }
     $clocked = 0; $ot = 0;

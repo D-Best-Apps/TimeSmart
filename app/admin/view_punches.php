@@ -10,14 +10,15 @@ if (!isset($_SESSION['admin'])) {
 // Permission check: only super admins can edit timesheets
 require_once __DIR__ . '/../functions/check_permission.php';
 require_once __DIR__ . '/../functions/settings_helper.php';
+require_once __DIR__ . '/../functions/hours.php';
 requirePermission('edit_timesheets');
 
 date_default_timezone_set('America/Chicago');
 
 $employeeList = $conn->query("SELECT ID, FirstName, LastName FROM users ORDER BY LastName");
 
-$from = $_GET['from'] ?? date('Y-m-d', strtotime('monday this week'));
-$to = $_GET['to'] ?? date('Y-m-d', strtotime('sunday this week'));
+$from = $_GET['from'] ?? payPeriodStart(date('Y-m-d')); // current Wed–Tue pay period
+$to = $_GET['to'] ?? payPeriodEnd(date('Y-m-d'));
 $employeeID = $_GET['emp'] ?? '';
 $editMode = isset($_GET['mode']) && $_GET['mode'] === 'edit';
 

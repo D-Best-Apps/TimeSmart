@@ -1,6 +1,7 @@
 <?php
 require_once '../auth/db.php';
 require_once '../vendor/autoload.php';
+require_once __DIR__ . '/../functions/hours.php';
 
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -19,30 +20,12 @@ if (!$startDate || !$endDate) {
     exit;
 }
 
-// === HELPER FUNCTIONS ===
-function hmsToDecimal($hms, $rounding = 0) {
-    list($h, $m, $s) = explode(':', $hms);
-    $minutes = $h * 60 + $m + ($s / 60);
-    if ($rounding > 0) {
-        $minutes = round($minutes / $rounding) * $rounding;
-    }
-    return round($minutes / 60, 2);
-}
-
-function decimalToHM($decimalHours) {
-    $totalMinutes = (int) round($decimalHours * 60);
-    $h = intdiv($totalMinutes, 60);
-    $m = $totalMinutes % 60;
-    return sprintf('%d:%02d', $h, $m);
-}
+// === HELPER FUNCTIONS === (decimalToHM / roundToNearestMinutes from functions/hours.php)
 
 function getPunches($conn, $start, $end, $emp = '') {
     $sql = "
         SELECT u.FirstName, u.LastName, tp.EmployeeID, tp.Date, tp.TimeIN, tp.TimeOUT, tp.LunchStart, tp.LunchEnd,
-            SEC_TO_TIME(
-                TIME_TO_SEC(TIMEDIFF(tp.TimeOUT, tp.TimeIN)) -
-                TIME_TO_SEC(TIMEDIFF(IFNULL(tp.LunchEnd, '00:00:00'), IFNULL(tp.LunchStart, '00:00:00')))
-            ) AS TotalHours
+            GREATEST(COALESCE(tp.TotalHours, 0), 0) AS TotalHours
         FROM timepunches tp
         JOIN users u ON u.ID = tp.EmployeeID
         WHERE tp.TimeIN IS NOT NULL AND tp.TimeOUT IS NOT NULL
@@ -120,7 +103,7 @@ while ($row = $result->fetch_assoc()) {
         }
     }
 
-    $roundedHours = hmsToDecimal($row['TotalHours'], $rounding);
+    $roundedHours = roundToNearestMinutes((float) $row['TotalHours'], $rounding);
     $totalHours += $roundedHours;
 
     $sheet->setCellValue("A{$rowNum}", $fullName);
