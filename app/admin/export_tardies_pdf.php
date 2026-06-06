@@ -1,6 +1,7 @@
 <?php
 require_once '../auth/db.php';
 require_once __DIR__ . '/tcpdf/tcpdf.php';
+require_once __DIR__ . '/../functions/hours.php';
 
 $startDate = $_POST['start'] ?? '';
 $endDate = $_POST['end'] ?? '';
@@ -11,25 +12,7 @@ if (!$startDate || !$endDate) {
     exit;
 }
 
-// === HELPER FUNCTIONS ===
-function getPayPeriodStart($date) {
-    $dt = new DateTime($date);
-    $dayOfWeek = (int)$dt->format('w');
-
-    if ($dayOfWeek >= 3) {
-        $dt->modify('wednesday this week');
-    } else {
-        $dt->modify('wednesday last week');
-    }
-
-    return $dt->format('Y-m-d');
-}
-
-function getPayPeriodEnd($startDate) {
-    $dt = new DateTime($startDate);
-    $dt->modify('+6 days');
-    return $dt->format('Y-m-d');
-}
+// === HELPER FUNCTIONS === (getPayPeriodStart/End from functions/hours.php)
 
 // === DATA FETCH ===
 $sql = "

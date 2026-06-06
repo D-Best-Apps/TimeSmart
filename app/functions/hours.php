@@ -116,6 +116,10 @@ function payPeriodEnd(string $date): string {
     return (new DateTime(payPeriodStart($date)))->modify('+6 days')->format('Y-m-d');
 }
 
+/** Legacy report helper names — aliases for the canonical pay-period functions. */
+function getPayPeriodStart(string $date): string { return payPeriodStart($date); }
+function getPayPeriodEnd(string $date): string { return payPeriodEnd($date); }
+
 /**
  * List of Wed–Tue pay periods overlapping [$start,$end].
  * @return array<int,array{start:string,end:string}>

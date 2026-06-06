@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../functions/hours.php'; // getPayPeriodStart/End
 // Default to current month
 $defaultStart = date('Y-m-d', strtotime('first day of this month'));
 $defaultEnd = date('Y-m-d', strtotime('last day of this month'));
@@ -15,25 +16,7 @@ if (isset($_GET['dates']) && strpos($_GET['dates'], ' - ') !== false) {
 
 $employeeID = (isset($_GET['emp']) && is_numeric($_GET['emp'])) ? (int)$_GET['emp'] : '';
 
-// Helper functions
-function getPayPeriodStart($date) {
-    $dt = new DateTime($date);
-    $dayOfWeek = (int)$dt->format('w');
-
-    if ($dayOfWeek >= 3) {
-        $dt->modify('wednesday this week');
-    } else {
-        $dt->modify('wednesday last week');
-    }
-
-    return $dt->format('Y-m-d');
-}
-
-function getPayPeriodEnd($startDate) {
-    $dt = new DateTime($startDate);
-    $dt->modify('+6 days');
-    return $dt->format('Y-m-d');
-}
+// Pay-period helpers (getPayPeriodStart/End) come from functions/hours.php
 
 $pageTitle = "Tardies Report";
 $extraCSS = ["https://cdn.jsdelivr.net/npm/litepicker/dist/css/litepicker.css", "../css/summary.css"];

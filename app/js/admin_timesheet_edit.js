@@ -23,7 +23,10 @@ function toMinutes(timeStr) {
     return parseInt(h) * 60 + parseInt(m);
 }
 
-// Calculate total hours for a single row
+// Calculate total hours for a single row.
+// NOTE: this is a live PREVIEW only. The authoritative value is recomputed
+// server-side by admin/save_punches.php via the canonical calculateTotalHours()
+// in functions/hours.php, so this mirror staying simple is fine.
 function calculateRowTotal(row) {
     const inTime = row.querySelector('input[name^="clockin"]')?.value;
     const outTime = row.querySelector('input[name^="clockout"]')?.value;
