@@ -17,6 +17,13 @@ if (!defined('MAX_SHIFT_HOURS')) {
     define('MAX_SHIFT_HOURS', 16);
 }
 
+if (!defined('MAX_PLAUSIBLE_LUNCH_HOURS')) {
+    // At clock-out, an unfinished lunch (LunchStart set, no LunchEnd) implying more
+    // than this many hours is treated as a missed lunch-end punch -> flag for review
+    // rather than silently swallowing the afternoon into "lunch".
+    define('MAX_PLAUSIBLE_LUNCH_HOURS', 2);
+}
+
 /**
  * Canonical read clause for reports (documented for reuse — keep every report identical):
  *   SUM(GREATEST(COALESCE(tp.TotalHours,0),0)) AS TotalHours
@@ -191,4 +198,16 @@ function reconcileClockStatus(mysqli $conn, int $empID): string {
         $up->close();
     }
     return $status;
+}
+
+/**
+ * Queue a pending_edits review item for a punch that needs human attention
+ * (e.g. clocked out with an unfinished lunch). Surfaces in the admin review panel.
+ */
+function queuePunchReview(mysqli $conn, int $empID, string $date, ?string $timeOut, string $reason, string $source = 'incomplete_lunch'): void {
+    $stmt = $conn->prepare("INSERT INTO pending_edits (EmployeeID, Date, TimeOut, Note, Reason, Source, Status, SubmittedAt) VALUES (?, ?, ?, ?, ?, ?, 'Pending', NOW())");
+    if (!$stmt) { return; }
+    $stmt->bind_param("isssss", $empID, $date, $timeOut, $reason, $reason, $source);
+    $stmt->execute();
+    $stmt->close();
 }

@@ -367,10 +367,26 @@ if (!empty($_POST['mode']) && $_POST['mode'] === 'kiosk' && !empty($_POST['TagID
             exit;
 
         case 'clockout':
-            // Auto close any open lunch if they forgot to end it
-            if (!empty($lunchStart) && empty($lunchEnd)) {
-                $lunchEnd = $now;
+            $openLunch = (!empty($lunchStart) && empty($lunchEnd));
+            $impliedLunchSec = $openLunch ? (strtotime($now) - strtotime($lunchStart)) : 0;
+            if ($openLunch && $impliedLunchSec > MAX_PLAUSIBLE_LUNCH_HOURS * 3600) {
+                // Missed lunch-end punch: don't swallow the afternoon into "lunch".
+                // Clock out, leave hours NULL, and flag for a manual time entry.
+                $stmt = $conn->prepare("UPDATE timepunches SET TimeOUT = ?, TotalHours = NULL, IPAddressOut = INET_ATON(?) WHERE ID = ?");
+                $stmt->bind_param("ssi", $now, $ip, $punchID);
+                if (!$stmt->execute()) send_json_response(false, "DB error (clockout)", 500, $stmt->error);
+                $stmt->close();
+                queuePunchReview($conn, $empID, $date, $now, 'Clocked out with an unfinished lunch (no lunch-end punch) — needs time entry');
+                setClockStatus($conn, $empID, 'Out');
+                echo json_encode([
+                    'success' => true,
+                    'firstName' => $firstName,
+                    'message' => "🕔 Clocked out at " . date("g:i A", strtotime($now)) . ". ⚠️ Your lunch was never ended — hours flagged for review."
+                ]);
+                exit;
             }
+            // Short/normal open lunch -> auto-close to now (reasonable)
+            if ($openLunch) { $lunchEnd = $now; }
 
             $total = calculateTotalHours($timeIn, $lunchStart, $lunchEnd, $now);
 
@@ -725,7 +741,25 @@ switch ($action) {
             send_json_response(true, "🕔 Clocked out at " . date("g:i A", strtotime($now)) . " (new punch created)");
         }
 
-        // Ensure lunch is properly ended if user clocks out while on lunch
+        // Detect an unfinished lunch (started, never ended) at clock-out.
+        $openLunch = (!empty($lastPunch['LunchStart']) && empty($lastPunch['LunchEnd']));
+        $impliedLunchSec = $openLunch ? (strtotime($now) - strtotime($lastPunch['LunchStart'])) : 0;
+
+        if ($openLunch && $impliedLunchSec > MAX_PLAUSIBLE_LUNCH_HOURS * 3600) {
+            // Missed lunch-end punch: don't fabricate a multi-hour lunch. Clock out,
+            // leave hours NULL, and flag for a manual time entry.
+            $sysNote = "\n[System] Clocked out with an unfinished lunch — hours need a time entry.";
+            $full_note = !empty($note) ? "\nClock Out Note: " . $note . $sysNote : $sysNote;
+            $stmt = $conn->prepare("UPDATE timepunches SET TimeOUT = ?, TotalHours = NULL, Note = CONCAT(COALESCE(Note,''), ?), LatitudeOut = ?, LongitudeOut = ?, AccuracyOut = ?, IPAddressOut = INET_ATON(?) WHERE EmployeeID = ? AND TimeOUT IS NULL");
+            $stmt->bind_param("ssdddsi", $now, $full_note, $lat, $lon, $accuracy, $ip, $empID);
+            if (!$stmt->execute()) { send_json_response(false, "DB execute error (clockout)", 500, $stmt->error); }
+            $stmt->close();
+            queuePunchReview($conn, $empID, $date, $now, 'Clocked out with an unfinished lunch (no lunch-end punch) — needs time entry');
+            setClockStatus($conn, $empID, 'Out');
+            send_json_response(true, "🕔 Clocked out at " . date("g:i A", strtotime($now)) . ". ⚠️ Your lunch was never ended — hours flagged for review.");
+        }
+
+        // Ensure lunch is properly ended if user clocks out while on lunch (short/normal)
         if ($userStatus === 'Lunch' && empty($lastPunch['LunchEnd'])) {
             $lastPunch['LunchEnd'] = $now;
         }

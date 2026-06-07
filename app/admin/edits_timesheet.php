@@ -19,16 +19,16 @@ $canViewPrivate = canViewPrivateNotes($conn);
 // Fetch employee-requested pending edits (exclude system forced-outs, shown separately below)
 $stmt = $conn->prepare("SELECT pe.*, u.FirstName, u.LastName FROM pending_edits pe
                         JOIN users u ON pe.EmployeeID = u.ID
-                        WHERE pe.Status = 'Pending' AND pe.Source <> 'auto_clockout'
+                        WHERE pe.Status = 'Pending' AND pe.Source = 'employee'
                         ORDER BY pe.SubmittedAt DESC");
 $stmt->execute();
 $result = $stmt->get_result();
 
-// System forced-outs / incomplete punches needing review (auto_clockout).
-// These are surfaced as-is (not diffed against the punch, which is already updated).
+// System-generated review items (forced-outs + unfinished-lunch clock-outs).
+// Surfaced as-is (not diffed against the punch, which is already updated).
 $forcedStmt = $conn->prepare("SELECT pe.*, u.FirstName, u.LastName FROM pending_edits pe
                               JOIN users u ON pe.EmployeeID = u.ID
-                              WHERE pe.Status = 'Pending' AND pe.Source = 'auto_clockout'
+                              WHERE pe.Status = 'Pending' AND pe.Source <> 'employee'
                               ORDER BY pe.Date DESC, pe.SubmittedAt DESC");
 $forcedStmt->execute();
 $forcedOuts = $forcedStmt->get_result()->fetch_all(MYSQLI_ASSOC);
