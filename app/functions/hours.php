@@ -211,3 +211,62 @@ function queuePunchReview(mysqli $conn, int $empID, string $date, ?string $timeO
     $stmt->execute();
     $stmt->close();
 }
+
+/**
+ * Validate a single punch (TIME strings or null) for data-integrity problems.
+ * Returns a list of ['severity' => 'error'|'anomaly', 'message' => string].
+ *   - 'error'   = impossible/contradictory data (should block a save)
+ *   - 'anomaly' = plausible but unusual (allow, flag for approval)
+ *
+ * A plain in/out punch with NO lunch (e.g. PIN/badge "in/out, in/out" where lunch
+ * is a separate clock-out cycle) is fully valid — the lunch checks simply don't
+ * fire when both lunch fields are empty. Multi-row days are validated per row;
+ * the gap between rows is the (unpaid) break and needs no lunch fields.
+ */
+function validatePunch(?string $in, ?string $lunchStart, ?string $lunchEnd, ?string $out): array {
+    $issues = [];
+    $inS  = hms_to_seconds($in);
+    $outS = hms_to_seconds($out);
+    $lsS  = hms_to_seconds($lunchStart);
+    $leS  = hms_to_seconds($lunchEnd);
+
+    // --- Completeness / shift ordering (same-day; overnight not supported) ---
+    if ($outS !== null && $inS === null) {
+        $issues[] = ['severity' => 'error', 'message' => 'Clock-out without a clock-in'];
+    }
+    if ($inS !== null && $outS !== null) {
+        if ($outS < $inS) {
+            $issues[] = ['severity' => 'error', 'message' => 'Clock-out is before clock-in'];
+        } elseif ($outS === $inS) {
+            $issues[] = ['severity' => 'error', 'message' => 'Clock-out equals clock-in (zero-length shift)'];
+        } elseif (($outS - $inS) > MAX_SHIFT_HOURS * 3600) {
+            $issues[] = ['severity' => 'anomaly', 'message' => 'Shift longer than ' . MAX_SHIFT_HOURS . ' hours'];
+        }
+    }
+
+    // --- Lunch pairing ---
+    if ($lsS !== null && $leS === null && $outS !== null) {
+        $issues[] = ['severity' => 'error', 'message' => 'Lunch started but never ended'];
+    }
+    if ($lsS === null && $leS !== null) {
+        $issues[] = ['severity' => 'error', 'message' => 'Lunch ended but never started'];
+    }
+
+    // --- Lunch ordering / bounds / plausibility (only when both ends present) ---
+    if ($lsS !== null && $leS !== null) {
+        if ($leS < $lsS) {
+            $issues[] = ['severity' => 'error', 'message' => 'Lunch end is before lunch start'];
+        }
+        if ($inS !== null && $lsS < $inS) {
+            $issues[] = ['severity' => 'error', 'message' => 'Lunch starts before clock-in'];
+        }
+        if ($outS !== null && $leS > $outS) {
+            $issues[] = ['severity' => 'error', 'message' => 'Lunch ends after clock-out'];
+        }
+        if ($leS > $lsS && ($leS - $lsS) > MAX_PLAUSIBLE_LUNCH_HOURS * 3600) {
+            $issues[] = ['severity' => 'anomaly', 'message' => 'Lunch longer than ' . MAX_PLAUSIBLE_LUNCH_HOURS . ' hours'];
+        }
+    }
+
+    return $issues;
+}

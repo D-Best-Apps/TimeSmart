@@ -26,6 +26,9 @@ $employeeID = intval($_POST['employeeID']);
 $from = $_POST['from'];
 $to = $_POST['to'];
 
+$skipped = []; // rows blocked by validation errors
+$flagged = []; // rows stored but flagged as anomalies for approval
+
 try {
     $conn->begin_transaction();
     // Handle deletions first
@@ -77,7 +80,16 @@ try {
             $clockOut = $clockOut ?: null;
             $reason = $reason ?: null;
             $totalHours = calculateTotalHours($clockIn, $lunchOut, $lunchIn, $clockOut);
-            
+
+            // Data-integrity validation: block contradictory rows, flag plausible anomalies.
+            $issues = validatePunch($clockIn, $lunchOut, $lunchIn, $clockOut);
+            $rowErrors = array_values(array_filter($issues, fn($i) => $i['severity'] === 'error'));
+            if (!empty($rowErrors)) {
+                $skipped[] = $punchId . ': ' . implode('; ', array_column($rowErrors, 'message'));
+                continue; // do not store contradictory data
+            }
+            $rowAnoms = array_values(array_filter($issues, fn($i) => $i['severity'] === 'anomaly'));
+
             // Check if this is a new punch (ID starts with "new-")
             if (strpos($punchId, 'new-') === 0) {
                 // This is a new punch - INSERT
@@ -111,7 +123,13 @@ try {
                 $newValue = "Punch ID: " . $newPunchId;
                 $logStmt->bind_param("issssss", $employeeID, $date, $adminUser, $field, $oldValue, $newValue, $reason);
                 $logStmt->execute();
-                
+
+                if (!empty($rowAnoms)) {
+                    $msg = implode('; ', array_column($rowAnoms, 'message'));
+                    queuePunchReview($conn, $employeeID, $date, $clockOut, "Anomaly ({$date}): {$msg} — needs approval", 'anomaly');
+                    $flagged[] = "{$date}: {$msg}";
+                }
+
             } else {
                 // This is an existing punch - UPDATE
                 $punchId = intval($punchId);
@@ -172,6 +190,12 @@ try {
                     ");
                     $updateStmt->bind_param("sssssdii", $clockIn, $lunchOut, $lunchIn, $clockOut, $reason, $totalHours, $punchId, $employeeID);
                     $updateStmt->execute();
+
+                    if (!empty($rowAnoms)) {
+                        $msg = implode('; ', array_column($rowAnoms, 'message'));
+                        queuePunchReview($conn, $employeeID, $date, $clockOut, "Anomaly ({$date}): {$msg} — needs approval", 'anomaly');
+                        $flagged[] = "{$date}: {$msg}";
+                    }
                 } else {
                     // Punch not found - log for debugging
                     error_log("Save failed: Punch ID $punchId not found for Employee $employeeID (or EmployeeID mismatch)");
@@ -181,6 +205,11 @@ try {
     }
 
     $conn->commit();
+
+    // Surface validation results to the admin on the next page.
+    if (!empty($skipped) || !empty($flagged)) {
+        $_SESSION['punch_save_notice'] = ['skipped' => $skipped, 'flagged' => $flagged];
+    }
 
     // Success
     header("Location: view_punches.php?emp=" . urlencode($employeeID) . "&from=" . urlencode($from) . "&to=" . urlencode($to) . "&success=1&mode=edit");

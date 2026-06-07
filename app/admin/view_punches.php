@@ -44,6 +44,26 @@ require_once 'header.php';
     <div class="alert alert-success" style="margin-bottom:1rem;">✅ Timesheet saved.</div>
 <?php endif; ?>
 
+<?php if (!empty($_SESSION['punch_save_notice'])):
+    $notice = $_SESSION['punch_save_notice']; unset($_SESSION['punch_save_notice']); ?>
+    <?php if (!empty($notice['skipped'])): ?>
+        <div class="alert alert-error" style="margin-bottom:1rem; background:#f8d7da; color:#721c24; border:1px solid #f5c6cb; padding:10px; border-radius:5px;">
+            ⛔ <strong>Not saved (invalid data):</strong>
+            <ul style="margin:0.3rem 0 0 1.2rem;">
+                <?php foreach ($notice['skipped'] as $s): ?><li><?= htmlspecialchars($s) ?></li><?php endforeach; ?>
+            </ul>
+        </div>
+    <?php endif; ?>
+    <?php if (!empty($notice['flagged'])): ?>
+        <div class="alert" style="margin-bottom:1rem; background:#fff3cd; color:#856404; border:1px solid #ffeeba; padding:10px; border-radius:5px;">
+            ⚠️ <strong>Saved but flagged for approval (anomalies):</strong>
+            <ul style="margin:0.3rem 0 0 1.2rem;">
+                <?php foreach ($notice['flagged'] as $f): ?><li><?= htmlspecialchars($f) ?></li><?php endforeach; ?>
+            </ul>
+        </div>
+    <?php endif; ?>
+<?php endif; ?>
+
 <!-- Filter card -->
 <div class="vp-card">
     <div class="vp-card-header">

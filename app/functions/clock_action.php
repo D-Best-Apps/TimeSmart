@@ -358,6 +358,10 @@ if (!empty($_POST['mode']) && $_POST['mode'] === 'kiosk' && !empty($_POST['TagID
             $stmt->bind_param("ssi", $now, $ip, $punchID);
             if (!$stmt->execute()) send_json_response(false, "DB error (lunchend)", 500, $stmt->error);
             $stmt->close();
+            // Flag an unusually long lunch for approval (kept, not blocked).
+            if (!empty($lunchStart) && (strtotime($now) - strtotime($lunchStart)) > MAX_PLAUSIBLE_LUNCH_HOURS * 3600) {
+                queuePunchReview($conn, $empID, $date, null, 'Lunch longer than ' . MAX_PLAUSIBLE_LUNCH_HOURS . 'h — needs approval', 'anomaly');
+            }
             setClockStatus($conn, $empID, 'In');
             echo json_encode([
                 'success' => true,
@@ -476,6 +480,10 @@ if (!empty($_POST['mode']) && $_POST['mode'] === 'quickclock') {
         $stmt->bind_param("ssi", $now, $ip, $punchID);
         if (!$stmt->execute()) { send_json_response(false, "DB error (lunch end)", 500, $stmt->error); }
         $stmt->close();
+        // Flag an unusually long lunch for approval (kept, not blocked).
+        if ((strtotime($now) - strtotime($lunchStart)) > MAX_PLAUSIBLE_LUNCH_HOURS * 3600) {
+            queuePunchReview($conn, $empID, $date, null, 'Lunch longer than ' . MAX_PLAUSIBLE_LUNCH_HOURS . 'h — needs approval', 'anomaly');
+        }
         setClockStatus($conn, $empID, 'In');
         send_json_response(true, "✅ Welcome back, {$firstName} — Clocked IN at " . date("g:i A", strtotime($now)),
             200, null, ['firstName' => $firstName, 'action' => 'in']);
@@ -716,6 +724,11 @@ switch ($action) {
         }
         
         if (!$stmt->execute()) { send_json_response(false, "DB execute error (lunchend)", 500, $stmt->error); }
+
+        // Flag an unusually long lunch for approval (kept, not blocked).
+        if (!empty($lastPunch['LunchStart']) && (strtotime($now) - strtotime($lastPunch['LunchStart'])) > MAX_PLAUSIBLE_LUNCH_HOURS * 3600) {
+            queuePunchReview($conn, $empID, $date, null, 'Lunch longer than ' . MAX_PLAUSIBLE_LUNCH_HOURS . 'h — needs approval', 'anomaly');
+        }
 
         setClockStatus($conn, $empID, 'In');
         $msg = "✅ Lunch ended at " . date("g:i A", strtotime($now));
