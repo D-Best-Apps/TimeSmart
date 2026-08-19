@@ -42,6 +42,16 @@ require_once 'header.php';
 
 <?php if (($_GET['success'] ?? '') === '1'): ?>
     <div class="alert alert-success" style="margin-bottom:1rem;">✅ Timesheet saved.</div>
+<?php elseif (($_GET['success'] ?? '') === '0'):
+    $errMessages = [
+        'missing_fields' => 'Missing required fields — please reselect the employee and date range, then try again.',
+        'exception'      => 'A server error prevented the save. No changes were made. Please try again; if it keeps happening, contact support.',
+    ];
+    $errKey = $_GET['error'] ?? '';
+    $errMsg = $errMessages[$errKey] ?? 'The timesheet could not be saved. No changes were made.'; ?>
+    <div class="alert alert-error" style="margin-bottom:1rem; background:#f8d7da; color:#721c24; border:1px solid #f5c6cb; padding:10px; border-radius:5px;">
+        ⛔ <strong>Not saved:</strong> <?= htmlspecialchars($errMsg) ?>
+    </div>
 <?php endif; ?>
 
 <?php if (!empty($_SESSION['punch_save_notice'])):

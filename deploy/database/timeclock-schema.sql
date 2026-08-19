@@ -118,8 +118,8 @@ CREATE TABLE `punch_changelog` (
   `ChangedBy` varchar(100) DEFAULT NULL,
   `ChangeTime` datetime DEFAULT current_timestamp(),
   `FieldChanged` varchar(50) DEFAULT NULL,
-  `OldValue` varchar(10) DEFAULT NULL,
-  `NewValue` varchar(10) DEFAULT NULL,
+  `OldValue` text DEFAULT NULL,
+  `NewValue` text DEFAULT NULL,
   `Reason` text DEFAULT NULL,
   PRIMARY KEY (`ID`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
