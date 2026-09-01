@@ -123,6 +123,7 @@ Admin → **Settings → M365 PTO Calendar Sync**:
 | Client Secret | step 2 |
 | **PTO Calendar Mailbox (UPN)** | the shared mailbox's primary SMTP (e.g. `ptocalendar@dbest.com`) |
 | Calendar Time Zone | `America/Chicago` (or your tz) |
+| Invite the employee to the calendar event | optional — see below |
 
 Click **Save & Test M365 Connection**. Success → green banner with the calendar name. Failure → see Troubleshooting.
 
@@ -135,11 +136,12 @@ Click **Save & Test M365 Connection**. Success → green banner with the calenda
 - **Multi-day partial requests** (rare): collapse to all-day.
 - **Show as:** Out of Office.
 - **Category:** `Sick` or `PTO`.
+- **Employee invite** (optional, off by default): with *Invite the employee to the calendar event* checked, the employee is added as a required attendee, so the approved time off also lands on their own Outlook calendar. Exchange sends the invitation from the PTO mailbox; no RSVP is requested and new-time proposals are disabled. Employees with no (or an invalid) email address on file are simply skipped — the shared-calendar event is still created. No extra Graph permission is needed: invitations ride along with the meeting, so `Calendars.ReadWrite` still suffices.
+- **Amendments:** when an approved request is edited (by the employee via an amendment, or by an admin), the old event is deleted and a new one created. With invites enabled, attendees get a cancellation for the old event and a fresh invitation for the new one.
 
 ## What does NOT sync
 
 - **Withdraw / reject after approval:** the calendar event is **not** deleted automatically. Reverse manually if needed.
-- **Edit after approval:** TimeSmart does not currently update existing events.
 
 ## Failure handling
 

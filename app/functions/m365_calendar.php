@@ -26,7 +26,8 @@ function m365DecryptSecret(string $encrypted): ?string {
  */
 function m365GetConfig(mysqli $conn): ?array {
     $keys = ['m365_enabled', 'm365_tenant_id', 'm365_client_id',
-             'm365_client_secret', 'm365_group_id', 'm365_calendar_mailbox', 'm365_timezone'];
+             'm365_client_secret', 'm365_group_id', 'm365_calendar_mailbox', 'm365_timezone',
+             'm365_invite_employee'];
     $config = [];
     foreach ($keys as $k) {
         $stmt = $conn->prepare("SELECT SettingValue FROM settings WHERE SettingKey = ? LIMIT 1");
@@ -94,7 +95,7 @@ function m365GetToken(array $config): array {
  * - Otherwise → all-day event (multi-day partial requests collapse to all-day)
  * Notes deliberately NOT included in event body — per "no notes" decision.
  */
-function m365BuildEvent(array $request, string $employeeName, string $timezone): array {
+function m365BuildEvent(array $request, string $employeeName, string $timezone, ?string $employeeEmail = null): array {
     $category    = ($request['Category'] === 'Sick') ? 'Sick' : 'PTO';
     $subject     = "{$employeeName} — {$category}";
     $isSingleDay = ($request['StartDate'] === $request['EndDate']);
@@ -106,6 +107,18 @@ function m365BuildEvent(array $request, string $employeeName, string $timezone):
         'showAs'     => 'oof',
         'categories' => [$category],
     ];
+
+    // Optionally invite the employee so the time-off lands on their own calendar.
+    // No RSVP is wanted — the request was already approved in TimeSmart — and
+    // proposing a new time would be meaningless here.
+    if ($employeeEmail !== null && $employeeEmail !== '') {
+        $base['attendees'] = [[
+            'emailAddress' => ['address' => $employeeEmail, 'name' => $employeeName],
+            'type'         => 'required',
+        ]];
+        $base['responseRequested']     = false;
+        $base['allowNewTimeProposals'] = false;
+    }
 
     if ($hasTime && $isSingleDay) {
         $startTime = substr($request['StartTime'], 0, 8);
@@ -258,6 +271,28 @@ function m365CreateMailboxEvent(string $mailboxUpn, string $accessToken, array $
 }
 
 /**
+ * Resolve the address to invite for a request, or null if the employee should
+ * not be invited (feature off, or no usable email on file).
+ * $request may or may not carry a joined Email column — fall back to a lookup
+ * on EmployeeID so callers can pass a bare time_off_requests row.
+ */
+function m365InviteEmailFor(mysqli $conn, array $config, array $request): ?string {
+    if (($config['m365_invite_employee'] ?? '0') !== '1') return null;
+
+    $email = trim((string)($request['Email'] ?? ''));
+    if ($email === '' && !empty($request['EmployeeID'])) {
+        $employeeId = (int)$request['EmployeeID'];
+        $stmt = $conn->prepare("SELECT Email FROM users WHERE ID = ? LIMIT 1");
+        $stmt->bind_param("i", $employeeId);
+        $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc();
+        $email = trim((string)($row['Email'] ?? ''));
+    }
+    if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) return null;
+    return $email;
+}
+
+/**
  * Top-level: sync an approved time-off request to the configured M365 calendar.
  * Dispatches to the shared-mailbox endpoint if m365_calendar_mailbox is set
  * (recommended path), otherwise falls back to the group calendar endpoint.
@@ -274,7 +309,8 @@ function m365SyncApprovedRequest(mysqli $conn, array $request, string $employeeN
         error_log("m365_calendar: token fetch failed: " . $token['error']);
         return ['success' => false, 'error' => $token['error']];
     }
-    $event = m365BuildEvent($request, $employeeName, $config['m365_timezone']);
+    $event = m365BuildEvent($request, $employeeName, $config['m365_timezone'],
+                            m365InviteEmailFor($conn, $config, $request));
 
     if (!empty($config['m365_calendar_mailbox'])) {
         $result = m365CreateMailboxEvent($config['m365_calendar_mailbox'], $token['token'], $event);

@@ -115,7 +115,8 @@ if ($wasApproved) {
             // Reload updated row
             $reload = $conn->query("SELECT * FROM time_off_requests WHERE ID = {$requestID}")->fetch_assoc();
             $employeeName = trim($req['FirstName'] . ' ' . $req['LastName']);
-            $event = m365BuildEvent($reload, $employeeName, $config['m365_timezone']);
+            $event = m365BuildEvent($reload, $employeeName, $config['m365_timezone'],
+                                    m365InviteEmailFor($conn, $config, $reload));
             $result = m365ReplaceMailboxEvent(
                 $config['m365_calendar_mailbox'],
                 $tok['token'],

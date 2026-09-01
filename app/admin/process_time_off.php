@@ -142,7 +142,8 @@ foreach ($_POST['action'] as $requestID => $action) {
         if ($config !== null) {
             $tok = m365GetToken($config);
             if ($tok['success'] && !empty($config['m365_calendar_mailbox'])) {
-                $event = m365BuildEvent($origRow, $employeeName, $config['m365_timezone']);
+                $event = m365BuildEvent($origRow, $employeeName, $config['m365_timezone'],
+                                        m365InviteEmailFor($conn, $config, $origRow));
                 $result = m365ReplaceMailboxEvent(
                     $config['m365_calendar_mailbox'],
                     $tok['token'],

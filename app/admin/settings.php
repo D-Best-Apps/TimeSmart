@@ -101,6 +101,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $stmt->execute();
     $settings['m365_enabled'] = $m365EnabledVal;
 
+    // m365_invite_employee is a checkbox — store '1' or '0'
+    $m365InviteVal = !empty($_POST['m365_invite_employee']) ? '1' : '0';
+    $stmt = $conn->prepare("INSERT INTO settings (SettingKey, SettingValue) VALUES (?, ?) ON DUPLICATE KEY UPDATE SettingValue = ?");
+    $key = 'm365_invite_employee';
+    $stmt->bind_param("sss", $key, $m365InviteVal, $m365InviteVal);
+    $stmt->execute();
+    $settings['m365_invite_employee'] = $m365InviteVal;
+
     // Security & punch policy checkboxes
     $enforceGpsVal = !empty($_POST['EnforceGPS']) ? '1' : '0';
     $stmt = $conn->prepare("INSERT INTO settings (SettingKey, SettingValue) VALUES (?, ?) ON DUPLICATE KEY UPDATE SettingValue = ?");
@@ -383,6 +391,19 @@ require_once 'header.php';
                     <input type="checkbox" name="m365_enabled" value="1" <?= ($settings['m365_enabled'] ?? '') === '1' ? 'checked' : '' ?>>
                     Enable M365 calendar sync on approval
                 </label>
+            </div>
+
+            <div class="field">
+                <label>
+                    <input type="checkbox" name="m365_invite_employee" value="1" <?= ($settings['m365_invite_employee'] ?? '') === '1' ? 'checked' : '' ?>>
+                    Invite the employee to the calendar event
+                </label>
+                <p style="color:#666; font-size:0.85em; margin:0.25rem 0 0;">
+                    Adds the employee as an attendee, so the approved time off also shows on their
+                    own Outlook calendar. They receive a meeting invitation from the PTO mailbox
+                    (no RSVP requested), and a cancellation if the request is later edited.
+                    Employees without an email address on file are skipped.
+                </p>
             </div>
 
             <div class="field">
