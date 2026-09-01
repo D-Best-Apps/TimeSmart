@@ -13,6 +13,7 @@
  *   php auto_lunch.php in    (cron at 45 11 * * 1-5)
  */
 
+require_once __DIR__ . '/../functions/cli_guard.php'; // CLI only — never over HTTP
 require_once __DIR__ . '/../auth/db.php';
 date_default_timezone_set('America/Chicago');
 

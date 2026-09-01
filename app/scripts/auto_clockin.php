@@ -10,6 +10,7 @@
  * Cron: 50 6 * * 1-5 (6:50AM Monday-Friday)
  */
 
+require_once __DIR__ . '/../functions/cli_guard.php'; // CLI only — never over HTTP
 require_once __DIR__ . '/../auth/db.php';
 require_once __DIR__ . '/../functions/hours.php'; // reconcileClockStatus
 date_default_timezone_set('America/Chicago');
