@@ -88,6 +88,7 @@ function formatDateRange(string $start, string $end): string {
   .status-Approved { color: #1e7e34; font-weight: 600; }
   .status-Rejected { color: #b02a37; font-weight: 600; }
   .status-Withdrawn { color: #6c757d; font-weight: 600; }
+  .status-Cancelled { color: #b02a37; font-weight: 600; }
   .withdraw-btn {
     background-color: #b02a37; color: #fff; border: none; padding: 0.3rem 0.7rem;
     border-radius: 3px; cursor: pointer; font-size: 0.85rem;

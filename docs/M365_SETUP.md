@@ -138,10 +138,11 @@ Click **Save & Test M365 Connection**. Success → green banner with the calenda
 - **Category:** `Sick` or `PTO`.
 - **Employee invite** (optional, off by default): with *Invite the employee to the calendar event* checked, the employee is added as a required attendee, so the approved time off also lands on their own Outlook calendar. Exchange sends the invitation from the PTO mailbox; no RSVP is requested and new-time proposals are disabled. Employees with no (or an invalid) email address on file are simply skipped — the shared-calendar event is still created. No extra Graph permission is needed: invitations ride along with the meeting, so `Calendars.ReadWrite` still suffices.
 - **Amendments:** when an approved request is edited (by the employee via an amendment, or by an admin), the old event is deleted and a new one created. With invites enabled, attendees get a cancellation for the old event and a fresh invitation for the new one.
+- **Cancellations:** *Edit Time-Off Request → Cancel this approved time off* sets the request to `Cancelled`, deletes the calendar event, and emails the employee. With invites enabled, Exchange sends the attendee a cancellation so it also leaves their own calendar.
 
 ## What does NOT sync
 
-- **Withdraw / reject after approval:** the calendar event is **not** deleted automatically. Reverse manually if needed.
+- **Withdraw (pending requests):** a pending request has no calendar event yet, so there is nothing to remove.
 
 ## Failure handling
 

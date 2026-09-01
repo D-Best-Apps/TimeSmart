@@ -140,11 +140,16 @@ require_once 'header.php';
 
 
 <div class="edits-page">
+    <?php if (($_GET['status'] ?? '') === 'cancelled'): ?>
+        <div style="background-color:#d1e7dd; border:1px solid #badbcc; color:#0f5132; padding:0.75rem 1rem; border-radius:4px; margin-bottom:1rem;">
+            <strong>Approved time off cancelled.</strong> The employee was emailed and the calendar event removed.
+        </div>
+    <?php endif; ?>
     <?php if (($_GET['m365_sync'] ?? '') === 'failed'): ?>
         <div style="background-color:#fff3cd; border:1px solid #ffeeba; color:#856404; padding:0.75rem 1rem; border-radius:4px; margin-bottom:1rem;">
-            <strong>M365 calendar sync failed for one or more approvals.</strong><br>
+            <strong>M365 calendar sync failed.</strong><br>
             <?= htmlspecialchars($_GET['details'] ?? '') ?><br>
-            <em>The approval went through. The calendar event was not created. Check <a href="settings.php#m365">M365 Settings</a> or the server error log.</em>
+            <em>The request change went through; only the calendar did not update. Check <a href="settings.php#m365">M365 Settings</a> or the server error log.</em>
         </div>
     <?php endif; ?>
 

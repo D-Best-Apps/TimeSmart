@@ -93,7 +93,7 @@ CREATE TABLE `time_off_requests` (
   `EndTime` time DEFAULT NULL,
   `Notes` varchar(500) DEFAULT NULL,
   `Reason` varchar(500) DEFAULT NULL,
-  `Status` enum('Pending','Approved','Rejected','Withdrawn') NOT NULL DEFAULT 'Pending',
+  `Status` enum('Pending','Approved','Rejected','Withdrawn','Cancelled') NOT NULL DEFAULT 'Pending',
   `SubmittedAt` datetime NOT NULL,
   `ReviewedAt` datetime DEFAULT NULL,
   `ReviewedBy` varchar(100) DEFAULT NULL,

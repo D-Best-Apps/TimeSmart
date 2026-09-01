@@ -71,6 +71,11 @@ require_once 'header.php';
   }
   .projection { padding: 0.5rem 0.75rem; background:#f5f5f5; border-left:3px solid #6c757d; margin-bottom:1rem; font-size:0.9em; }
   .projection .over { color:#b02a37; font-weight:bold; }
+  .danger-zone { margin-top: 2rem; padding: 1rem; border: 1px solid #f5c2c7; border-radius: 4px; background: #fff5f5; }
+  .danger-zone h3 { margin: 0 0 0.35rem; font-size: 1rem; color: #842029; }
+  .danger-zone p { margin: 0 0 0.75rem; font-size: 0.9em; color: #6c757d; }
+  .danger-zone button[type=submit] { background-color: #b02a37; }
+  .danger-zone button[type=submit]:hover { background-color: #8b2029; }
 </style>
 
 <div class="dashboard-container">
@@ -152,6 +157,25 @@ require_once 'header.php';
       <button type="submit">Save changes</button>
       <a href="edits_timesheet.php" style="margin-left:1rem;">Cancel</a>
     </form>
+
+    <?php if ($req['Status'] === 'Approved'): ?>
+    <div class="danger-zone">
+      <h3>Cancel this approved time off</h3>
+      <p>
+        Marks the request <strong>Cancelled</strong> so the hours no longer count, removes the
+        event from the PTO calendar (and from the employee's own calendar if they were invited),
+        and emails the employee. Any pending amendment against it is cancelled too.
+      </p>
+      <form method="POST" action="cancel_time_off.php" id="adminTOCancel">
+        <input type="hidden" name="RequestID" value="<?= $requestID ?>">
+        <div class="field">
+          <label for="CancelReason">Reason (emailed to employee)</label>
+          <textarea id="CancelReason" name="CancelReason" maxlength="500" placeholder="e.g., 'Employee worked these days after all'"></textarea>
+        </div>
+        <button type="submit">Cancel this time off</button>
+      </form>
+    </div>
+    <?php endif; ?>
   </div>
 </div>
 
@@ -169,6 +193,15 @@ require_once 'header.php';
     if (toggle.checked) fields.classList.add('visible');
     else { fields.classList.remove('visible'); startTime.value=''; endTime.value=''; }
   });
+
+  const cancelForm = document.getElementById('adminTOCancel');
+  if (cancelForm) {
+    cancelForm.addEventListener('submit', (e) => {
+      if (!confirm('Cancel this approved time off? The employee will be emailed and the calendar event removed.')) {
+        e.preventDefault();
+      }
+    });
+  }
 
   form.addEventListener('submit', (e) => {
     if (endDate.value < startDate.value) {
