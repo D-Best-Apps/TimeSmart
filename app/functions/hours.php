@@ -79,6 +79,21 @@ function calculateTotalHours(?string $clockIn, ?string $lunchStart, ?string $lun
     return round($span / 3600, 2);
 }
 
+/**
+ * Reconcile a stored TIME against one submitted from an <input type="time">, which
+ * only carries H:i. If they name the same minute the admin did not touch the field,
+ * so keep the stored value and its seconds — otherwise every save rewrites 06:52:34
+ * to 06:52:00 and logs a phantom change for a field nobody edited.
+ */
+function preserveSeconds(?string $stored, ?string $submitted): ?string {
+    if ($submitted === null || $submitted === '') return null;
+    if ($stored === null || $stored === '') return $submitted;
+    $a = hms_to_seconds($stored);
+    $b = hms_to_seconds($submitted);
+    if ($a === null || $b === null) return $submitted;
+    return (intdiv($a, 60) === intdiv($b, 60)) ? $stored : $submitted;
+}
+
 /** 'H:i:s' -> decimal hours (2 dp). '' / null -> 0.0 */
 function hmsToDecimal(?string $hms): float {
     $sec = hms_to_seconds($hms);
@@ -218,6 +233,9 @@ function queuePunchReview(mysqli $conn, int $empID, string $date, ?string $timeO
  *   - 'error'   = impossible/contradictory data (should block a save)
  *   - 'anomaly' = plausible but unusual (allow, flag for approval)
  *
+ * Kept deliberately consistent with calculateTotalHours(): anything that function is
+ * willing to pay out must not be an 'error' here, or the row becomes uneditable.
+ *
  * A plain in/out punch with NO lunch (e.g. PIN/badge "in/out, in/out" where lunch
  * is a separate clock-out cycle) is fully valid — the lunch checks simply don't
  * fire when both lunch fields are empty. Multi-row days are validated per row;
@@ -236,7 +254,16 @@ function validatePunch(?string $in, ?string $lunchStart, ?string $lunchEnd, ?str
     }
     if ($inS !== null && $outS !== null) {
         if ($outS < $inS) {
-            $issues[] = ['severity' => 'error', 'message' => 'Clock-out is before clock-in'];
+            // calculateTotalHours() treats out < in as an overnight roll-over and pays it,
+            // so rejecting the same row here would make any past-midnight shift impossible
+            // to enter or correct. Match that behaviour: plausible overnight = anomaly,
+            // implausible (beyond MAX_SHIFT_HOURS once rolled over) = error.
+            $span = ($outS - $inS) + 86400;
+            if ($span > MAX_SHIFT_HOURS * 3600) {
+                $issues[] = ['severity' => 'error', 'message' => 'Clock-out is before clock-in, and too long to be an overnight shift'];
+            } else {
+                $issues[] = ['severity' => 'anomaly', 'message' => 'Overnight shift (clock-out is on the next day)'];
+            }
         } elseif ($outS === $inS) {
             $issues[] = ['severity' => 'error', 'message' => 'Clock-out equals clock-in (zero-length shift)'];
         } elseif (($outS - $inS) > MAX_SHIFT_HOURS * 3600) {

@@ -12,6 +12,9 @@ require_once __DIR__ . '/../functions/check_permission.php';
 require_once __DIR__ . '/../functions/hours.php'; // canonical calculateTotalHours
 requirePermission('approve_edits');
 
+require_once __DIR__ . '/../functions/csrf.php';
+require_csrf('edits_timesheet.php?error=csrf');
+
 $admin = $_SESSION['admin'];
 $now = date('Y-m-d H:i:s');
 $canViewPrivate = canViewPrivateNotes($conn);

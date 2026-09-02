@@ -1,0 +1,67 @@
+/* Change-history viewer. Reuses the .vp-* card/filter shell from view_punches.css,
+   which this page also loads, and adds only what the grouped diff list needs. */
+.ph-checkbox { display: flex; align-items: flex-end; }
+.ph-checkbox label { font-weight: 400; display: flex; align-items: center; gap: 0.4rem; }
+.ph-checkbox input { width: auto; margin: 0; }
+
+.ph-set {
+    border: 1px solid #e3e8ee;
+    border-left: 3px solid var(--primary-color, #2b6cb0);
+    border-radius: 6px;
+    margin-bottom: 0.9rem;
+    overflow: hidden;
+    background: #fff;
+}
+.ph-set-system { border-left-color: #9aa5b1; background: #fcfcfd; }
+
+.ph-set-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.4rem 1rem;
+    padding: 0.6rem 0.85rem;
+    background: #f7f9fc;
+    border-bottom: 1px solid #eef2f6;
+    font-size: 0.9rem;
+}
+.ph-who   { font-weight: 700; }
+.ph-when  { color: #5a6673; }
+.ph-emp   { color: #2b6cb0; font-weight: 600; }
+.ph-reason { color: #6b7480; font-style: italic; }
+
+.ph-table { width: 100%; border-collapse: collapse; }
+.ph-table th {
+    text-align: left;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #8792a2;
+    font-weight: 600;
+    padding: 0.35rem 0.85rem;
+    border-bottom: 1px solid #f0f3f7;
+}
+.ph-table td {
+    padding: 0.35rem 0.85rem;
+    border-bottom: 1px solid #f4f6f9;
+    font-size: 0.9rem;
+    vertical-align: top;
+}
+.ph-table tr:last-child td { border-bottom: none; }
+
+.ph-date  { white-space: nowrap; color: #5a6673; width: 6.5rem; }
+.ph-field { white-space: nowrap; font-weight: 600; width: 8rem; }
+.ph-old   { color: #a02b3b; text-decoration: line-through; text-decoration-color: #e6b3bb; }
+.ph-new   { color: #1e7e34; font-weight: 600; }
+.ph-arrow { color: #b3bcc7; width: 1.5rem; text-align: center; }
+.ph-empty { color: #b3bcc7; }
+.ph-created { color: #1e7e34; font-weight: 600; }
+.ph-deleted { color: #a02b3b; }
+
+.ph-pager { display: flex; align-items: center; gap: 0.6rem; }
+.ph-pager-bottom { justify-content: center; padding-top: 0.6rem; }
+.ph-pageno { font-size: 0.85rem; color: #5a6673; }
+
+@media (max-width: 640px) {
+    .ph-table th:first-child, .ph-table td.ph-date { width: auto; }
+    .ph-set-head { font-size: 0.85rem; }
+}

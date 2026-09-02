@@ -11,6 +11,10 @@ if (!isset($_SESSION['admin'])) {
 require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('edit_timesheets');
 
+// A logged-in admin's session must not be usable by a page they merely visited.
+require_once __DIR__ . '/../functions/csrf.php';
+require_csrf('view_punches.php?success=0&error=csrf');
+
 date_default_timezone_set('America/Chicago');
 
 // Canonical worked-hours / period / OT helpers (single source of truth).
@@ -28,6 +32,17 @@ $to = $_POST['to'];
 
 $skipped = []; // rows blocked by validation errors
 $flagged = []; // rows stored but flagged as anomalies for approval
+
+/**
+ * Human label for a punch row in the save notices. The admin never sees punch IDs
+ * anywhere in the UI, so reporting one back ("4679: ...") tells them nothing —
+ * name the row by the date and times they can actually see on screen.
+ */
+function describePunchRow(?string $date, ?string $clockIn, ?string $clockOut): string {
+    $t = function (?string $v) { return $v ? date('g:i a', strtotime($v)) : '—'; };
+    $d = $date ? date('m/d/Y', strtotime($date)) : 'new row';
+    return $d . ' (' . $t($clockIn) . ' – ' . $t($clockOut) . ')';
+}
 
 try {
     $conn->begin_transaction();
@@ -68,70 +83,31 @@ try {
     // Get all punch IDs from clockin array keys
     if (isset($_POST['clockin']) && is_array($_POST['clockin'])) {
         foreach ($_POST['clockin'] as $punchId => $clockInValue) {
-            $clockIn = $_POST['clockin'][$punchId] ?? null;
-            $lunchOut = $_POST['lunchout'][$punchId] ?? null;
-            $lunchIn = $_POST['lunchin'][$punchId] ?? null;
-            $clockOut = $_POST['clockout'][$punchId] ?? null;
-            $reason = trim($_POST['reason'][$punchId] ?? '');
-            
-            $clockIn = $clockIn ?: null;
-            $lunchOut = $lunchOut ?: null;
-            $lunchIn = $lunchIn ?: null;
-            $clockOut = $clockOut ?: null;
-            $reason = $reason ?: null;
-            $totalHours = calculateTotalHours($clockIn, $lunchOut, $lunchIn, $clockOut);
+            $clockIn  = ($_POST['clockin'][$punchId]  ?? null) ?: null;
+            $lunchOut = ($_POST['lunchout'][$punchId] ?? null) ?: null;
+            $lunchIn  = ($_POST['lunchin'][$punchId]  ?? null) ?: null;
+            $clockOut = ($_POST['clockout'][$punchId] ?? null) ?: null;
+            // "Reason for Adjustment" is audit metadata: it belongs in punch_changelog,
+            // never in timepunches.Note. Note is employee-facing (user/dashboard.php shows
+            // it, user/timesheet.php lets them edit it) and carries system messages from
+            // the auto-clockout scripts, so writing an admin reason there both leaked the
+            // audit trail into the employee's view and erased those messages. This form
+            // no longer touches Note at all.
+            $reason   = trim($_POST['reason'][$punchId] ?? '') ?: null;
 
-            // Data-integrity validation: block contradictory rows, flag plausible anomalies.
-            $issues = validatePunch($clockIn, $lunchOut, $lunchIn, $clockOut);
-            $rowErrors = array_values(array_filter($issues, fn($i) => $i['severity'] === 'error'));
-            if (!empty($rowErrors)) {
-                $skipped[] = $punchId . ': ' . implode('; ', array_column($rowErrors, 'message'));
-                continue; // do not store contradictory data
-            }
-            $rowAnoms = array_values(array_filter($issues, fn($i) => $i['severity'] === 'anomaly'));
+            $isNew    = strpos((string) $punchId, 'new-') === 0;
+            $existing = null;
 
-            // Check if this is a new punch (ID starts with "new-")
-            if (strpos($punchId, 'new-') === 0) {
-                // This is a new punch - INSERT
-                
-                // Get date from the date input field
+            if ($isNew) {
+                // Date comes from the row's date input; skip incomplete scaffolding rows.
                 $date = $_POST['date'][$punchId] ?? null;
                 if (!$date) {
-                    continue; // Skip if no date provided
+                    continue;
                 }
-                
-                // Validate that we have at least clock in or clock out
                 if (!$clockIn && !$clockOut) {
-                    continue; // Skip empty rows
+                    continue; // empty row
                 }
-                
-                // Insert new punch record
-                $insertStmt = $conn->prepare("
-                    INSERT INTO timepunches (EmployeeID, Date, TimeIN, LunchStart, LunchEnd, TimeOut, Note, TotalHours)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ");
-                $insertStmt->bind_param("issssssd", $employeeID, $date, $clockIn, $lunchOut, $lunchIn, $clockOut, $reason, $totalHours);
-                $insertStmt->execute();
-                
-                $newPunchId = $conn->insert_id;
-                
-                // Log the creation in changelog
-                $logStmt = $conn->prepare("INSERT INTO punch_changelog (EmployeeID, Date, ChangedBy, FieldChanged, OldValue, NewValue, Reason) VALUES (?, ?, ?, ?, ?, ?, ?)");
-                $adminUser = $_SESSION['admin'];
-                $field = "CREATED";
-                $oldValue = "NULL";
-                $newValue = "Punch ID: " . $newPunchId;
-                $logStmt->bind_param("issssss", $employeeID, $date, $adminUser, $field, $oldValue, $newValue, $reason);
-                $logStmt->execute();
-
-                if (!empty($rowAnoms)) {
-                    $msg = implode('; ', array_column($rowAnoms, 'message'));
-                    queuePunchReview($conn, $employeeID, $date, $clockOut, "Anomaly ({$date}): {$msg} — needs approval", 'anomaly');
-                    $flagged[] = "{$date}: {$msg}";
-                }
-
             } else {
-                // This is an existing punch - UPDATE
                 $punchId = intval($punchId);
 
                 // In edit mode, all punches are auto-confirmed
@@ -152,54 +128,113 @@ try {
                     error_log("Skipping punch $punchId - not confirmed (editMode: " . ($editMode ? 'true' : 'false') . ")");
                     continue;
                 }
-                
+
                 // Check for existing entry (with EmployeeID validation for security)
                 $checkStmt = $conn->prepare("SELECT * FROM timepunches WHERE id = ? AND EmployeeID = ?");
                 $checkStmt->bind_param("ii", $punchId, $employeeID);
                 $checkStmt->execute();
-                $result = $checkStmt->get_result();
-                $existing = $result->fetch_assoc();
+                $existing = $checkStmt->get_result()->fetch_assoc();
 
-                if ($existing) {
-                    $date = $existing['Date'];
-                    // Log changes
-                    $fields = [
-                        "TimeIN" => $clockIn,
-                        "LunchStart" => $lunchOut,
-                        "LunchEnd" => $lunchIn,
-                        "TimeOut" => $clockOut,
-                        "Note" => $reason,
-                        "TotalHours" => $totalHours
-                    ];
-
-                    foreach ($fields as $field => $newVal) {
-                        $oldVal = $existing[$field] ?? null;
-                        if ($newVal != $oldVal) {
-                            $logStmt = $conn->prepare("INSERT INTO punch_changelog (EmployeeID, Date, ChangedBy, FieldChanged, OldValue, NewValue, Reason) VALUES (?, ?, ?, ?, ?, ?, ?)");
-                            $adminUser = $_SESSION['admin'];
-                            $logStmt->bind_param("issssss", $employeeID, $date, $adminUser, $field, $oldVal, $newVal, $reason);
-                            $logStmt->execute();
-                        }
-                    }
-
-                    // Update (with EmployeeID validation for security)
-                    $updateStmt = $conn->prepare("
-                        UPDATE timepunches
-                        SET TimeIN = ?, LunchStart = ?, LunchEnd = ?, TimeOut = ?, Note = ?, TotalHours = ?
-                        WHERE id = ? AND EmployeeID = ?
-                    ");
-                    $updateStmt->bind_param("sssssdii", $clockIn, $lunchOut, $lunchIn, $clockOut, $reason, $totalHours, $punchId, $employeeID);
-                    $updateStmt->execute();
-
-                    if (!empty($rowAnoms)) {
-                        $msg = implode('; ', array_column($rowAnoms, 'message'));
-                        queuePunchReview($conn, $employeeID, $date, $clockOut, "Anomaly ({$date}): {$msg} — needs approval", 'anomaly');
-                        $flagged[] = "{$date}: {$msg}";
-                    }
-                } else {
-                    // Punch not found - log for debugging
+                if (!$existing) {
+                    // Punch not found (e.g. deleted above) - log for debugging
                     error_log("Save failed: Punch ID $punchId not found for Employee $employeeID (or EmployeeID mismatch)");
+                    continue;
                 }
+
+                $date = $existing['Date'];
+
+                // <input type="time"> posts H:i, the column stores H:i:s. Without this every
+                // save would rewrite 06:52:34 -> 06:52:00 on fields nobody touched.
+                $clockIn  = preserveSeconds($existing['TimeIN'],     $clockIn);
+                $lunchOut = preserveSeconds($existing['LunchStart'], $lunchOut);
+                $lunchIn  = preserveSeconds($existing['LunchEnd'],   $lunchIn);
+                $clockOut = preserveSeconds($existing['TimeOut'],    $clockOut);
+            }
+
+            $totalHours = calculateTotalHours($clockIn, $lunchOut, $lunchIn, $clockOut);
+
+            // DECIMAL(x,2) reads back as '9.70' where the computed float is 9.7 — compare
+            // numerically so formatting alone never counts as a change.
+            $sameHours = fn($a, $b) => ($a === null || $a === '') && ($b === null || $b === '')
+                ? true
+                : (($a !== null && $a !== '' && $b !== null && $b !== '') && abs((float) $a - (float) $b) < 0.005);
+
+            // Untouched rows are left exactly as they are: no changelog noise, and no
+            // pre-existing bad row (a kiosk double-tap, say) blocking edits made elsewhere.
+            if ($existing
+                && $clockIn  === $existing['TimeIN']
+                && $lunchOut === $existing['LunchStart']
+                && $lunchIn  === $existing['LunchEnd']
+                && $clockOut === $existing['TimeOut']
+                && $sameHours($totalHours, $existing['TotalHours'])) {
+                continue;
+            }
+
+            // Data-integrity validation: block contradictory rows, flag plausible anomalies.
+            $issues = validatePunch($clockIn, $lunchOut, $lunchIn, $clockOut);
+            $rowErrors = array_values(array_filter($issues, fn($i) => $i['severity'] === 'error'));
+            if (!empty($rowErrors)) {
+                $skipped[] = describePunchRow($date, $clockIn, $clockOut) . ': ' . implode('; ', array_column($rowErrors, 'message'));
+                continue; // do not store contradictory data
+            }
+            $rowAnoms = array_values(array_filter($issues, fn($i) => $i['severity'] === 'anomaly'));
+
+            $adminUser = $_SESSION['admin'];
+
+            if ($isNew) {
+                // Insert new punch record
+                $insertStmt = $conn->prepare("
+                    INSERT INTO timepunches (EmployeeID, Date, TimeIN, LunchStart, LunchEnd, TimeOut, TotalHours)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                ");
+                $insertStmt->bind_param("isssssd", $employeeID, $date, $clockIn, $lunchOut, $lunchIn, $clockOut, $totalHours);
+                $insertStmt->execute();
+
+                $newPunchId = $conn->insert_id;
+
+                // Log the creation in changelog
+                $logStmt = $conn->prepare("INSERT INTO punch_changelog (EmployeeID, Date, ChangedBy, FieldChanged, OldValue, NewValue, Reason) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                $field = "CREATED";
+                $oldValue = "NULL";
+                $newValue = "Punch ID: " . $newPunchId;
+                $logStmt->bind_param("issssss", $employeeID, $date, $adminUser, $field, $oldValue, $newValue, $reason);
+                $logStmt->execute();
+            } else {
+                // Log only the fields that actually changed
+                $fields = [
+                    "TimeIN"     => $clockIn,
+                    "LunchStart" => $lunchOut,
+                    "LunchEnd"   => $lunchIn,
+                    "TimeOut"    => $clockOut,
+                    "TotalHours" => $totalHours
+                ];
+
+                foreach ($fields as $field => $newVal) {
+                    $oldVal = $existing[$field] ?? null;
+                    $changed = $field === 'TotalHours'
+                        ? !$sameHours($newVal, $oldVal)
+                        : (string) $newVal !== (string) $oldVal;
+                    if ($changed) {
+                        $logStmt = $conn->prepare("INSERT INTO punch_changelog (EmployeeID, Date, ChangedBy, FieldChanged, OldValue, NewValue, Reason) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                        $logStmt->bind_param("issssss", $employeeID, $date, $adminUser, $field, $oldVal, $newVal, $reason);
+                        $logStmt->execute();
+                    }
+                }
+
+                // Update (with EmployeeID validation for security)
+                $updateStmt = $conn->prepare("
+                    UPDATE timepunches
+                    SET TimeIN = ?, LunchStart = ?, LunchEnd = ?, TimeOut = ?, TotalHours = ?
+                    WHERE id = ? AND EmployeeID = ?
+                ");
+                $updateStmt->bind_param("ssssdii", $clockIn, $lunchOut, $lunchIn, $clockOut, $totalHours, $punchId, $employeeID);
+                $updateStmt->execute();
+            }
+
+            if (!empty($rowAnoms)) {
+                $msg = implode('; ', array_column($rowAnoms, 'message'));
+                queuePunchReview($conn, $employeeID, $date, $clockOut, "Anomaly ({$date}): {$msg} — needs approval", 'anomaly');
+                $flagged[] = describePunchRow($date, $clockIn, $clockOut) . ': ' . $msg;
             }
         }
     }

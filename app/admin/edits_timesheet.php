@@ -134,6 +134,7 @@ foreach ($timeOffRequests as $tor) {
 }
 
 $pageTitle = "Pending Approvals";
+require_once __DIR__ . '/../functions/csrf.php';
 require_once 'header.php';
 ?>
 <link rel="stylesheet" href="../css/edits_timesheet.css?v=2" />
@@ -153,11 +154,19 @@ require_once 'header.php';
         </div>
     <?php endif; ?>
 
+    <?php if (($_GET['error'] ?? '') === 'csrf'): ?>
+        <div class="alert alert-danger" style="margin-bottom:1rem;">
+            ⛔ <strong>Not saved:</strong> this page had been open too long and the request was
+            rejected for safety. Nothing was approved or rejected — reload and try again.
+        </div>
+    <?php endif; ?>
+
     <h2 style="margin-top:0;">Timesheet Edit Requests</h2>
     <?php if (count($edits) === 0): ?>
         <p class="no-edits">✅ No pending time edits to review at the moment.</p>
     <?php else: ?>
         <form method="POST" action="process_edits.php">
+        <?= csrf_field() ?>
             <div class="table-scroll">
             <table class="approval-table">
                 <thead>
@@ -206,6 +215,7 @@ require_once 'header.php';
     <?php else: ?>
         <p style="color:#555; font-size:0.9em;">These punches were auto-closed at 5:00 PM because the employee never clocked out. Review and Approve (accept the recorded time) or Reject (you'll fix the punch manually). Incomplete punches (e.g. open lunch) have no hours and need a manual time entry.</p>
         <form method="POST" action="process_edits.php">
+        <?= csrf_field() ?>
             <div class="table-scroll">
             <table class="approval-table">
                 <thead>

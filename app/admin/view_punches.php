@@ -11,6 +11,7 @@ if (!isset($_SESSION['admin'])) {
 require_once __DIR__ . '/../functions/check_permission.php';
 require_once __DIR__ . '/../functions/settings_helper.php';
 require_once __DIR__ . '/../functions/hours.php';
+require_once __DIR__ . '/../functions/csrf.php';
 requirePermission('edit_timesheets');
 
 date_default_timezone_set('America/Chicago');
@@ -40,12 +41,21 @@ $extraCSS = [
 require_once 'header.php';
 ?>
 
-<?php if (($_GET['success'] ?? '') === '1'): ?>
+<?php
+// Pull the per-save notice first: a save can partly succeed (some rows stored, one
+// row rejected), and showing "✅ Timesheet saved" above "⛔ Not saved" reads as a
+// contradiction. When anything was rejected, lead with the rejection.
+$notice = $_SESSION['punch_save_notice'] ?? null;
+unset($_SESSION['punch_save_notice']);
+?>
+
+<?php if (($_GET['success'] ?? '') === '1' && empty($notice['skipped'])): ?>
     <div class="alert alert-success" style="margin-bottom:1rem;">✅ Timesheet saved.</div>
 <?php elseif (($_GET['success'] ?? '') === '0'):
     $errMessages = [
         'missing_fields' => 'Missing required fields — please reselect the employee and date range, then try again.',
         'exception'      => 'A server error prevented the save. No changes were made. Please try again; if it keeps happening, contact support.',
+        'csrf'           => 'This page had been open too long and the save was rejected for safety. No changes were made — reload the timesheet and re-enter them.',
     ];
     $errKey = $_GET['error'] ?? '';
     $errMsg = $errMessages[$errKey] ?? 'The timesheet could not be saved. No changes were made.'; ?>
@@ -54,11 +64,10 @@ require_once 'header.php';
     </div>
 <?php endif; ?>
 
-<?php if (!empty($_SESSION['punch_save_notice'])):
-    $notice = $_SESSION['punch_save_notice']; unset($_SESSION['punch_save_notice']); ?>
+<?php if (!empty($notice)): ?>
     <?php if (!empty($notice['skipped'])): ?>
         <div class="alert alert-error" style="margin-bottom:1rem; background:#f8d7da; color:#721c24; border:1px solid #f5c6cb; padding:10px; border-radius:5px;">
-            ⛔ <strong>Not saved (invalid data):</strong>
+            ⛔ <strong>These rows were not saved (invalid data)</strong> — every other change on this timesheet was saved:
             <ul style="margin:0.3rem 0 0 1.2rem;">
                 <?php foreach ($notice['skipped'] as $s): ?><li><?= htmlspecialchars($s) ?></li><?php endforeach; ?>
             </ul>
@@ -124,12 +133,14 @@ require_once 'header.php';
                 <button type="submit" form="punchForm" class="btn primary">Save All Changes</button>
                 <a href="view_punches.php?emp=<?= $empParam ?>&from=<?= $fromParam ?>&to=<?= $toParam ?>" class="btn secondary">Cancel</a>
             <?php else: ?>
+                <a href="punch_history.php?emp=<?= $empParam ?>&from=<?= htmlspecialchars($from) ?>&to=<?= htmlspecialchars($to) ?>" class="btn secondary">📜 Change History</a>
                 <a href="view_punches.php?emp=<?= $empParam ?>&from=<?= $fromParam ?>&to=<?= $toParam ?>&mode=edit" class="btn primary">✎ Edit Timesheet</a>
             <?php endif; ?>
         </div>
     </div>
 
     <form method="POST" action="save_punches.php" id="punchForm">
+        <?= csrf_field() ?>
         <input type="hidden" name="employeeID" value="<?= htmlspecialchars($employeeID) ?>">
         <input type="hidden" name="from" value="<?= htmlspecialchars($from) ?>">
         <input type="hidden" name="to" value="<?= htmlspecialchars($to) ?>">
