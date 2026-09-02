@@ -3,10 +3,14 @@
 # Auto Clock-Out Wrapper Script
 #
 # This script runs the auto clock-out PHP script inside the Docker container.
-# It should be scheduled via cron to run at midnight daily.
+#
+# Scheduled for early morning rather than midnight: this host powers off overnight
+# (19:00-04:10), so a midnight job never fires and cron does not catch up. The PHP
+# script only closes punches from PAST days, so the exact run time does not matter
+# and a missed run is picked up by the next one.
 #
 # Usage: /path/to/auto_clockout_wrapper.sh
-# Cron: 0 0 * * * /opt/Timeclock-D-Best/deploy/scripts/auto_clockout_wrapper.sh >> /var/log/timeclock-auto-clockout.log 2>&1
+# Cron: 15 5 * * * /opt/Timeclock-D-Best/deploy/scripts/auto_clockout_wrapper.sh >> /var/log/timeclock-auto-clockout.log 2>&1
 #
 
 # Configuration
