@@ -14,6 +14,12 @@ if (isset($_GET['status'])) {
         case 'withdrawn':
             $statusMessage = '<div class="alert alert-info">Your request has been withdrawn.</div>';
             break;
+        case 'cancelled':
+            $statusMessage = '<div class="alert alert-info">Your approved time off has been cancelled and your manager has been notified.</div>';
+            if (isset($_GET['m365_sync']) && $_GET['m365_sync'] === 'failed') {
+                $statusMessage .= '<div class="alert alert-danger">The calendar event could not be removed automatically. Your manager has been told to delete it by hand.</div>';
+            }
+            break;
         case 'updated':
             $statusMessage = '<div class="alert alert-success">Your pending request has been updated.</div>';
             break;
@@ -59,6 +65,11 @@ function formatDateRange(string $start, string $end): string {
     if ($start === $end) return date('m/d/Y', strtotime($start));
     return date('m/d/Y', strtotime($start)) . ' &ndash; ' . date('m/d/Y', strtotime($end));
 }
+// Entity-free variant for attribute values / JS strings (formatDateRange emits &ndash;).
+function plainDateRange(string $start, string $end): string {
+    if ($start === $end) return date('m/d/Y', strtotime($start));
+    return date('m/d/Y', strtotime($start)) . ' - ' . date('m/d/Y', strtotime($end));
+}
 ?>
 <link rel="stylesheet" href="../css/user_timesheet.css">
 <style>
@@ -94,6 +105,29 @@ function formatDateRange(string $start, string $end): string {
     border-radius: 3px; cursor: pointer; font-size: 0.85rem;
   }
   .withdraw-btn:hover { background-color: #8a1f2a; }
+  .to-modal-backdrop {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+    z-index: 1000; align-items: center; justify-content: center; padding: 1rem;
+  }
+  .to-modal-backdrop.visible { display: flex; }
+  .to-modal {
+    background: #fff; color: #222; border-radius: 6px; padding: 1.25rem;
+    width: 100%; max-width: 460px; box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+  }
+  .to-modal h3 { margin: 0 0 0.5rem; font-size: 1.1rem; }
+  .to-modal p { margin: 0 0 0.75rem; font-size: 0.9rem; color: #555; }
+  .to-modal label { display: block; font-weight: 600; margin-bottom: 0.25rem; }
+  .to-modal textarea {
+    width: 100%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px;
+    font-size: 1rem; box-sizing: border-box; resize: vertical; min-height: 70px;
+  }
+  .to-modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
+  .to-modal-actions button {
+    border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.95rem;
+  }
+  .to-modal-keep { background-color: #e0e0e0; color: #222; }
+  .to-modal-confirm { background-color: #b02a37; color: #fff; }
+  .to-modal-confirm:hover { background-color: #8a1f2a; }
 </style>
 
 <?= $statusMessage ?>
@@ -199,7 +233,12 @@ function formatDateRange(string $start, string $end): string {
                   <button type="submit" class="withdraw-btn" onclick="return confirm('Withdraw this request?');">Withdraw</button>
                 </form>
               <?php elseif ($r['Status'] === 'Approved' && !$hasOpenAmendment): ?>
-                <a href="edit_time_off.php?id=<?= (int) $r['ID'] ?>" class="withdraw-btn" style="background-color:#0078D7; text-decoration:none; display:inline-block;">Edit</a>
+                <a href="edit_time_off.php?id=<?= (int) $r['ID'] ?>" class="withdraw-btn" style="background-color:#0078D7; text-decoration:none; display:inline-block; margin-right:0.25rem;">Edit</a>
+                <?php if ($r['StartDate'] > $today): ?>
+                  <button type="button" class="withdraw-btn cancel-to-btn"
+                          data-id="<?= (int) $r['ID'] ?>"
+                          data-label="<?= htmlspecialchars($r['Category'] . ', ' . plainDateRange($r['StartDate'], $r['EndDate']), ENT_QUOTES) ?>">Cancel</button>
+                <?php endif; ?>
               <?php elseif ($r['Status'] === 'Approved' && $hasOpenAmendment): ?>
                 <span style="color:#856404; font-size:0.85rem;">amendment pending</span>
               <?php endif; ?>
@@ -210,6 +249,29 @@ function formatDateRange(string $start, string $end): string {
     </table>
   </div>
 <?php endif; ?>
+
+<div class="to-modal-backdrop" id="cancelTOBackdrop">
+  <div class="to-modal" role="dialog" aria-modal="true" aria-labelledby="cancelTOTitle">
+    <form method="POST" action="cancel_time_off.php" id="cancelTOForm">
+      <h3 id="cancelTOTitle">Cancel this time off</h3>
+      <p>
+        <strong id="cancelTOLabel"></strong><br>
+        These hours will stop counting toward your time off, the calendar event is removed,
+        and your manager is notified. You can submit a new request later if plans change.
+      </p>
+      <input type="hidden" name="RequestID" id="cancelTORequestID" value="">
+      <div>
+        <label for="CancelReason">Reason (required &mdash; sent to your manager)</label>
+        <textarea id="CancelReason" name="CancelReason" maxlength="500"
+                  placeholder="e.g., trip fell through, covering a shift instead" required></textarea>
+      </div>
+      <div class="to-modal-actions">
+        <button type="button" class="to-modal-keep" id="cancelTOKeep">Keep it</button>
+        <button type="submit" class="to-modal-confirm">Cancel this time off</button>
+      </div>
+    </form>
+  </div>
+</div>
 
 <script>
 (function() {
@@ -256,6 +318,42 @@ function formatDateRange(string $start, string $end): string {
         alert('End time must be later than start time.');
         return;
       }
+    }
+  });
+
+  // Cancel-approved-time-off modal
+  const backdrop  = document.getElementById('cancelTOBackdrop');
+  const cancelId  = document.getElementById('cancelTORequestID');
+  const cancelLbl = document.getElementById('cancelTOLabel');
+  const reasonBox = document.getElementById('CancelReason');
+
+  function closeCancelModal() {
+    backdrop.classList.remove('visible');
+    reasonBox.value = '';
+    cancelId.value = '';
+  }
+
+  document.querySelectorAll('.cancel-to-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      cancelId.value = btn.dataset.id;
+      cancelLbl.textContent = btn.dataset.label;
+      backdrop.classList.add('visible');
+      reasonBox.focus();
+    });
+  });
+
+  document.getElementById('cancelTOKeep').addEventListener('click', closeCancelModal);
+  backdrop.addEventListener('click', (e) => {
+    if (e.target === backdrop) closeCancelModal();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && backdrop.classList.contains('visible')) closeCancelModal();
+  });
+
+  document.getElementById('cancelTOForm').addEventListener('submit', (e) => {
+    if (reasonBox.value.trim() === '') {
+      e.preventDefault();
+      alert('Please give a reason so your manager knows why.');
     }
   });
 })();
