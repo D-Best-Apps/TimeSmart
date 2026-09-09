@@ -129,6 +129,7 @@ $timeOffHistory = $torStmt->get_result()->fetch_all(MYSQLI_ASSOC);
     .badge-pending { background-color: #FFA500; }
     .badge-approved { background-color: #28a745; }
     .badge-rejected { background-color: #dc3545; }
+    .badge-cancelled { background-color: #dc3545; }
     .badge-unknown { background-color: #6c757d; }
 
     .edit-status-table {
@@ -321,6 +322,7 @@ $timeOffHistory = $torStmt->get_result()->fetch_all(MYSQLI_ASSOC);
                             'pending'   => 'badge-pending',
                             'approved'  => 'badge-approved',
                             'rejected'  => 'badge-rejected',
+                            'cancelled' => 'badge-cancelled',
                             'withdrawn' => 'badge-unknown',
                             default     => 'badge-unknown',
                         };

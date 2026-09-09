@@ -10,6 +10,7 @@
     .badge-pending { background-color: #FFA500; }
     .badge-approved { background-color: #28a745; }
     .badge-rejected { background-color: #dc3545; }
+    .badge-cancelled { background-color: #dc3545; }
     .badge-unknown { background-color: #6c757d; }
 
     .edit-status-table {
