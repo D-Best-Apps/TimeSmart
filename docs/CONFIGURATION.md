@@ -338,6 +338,29 @@ Stored in `settings` table:
 | Setting | Type | Description | Default |
 |---------|------|-------------|---------|
 | `EnforceGPS` | boolean | Require GPS for clock actions | 0 (disabled) |
+| `notify_timeoff_extra` | string | Extra addresses (comma-separated) notified on time-off requests, on top of opted-in admins | empty |
+| `notify_timesheet_edits_extra` | string | Extra addresses (comma-separated) notified on timesheet edit requests | empty |
+| `mail_admin_address` | string | Target of the **Save & Send Test Email** button only — not a notification recipient | empty |
+
+### Notification Recipients
+
+Who gets notified when an employee submits a request is configured in the admin portal
+under **Settings → Notification Recipients**, not by a single address.
+
+Each admin (`super_admin` or `reports_only`) has a per-type opt-in stored on their user row:
+
+| Column | Notifies on |
+|--------|-------------|
+| `users.NotifyTimeOff` | New time-off requests, amendments, and employee cancellations |
+| `users.NotifyTimesheetEdits` | Timesheet adjustment requests |
+
+The final recipient list is the opted-in admins plus the matching `notify_*_extra`
+setting, deduplicated case-insensitively and validated. Resolved by
+`notificationRecipients()` in `app/functions/notify_recipients.php`. An empty list
+means nobody is notified — it is not an error, but it is logged.
+
+Employee-facing mail (approval, denial, admin cancellation) always goes to the
+employee and ignores these settings.
 
 **Modify via SQL:**
 ```sql

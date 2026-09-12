@@ -129,11 +129,8 @@ if (!$ins->execute()) {
     exit;
 }
 
-// Notify admin
-$adminAddress = '';
-if ($row = $conn->query("SELECT SettingValue FROM settings WHERE SettingKey = 'mail_admin_address' LIMIT 1")->fetch_assoc()) {
-    $adminAddress = $row['SettingValue'] ?? '';
-}
+// Notify every admin who can act on this
+$adminAddresses = notificationRecipients($conn, 'timeoff');
 
 $empInfo = $conn->prepare("SELECT FirstName, LastName FROM users WHERE ID = ?");
 $empInfo->bind_param("i", $sessionEmpID);
@@ -142,7 +139,7 @@ $emp = $empInfo->get_result()->fetch_assoc();
 $empName = trim(($emp['FirstName'] ?? '') . ' ' . ($emp['LastName'] ?? ''));
 
 $emailStatus = 'not_attempted';
-if ($adminAddress !== '') {
+if ($adminAddresses) {
     $origDates = $req['StartDate'] === $req['EndDate']
         ? date('m/d/Y', strtotime($req['StartDate']))
         : date('m/d/Y', strtotime($req['StartDate'])) . ' &ndash; ' . date('m/d/Y', strtotime($req['EndDate']));
@@ -168,7 +165,7 @@ if ($adminAddress !== '') {
     $body .= "<p><strong>Reason for change:</strong> " . nl2br(htmlspecialchars($reasonVal ?? '')) . "</p>";
     $body .= "<p>Review in the admin panel: <a href=\"/admin/edits_timesheet.php\">Pending Approvals</a></p>";
 
-    $emailStatus = sendTimeOffEmail($conn, $adminAddress, $subject, $body);
+    $emailStatus = sendTimeOffEmail($conn, $adminAddresses, $subject, $body);
 }
 
 header("Location: time_off.php?status=amendment_submitted&email_status=" . urlencode($emailStatus));

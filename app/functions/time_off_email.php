@@ -4,6 +4,7 @@
 // app/admin/process_time_off.php (notify employee on decision).
 
 require_once __DIR__ . '/../vendor/autoload.php';
+require_once __DIR__ . '/notify_recipients.php';
 
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
@@ -26,12 +27,20 @@ function timeOffDecryptMailPassword(?string $encrypted): ?string {
 
 /**
  * Send a transactional email using mail_* settings from the settings table.
+ * $to may be a single address or a list of them; invalid entries are dropped.
  * Returns a string status: 'sent', 'error:<reason>', or 'error:incomplete_settings'.
  * Never throws — callers must not depend on email succeeding.
  */
-function sendTimeOffEmail(mysqli $conn, string $toAddress, string $subject, string $bodyHtml): string
+function sendTimeOffEmail(mysqli $conn, $to, string $subject, string $bodyHtml): string
 {
-    if ($toAddress === '') {
+    $addresses = [];
+    foreach ((array) $to as $address) {
+        $address = trim((string) $address);
+        if ($address !== '' && filter_var($address, FILTER_VALIDATE_EMAIL)) {
+            $addresses[strtolower($address)] ??= $address;
+        }
+    }
+    if (!$addresses) {
         return 'error:no_recipient';
     }
 
@@ -69,7 +78,9 @@ function sendTimeOffEmail(mysqli $conn, string $toAddress, string $subject, stri
         $mail->Port       = (int) $mailSettings['mail_port'];
 
         $mail->setFrom($mailSettings['mail_from_address'], $mailSettings['mail_from_name']);
-        $mail->addAddress($toAddress);
+        foreach ($addresses as $address) {
+            $mail->addAddress($address);
+        }
 
         $mail->isHTML(true);
         $mail->Subject = $subject;

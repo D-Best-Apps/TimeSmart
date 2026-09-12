@@ -2,6 +2,7 @@
 session_start();
 require '../auth/db.php';
 require_once '../vendor/autoload.php';
+require_once __DIR__ . '/../functions/notify_recipients.php';
 date_default_timezone_set('America/Chicago');
 
 use PHPMailer\PHPMailer\PHPMailer;
@@ -126,15 +127,19 @@ if ($inserted > 0) {
         $mailSettings[$row['SettingKey']] = $row['SettingValue'];
     }
 
-    if (
+    $adminAddresses = notificationRecipients($conn, 'timesheet_edits');
+
+    if (!$adminAddresses) {
+        error_log("submit_timesheet_edits: no recipients opted in for timesheet edit notifications.");
+        $emailStatus = 'error:no_recipient';
+    } elseif (
         isset($mailSettings['mail_server']) &&
         isset($mailSettings['mail_port']) &&
         isset($mailSettings['mail_username']) &&
         isset($mailSettings['mail_password']) &&
         isset($mailSettings['mail_from_address']) &&
         isset($mailSettings['mail_from_name']) &&
-        isset($mailSettings['mail_encryption']) &&
-        isset($mailSettings['mail_admin_address'])
+        isset($mailSettings['mail_encryption'])
     ) {
         // mail_password is AES-256-CBC encrypted in the settings table; decrypt before use.
         $cipher = 'aes-256-cbc';
@@ -161,7 +166,9 @@ if ($inserted > 0) {
 
             //Recipients
             $mail->setFrom($mailSettings['mail_from_address'], $mailSettings['mail_from_name']);
-            $mail->addAddress($mailSettings['mail_admin_address']);
+            foreach ($adminAddresses as $adminAddress) {
+                $mail->addAddress($adminAddress);
+            }
 
             // Content
             $mail->isHTML(true);

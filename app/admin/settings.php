@@ -3,6 +3,7 @@ session_start();
 require_once '../auth/db.php';
 require_once '../vendor/autoload.php'; // For PHPMailer
 require_once __DIR__ . '/../functions/m365_calendar.php';
+require_once __DIR__ . '/../functions/notify_recipients.php';
 
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
@@ -80,6 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'mail_server', 'mail_port', 'mail_username',
         'mail_from_address', 'mail_from_name', 'mail_encryption', 'mail_admin_address',
         'm365_tenant_id', 'm365_client_id', 'm365_calendar_mailbox', 'm365_timezone',
+        'notify_timeoff_extra', 'notify_timesheet_edits_extra',
         'WeatherZip', 'QuickDefaultField'
     ];
 
@@ -170,6 +172,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute();
         $settings['mail_password'] = $encrypted_password; // Update in settings array
         $settings['mail_password_display'] = $_POST['mail_password']; // Update display value
+    }
+
+    // Notification opt-ins: one checkbox per admin, per notification type.
+    // Absent checkbox = opted out, so every eligible admin is rewritten each save.
+    $eligibleIds = [];
+    if ($res = $conn->query("SELECT ID FROM users WHERE Role IN ('super_admin', 'reports_only')")) {
+        while ($row = $res->fetch_assoc()) {
+            $eligibleIds[] = (int) $row['ID'];
+        }
+    }
+    foreach (NOTIFY_TYPES as $type => [$column, $_settingKey]) {
+        $checked = array_map('intval', (array) ($_POST["notify_{$type}_users"] ?? []));
+        // Column name comes from the constant, never from user input.
+        $upd = $conn->prepare("UPDATE users SET `{$column}` = ? WHERE ID = ?");
+        foreach ($eligibleIds as $id) {
+            $on = in_array($id, $checked, true) ? 1 : 0;
+            $upd->bind_param("ii", $on, $id);
+            $upd->execute();
+        }
     }
 
     // Handle M365 client secret separately for encryption
@@ -367,12 +388,90 @@ require_once 'header.php';
                 <input type="text" id="mail_from_name" name="mail_from_name" value="<?= htmlspecialchars($settings['mail_from_name'] ?? '') ?>">
             </div>
             <div class="field">
-                <label for="mail_admin_address">Admin Email Address (for notifications):</label>
+                <label for="mail_admin_address">Test Email Address:</label>
                 <input type="email" id="mail_admin_address" name="mail_admin_address" value="<?= htmlspecialchars($settings['mail_admin_address'] ?? '') ?>">
+                <small style="color:#555;">Where &ldquo;Save &amp; Send Test Email&rdquo; delivers. Who gets real
+                notifications is set under Notification Recipients below.</small>
             </div>
             <div class="buttons">
                 <button type="submit">Save Settings</button>
                 <button type="submit" name="test_email" value="1">Save &amp; Send Test Email</button>
+            </div>
+            <hr style="margin: 2rem 0;">
+
+            <h2 id="notifications">Notification Recipients</h2>
+            <p style="color:#555; font-size:0.9em;">
+                Who gets emailed when employees submit requests. Tick an admin to notify them,
+                or add shared mailboxes that aren&rsquo;t user accounts. Employees always get their
+                own approval and denial notices regardless of these settings.
+            </p>
+            <?php $notifyAdmins = notificationAdminUsers($conn); ?>
+            <?php if (!$notifyAdmins): ?>
+                <p style="color:#b00;">No admin accounts found to notify.</p>
+            <?php else: ?>
+            <div style="overflow-x:auto;">
+            <table style="width:100%; border-collapse:collapse; margin-bottom:1rem;">
+                <thead>
+                    <tr style="text-align:left; border-bottom:2px solid #ddd;">
+                        <th style="padding:.5rem;">Admin</th>
+                        <th style="padding:.5rem;">Email</th>
+                        <th style="padding:.5rem; text-align:center;">Time-Off Requests</th>
+                        <th style="padding:.5rem; text-align:center;">Timesheet Edits</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($notifyAdmins as $admin): ?>
+                    <?php
+                        $adminId    = (int) $admin['ID'];
+                        $adminName  = trim(($admin['FirstName'] ?? '') . ' ' . ($admin['LastName'] ?? ''));
+                        $adminEmail = trim((string) ($admin['Email'] ?? ''));
+                        $noEmail    = ($adminEmail === '');
+                    ?>
+                    <tr style="border-bottom:1px solid #eee;">
+                        <td style="padding:.5rem;">
+                            <?= htmlspecialchars($adminName) ?>
+                            <?php if ($admin['Role'] === 'reports_only'): ?>
+                                <small style="color:#777;">(reports only)</small>
+                            <?php endif; ?>
+                        </td>
+                        <td style="padding:.5rem;">
+                            <?php if ($noEmail): ?>
+                                <small style="color:#b00;">no address on file</small>
+                            <?php else: ?>
+                                <?= htmlspecialchars($adminEmail) ?>
+                            <?php endif; ?>
+                        </td>
+                        <?php foreach (['timeoff' => 'NotifyTimeOff', 'timesheet_edits' => 'NotifyTimesheetEdits'] as $type => $col): ?>
+                        <td style="padding:.5rem; text-align:center;">
+                            <input type="checkbox"
+                                   name="notify_<?= $type ?>_users[]"
+                                   value="<?= $adminId ?>"
+                                   <?= !empty($admin[$col]) ? 'checked' : '' ?>
+                                   <?= $noEmail ? 'disabled' : '' ?>>
+                        </td>
+                        <?php endforeach; ?>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+            </div>
+            <?php endif; ?>
+            <div class="field">
+                <label for="notify_timeoff_extra">Also notify on time-off requests:</label>
+                <input type="text" id="notify_timeoff_extra" name="notify_timeoff_extra" maxlength="255"
+                       placeholder="hr@example.com, payroll@example.com"
+                       value="<?= htmlspecialchars($settings['notify_timeoff_extra'] ?? '') ?>">
+                <small style="color:#555;">Comma-separated. Max 255 characters.</small>
+            </div>
+            <div class="field">
+                <label for="notify_timesheet_edits_extra">Also notify on timesheet edits:</label>
+                <input type="text" id="notify_timesheet_edits_extra" name="notify_timesheet_edits_extra" maxlength="255"
+                       placeholder="payroll@example.com"
+                       value="<?= htmlspecialchars($settings['notify_timesheet_edits_extra'] ?? '') ?>">
+                <small style="color:#555;">Comma-separated. Max 255 characters.</small>
+            </div>
+            <div class="buttons">
+                <button type="submit">Save Settings</button>
             </div>
             <hr style="margin: 2rem 0;">
 

@@ -124,14 +124,11 @@ if (!empty($req['M365EventId'])) {
     }
 }
 
-// Notify the admin (best-effort)
-$adminAddress = '';
-if ($row = $conn->query("SELECT SettingValue FROM settings WHERE SettingKey = 'mail_admin_address' LIMIT 1")->fetch_assoc()) {
-    $adminAddress = $row['SettingValue'] ?? '';
-}
+// Notify every admin (best-effort)
+$adminAddresses = notificationRecipients($conn, 'timeoff');
 
 $emailStatus = 'not_attempted';
-if ($adminAddress !== '') {
+if ($adminAddresses) {
     $datesLabel = $req['StartDate'] === $req['EndDate']
         ? date('m/d/Y', strtotime($req['StartDate']))
         : date('m/d/Y', strtotime($req['StartDate'])) . ' &ndash; ' . date('m/d/Y', strtotime($req['EndDate']));
@@ -154,7 +151,7 @@ if ($adminAddress !== '') {
     }
     $body .= "<p>View in the admin panel: <a href=\"/admin/edit_time_off.php?id={$requestID}\">this request</a></p>";
 
-    $emailStatus = sendTimeOffEmail($conn, $adminAddress, $subject, $body);
+    $emailStatus = sendTimeOffEmail($conn, $adminAddresses, $subject, $body);
 }
 
 $query = '?status=cancelled&email_status=' . urlencode($emailStatus);

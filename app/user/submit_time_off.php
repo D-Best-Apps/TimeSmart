@@ -118,12 +118,9 @@ if (!$stmt->execute()) {
     exit;
 }
 
-// Notify admin (best-effort)
+// Notify every admin who can act on this (best-effort)
 $emailStatus = 'not_attempted';
-$adminAddress = '';
-if ($row = $conn->query("SELECT SettingValue FROM settings WHERE SettingKey = 'mail_admin_address' LIMIT 1")->fetch_assoc()) {
-    $adminAddress = $row['SettingValue'] ?? '';
-}
+$adminAddresses = notificationRecipients($conn, 'timeoff');
 
 $empInfo = $conn->prepare("SELECT FirstName, LastName FROM users WHERE ID = ?");
 $empInfo->bind_param("i", $sessionEmpID);
@@ -131,7 +128,7 @@ $empInfo->execute();
 $emp = $empInfo->get_result()->fetch_assoc();
 $empName = trim(($emp['FirstName'] ?? '') . ' ' . ($emp['LastName'] ?? ''));
 
-if ($adminAddress !== '') {
+if ($adminAddresses) {
     $datesLabel = $startDate === $endDate
         ? date('m/d/Y', strtotime($startDate))
         : date('m/d/Y', strtotime($startDate)) . ' &ndash; ' . date('m/d/Y', strtotime($endDate));
@@ -152,10 +149,10 @@ if ($adminAddress !== '') {
     $body .= "</ul>";
     $body .= "<p>Review in the admin panel: <a href=\"/admin/edits_timesheet.php\">Pending Approvals</a></p>";
 
-    $emailStatus = sendTimeOffEmail($conn, $adminAddress, $subject, $body);
+    $emailStatus = sendTimeOffEmail($conn, $adminAddresses, $subject, $body);
 } else {
     $emailStatus = 'error:incomplete_settings';
-    error_log("submit_time_off: mail_admin_address not configured; admin not notified.");
+    error_log("submit_time_off: no admin recipients (check mail_admin_address and super_admin emails); admins not notified.");
 }
 
 header("Location: time_off.php?status=submitted&email_status=" . urlencode($emailStatus));
