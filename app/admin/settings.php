@@ -4,6 +4,7 @@ require_once '../auth/db.php';
 require_once '../vendor/autoload.php'; // For PHPMailer
 require_once __DIR__ . '/../functions/m365_calendar.php';
 require_once __DIR__ . '/../functions/notify_recipients.php';
+require_once __DIR__ . '/../functions/app_url.php';
 
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
@@ -81,7 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'mail_server', 'mail_port', 'mail_username',
         'mail_from_address', 'mail_from_name', 'mail_encryption', 'mail_admin_address',
         'm365_tenant_id', 'm365_client_id', 'm365_calendar_mailbox', 'm365_timezone',
-        'notify_timeoff_extra', 'notify_timesheet_edits_extra',
+        'notify_timeoff_extra', 'notify_timesheet_edits_extra', 'app_base_url',
         'WeatherZip', 'QuickDefaultField'
     ];
 
@@ -392,6 +393,15 @@ require_once 'header.php';
                 <input type="email" id="mail_admin_address" name="mail_admin_address" value="<?= htmlspecialchars($settings['mail_admin_address'] ?? '') ?>">
                 <small style="color:#555;">Where &ldquo;Save &amp; Send Test Email&rdquo; delivers. Who gets real
                 notifications is set under Notification Recipients below.</small>
+            </div>
+            <div class="field">
+                <label for="app_base_url">Site Address (used in email links):</label>
+                <input type="text" id="app_base_url" name="app_base_url" maxlength="255"
+                       placeholder="<?= htmlspecialchars(appBaseUrl() ?: 'https://timeclock.example.com') ?>"
+                       value="<?= htmlspecialchars($settings['app_base_url'] ?? '') ?>">
+                <small style="color:#555;">The address employees and admins use to reach this site, e.g.
+                <code>https://timeclock.example.com</code>. Links in notification emails are built from it.
+                Leave blank to use whatever host the browser requested.</small>
             </div>
             <div class="buttons">
                 <button type="submit">Save Settings</button>

@@ -8,6 +8,7 @@
 session_start();
 require '../auth/db.php';
 require_once __DIR__ . '/../functions/time_off_email.php';
+require_once __DIR__ . '/../functions/app_url.php';
 require_once __DIR__ . '/../functions/m365_calendar.php';
 date_default_timezone_set('America/Chicago');
 
@@ -149,7 +150,8 @@ if ($adminAddresses) {
             ? "<p>The calendar event has been removed.</p>"
             : "<p><strong>Note:</strong> the calendar event could not be removed automatically (" . htmlspecialchars($m365Failure) . ") &mdash; it may need to be deleted by hand.</p>";
     }
-    $body .= "<p>View in the admin panel: <a href=\"/admin/edit_time_off.php?id={$requestID}\">this request</a></p>";
+    $reviewUrl = appUrl("/admin/edit_time_off.php?id={$requestID}", $conn);
+    $body .= "<p>View in the admin panel: <a href=\"{$reviewUrl}\">this request</a></p>";
 
     $emailStatus = sendTimeOffEmail($conn, $adminAddresses, $subject, $body);
 }

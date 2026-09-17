@@ -2,6 +2,7 @@
 session_start();
 require '../auth/db.php';
 require_once __DIR__ . '/../functions/time_off_email.php';
+require_once __DIR__ . '/../functions/app_url.php';
 date_default_timezone_set('America/Chicago');
 
 if (!isset($_SESSION['EmployeeID'])) {
@@ -163,7 +164,8 @@ if ($adminAddresses) {
     $body .= "<tr><td>Notes</td><td>" . nl2br(htmlspecialchars($req['Notes'] ?? '')) . "</td><td>" . nl2br(htmlspecialchars($notesVal ?? '')) . "</td></tr>";
     $body .= "</table>";
     $body .= "<p><strong>Reason for change:</strong> " . nl2br(htmlspecialchars($reasonVal ?? '')) . "</p>";
-    $body .= "<p>Review in the admin panel: <a href=\"/admin/edits_timesheet.php\">Pending Approvals</a></p>";
+    $reviewUrl = appUrl('/admin/edits_timesheet.php', $conn);
+    $body .= "<p>Review in the admin panel: <a href=\"{$reviewUrl}\">Pending Approvals</a></p>";
 
     $emailStatus = sendTimeOffEmail($conn, $adminAddresses, $subject, $body);
 }
