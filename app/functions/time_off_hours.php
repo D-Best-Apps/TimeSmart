@@ -3,12 +3,20 @@
 // Used by the summary report (HTML + PDF), per-employee detail pages, and the
 // employee timesheet view to surface approved Sick/PTO hours within a date range.
 
-require_once __DIR__ . '/hours.php'; // canonical payPeriodStart/End + read-stored-hours conventions
+require_once __DIR__ . '/hours.php';    // canonical payPeriodStart/End + read-stored-hours conventions
+require_once __DIR__ . '/holidays.php'; // canonical workday / observed-holiday calendar
 
 /**
  * Compute hours for a single approved time-off request, intersected with [periodStart, periodEnd].
- * Full-day requests count as $defaultDayHours per day (default 8).
- * Partial-day requests (StartTime + EndTime set) count as the time delta per day.
+ *
+ * Full-day requests count as $defaultDayHours (default 8) per WORKING day — weekends
+ * and observed company holidays are skipped, because the office is closed and no PTO
+ * is consumed. A Thu-to-the-following-Tue request is 3 days of PTO, not 6.
+ *
+ * Partial-day requests (StartTime + EndTime set) count the time delta for every day in
+ * the range as given, weekends included: the explicit times mean the employee picked
+ * specific hours on specific days, including the occasional weekend shift.
+ *
  * Returns a float of decimal hours; caller can convert to H:MM.
  */
 function timeOffHoursInPeriod(array $request, string $periodStart, string $periodEnd, int $defaultDayHours = 8): float
@@ -24,13 +32,11 @@ function timeOffHoursInPeriod(array $request, string $periodStart, string $perio
         $startSec = strtotime("1970-01-01 " . $request['StartTime']);
         $endSec   = strtotime("1970-01-01 " . $request['EndTime']);
         $hoursPerDay = ($endSec - $startSec) / 3600.0;
+        $days = (int) (new DateTime($reqEnd))->diff(new DateTime($reqStart))->days + 1;
     } else {
         $hoursPerDay = (float) $defaultDayHours;
+        $days = countWorkdays($reqStart, $reqEnd);
     }
-
-    $d1 = new DateTime($reqStart);
-    $d2 = new DateTime($reqEnd);
-    $days = (int) $d2->diff($d1)->days + 1;
 
     return $days * $hoursPerDay;
 }
@@ -146,13 +152,13 @@ function weeklyTimeOffExcess(mysqli $conn, int $empID, string $periodStart, stri
 /**
  * For a proposed time-off request (could be new or an amendment), compute the
  * projected weekly hour totals (clocked + already-approved time-off + this
- * request) for every Mon–Sun week the request touches. Used to warn the
- * employee / admin when approval would push the week over 40 hours.
+ * request) for every Wed–Tue pay period the request touches. Used to warn the
+ * employee / admin when approval would push the period over 40 hours.
  *
  * Returns: [
  *   [
- *     'weekStart' => 'YYYY-MM-DD' (Monday),
- *     'weekEnd'   => 'YYYY-MM-DD' (Sunday),
+ *     'weekStart' => 'YYYY-MM-DD' (Wednesday),
+ *     'weekEnd'   => 'YYYY-MM-DD' (Tuesday),
  *     'clocked'   => float,
  *     'priorTimeOff' => float,   // approved Sick/PTO already on record (excludes $excludeRequestID)
  *     'thisRequest'  => float,   // hours this request contributes to this week
@@ -247,7 +253,10 @@ function projectedWeeklyHours(
  * Expand approved time-off requests into per-day rows for chronological merging
  * into a daily detail table. Returns array indexed numerically with keys:
  *   Date, Category ('Sick'|'PTO'), Hours (float), StartTime (or null), EndTime (or null)
- * One row per day in the request's range, with hours-per-day applied.
+ *
+ * One row per day in the request's range, with hours-per-day applied. Full-day
+ * requests emit rows for working days only, so the per-day rows always sum to
+ * timeOffHoursInPeriod() for the same range — keep these two in step.
  */
 function expandTimeOffToDays(array $request, string $periodStart, string $periodEnd, int $defaultDayHours = 8): array
 {
@@ -270,6 +279,11 @@ function expandTimeOffToDays(array $request, string $periodStart, string $period
     $d = new DateTime($reqStart);
     $end = new DateTime($reqEnd);
     while ($d <= $end) {
+        // Full-day time off only lands on working days; partial-day requests are taken as given.
+        if (!$hasTime && !isWorkday($d->format('Y-m-d'))) {
+            $d->modify('+1 day');
+            continue;
+        }
         $rows[] = [
             'Date'      => $d->format('Y-m-d'),
             'Category'  => $request['Category'],
