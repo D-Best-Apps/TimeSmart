@@ -24,9 +24,24 @@ $stmt = $conn->prepare("SELECT pe.*, u.FirstName, u.LastName FROM pending_edits 
 $stmt->execute();
 $result = $stmt->get_result();
 
+// An unfinished-lunch item whose punch has since been fixed elsewhere (e.g. on the
+// punch editor) no longer needs review — close it so the queue reflects reality.
+$autoClose = $conn->prepare("UPDATE pending_edits pe
+                               SET pe.Status = 'Approved', pe.ReviewedAt = NOW(), pe.ReviewedBy = 'System (punch corrected)'
+                             WHERE pe.Status = 'Pending' AND pe.Source = 'incomplete_lunch'
+                               AND NOT EXISTS (SELECT 1 FROM timepunches tp
+                                                WHERE tp.EmployeeID = pe.EmployeeID AND tp.Date = pe.Date
+                                                  AND tp.LunchStart IS NOT NULL AND tp.LunchEnd IS NULL)");
+$autoClose->execute();
+
 // System-generated review items (forced-outs + unfinished-lunch clock-outs).
 // Surfaced as-is (not diffed against the punch, which is already updated).
-$forcedStmt = $conn->prepare("SELECT pe.*, u.FirstName, u.LastName FROM pending_edits pe
+// OpenLunchStart is set only for an unfinished lunch still awaiting its end time.
+$forcedStmt = $conn->prepare("SELECT pe.*, u.FirstName, u.LastName,
+                                     (SELECT MIN(tp.LunchStart) FROM timepunches tp
+                                       WHERE tp.EmployeeID = pe.EmployeeID AND tp.Date = pe.Date
+                                         AND tp.LunchStart IS NOT NULL AND tp.LunchEnd IS NULL) AS OpenLunchStart
+                              FROM pending_edits pe
                               JOIN users u ON pe.EmployeeID = u.ID
                               WHERE pe.Status = 'Pending' AND pe.Source <> 'employee'
                               ORDER BY pe.Date DESC, pe.SubmittedAt DESC");
@@ -154,6 +169,11 @@ require_once 'header.php';
         </div>
     <?php endif; ?>
 
+    <?php if (($_GET['error'] ?? '') === 'lunchend'): ?>
+        <div class="alert alert-danger" style="margin-bottom:1rem;">
+            ⛔ <strong>Lunch end not saved:</strong> <?= htmlspecialchars($_GET['details'] ?? 'enter a valid time.') ?>
+        </div>
+    <?php endif; ?>
     <?php if (($_GET['error'] ?? '') === 'csrf'): ?>
         <div class="alert alert-danger" style="margin-bottom:1rem;">
             ⛔ <strong>Not saved:</strong> this page had been open too long and the request was
@@ -213,7 +233,7 @@ require_once 'header.php';
     <?php if (count($forcedOuts) === 0): ?>
         <p class="no-edits">✅ No system forced-outs awaiting review.</p>
     <?php else: ?>
-        <p style="color:#555; font-size:0.9em;">These punches were auto-closed at 5:00 PM because the employee never clocked out. Review and Approve (accept the recorded time) or Reject (you'll fix the punch manually). Incomplete punches (e.g. open lunch) have no hours and need a manual time entry.</p>
+        <p style="color:#555; font-size:0.9em;">These punches were auto-closed at 5:00 PM because the employee never clocked out. Review and Approve (accept the recorded time) or Reject (you'll fix the punch manually). Unfinished lunches have <strong>no hours</strong> until you enter the time the employee came back from lunch.</p>
         <form method="POST" action="process_edits.php">
         <?= csrf_field() ?>
             <div class="table-scroll">
@@ -234,10 +254,22 @@ require_once 'header.php';
                             <td><?= htmlspecialchars($fo['Date']) ?></td>
                             <td><?= $fo['TimeOut'] ? htmlspecialchars(date('g:i a', strtotime($fo['TimeOut']))) : '—' ?></td>
                             <td class="note-box"><?= htmlspecialchars($fo['Reason']) ?></td>
-                            <td class="action-buttons">
-                                <button type="submit" class="approve-btn" name="action[<?= (int) $fo['ID'] ?>][__forced]" value="approve">Approve</button>
-                                <button type="submit" class="reject-btn" name="action[<?= (int) $fo['ID'] ?>][__forced]" value="reject">Reject</button>
-                            </td>
+                            <?php if ($fo['Source'] === 'incomplete_lunch' && $fo['OpenLunchStart']): ?>
+                                <?php $foDate = date('m/d/Y', strtotime($fo['Date'])); ?>
+                                <td class="action-buttons">
+                                    <label style="display:block; font-size:0.85em; margin-bottom:0.25rem;">
+                                        Lunch started <?= htmlspecialchars(date('g:i a', strtotime($fo['OpenLunchStart']))) ?> — back at:
+                                    </label>
+                                    <input type="time" name="lunch_end[<?= (int) $fo['ID'] ?>]" aria-label="Lunch end time">
+                                    <button type="submit" class="approve-btn" name="action[<?= (int) $fo['ID'] ?>][__lunchend]" value="approve">Save lunch end</button>
+                                    <a href="timesheet_edit.php?emp=<?= (int) $fo['EmployeeID'] ?>&amp;from=<?= urlencode($foDate) ?>&amp;to=<?= urlencode($foDate) ?>" style="display:block; font-size:0.85em; margin-top:0.25rem;">Edit punch instead</a>
+                                </td>
+                            <?php else: ?>
+                                <td class="action-buttons">
+                                    <button type="submit" class="approve-btn" name="action[<?= (int) $fo['ID'] ?>][__forced]" value="approve">Approve</button>
+                                    <button type="submit" class="reject-btn" name="action[<?= (int) $fo['ID'] ?>][__forced]" value="reject">Reject</button>
+                                </td>
+                            <?php endif; ?>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>

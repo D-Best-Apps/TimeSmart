@@ -8,6 +8,9 @@ $user = $_ENV['DB_USER'];
 $pass = $_ENV['DB_PASS'];
 $tz   = $_ENV['DB_TIMEZONE'] ?? 'America/Chicago';
 
+// PHP in the container defaults to UTC; keep PHP and MySQL on the same clock.
+date_default_timezone_set($tz);
+
 // Connect to MySQL
 $conn = new mysqli($host, $user, $pass, $db);
 if ($conn->connect_error) {

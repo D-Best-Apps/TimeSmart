@@ -16,6 +16,56 @@ require_once __DIR__ . '/../functions/csrf.php';
 require_csrf('edits_timesheet.php?error=csrf');
 
 $admin = $_SESSION['admin'];
+
+/**
+ * Set LunchEnd on the open-lunch punch behind an incomplete_lunch review item,
+ * recompute TotalHours, log it, and close the item. Returns an error message or null.
+ */
+function resolveIncompleteLunch(mysqli $conn, array $edit, string $lunchEnd, string $admin, string $now): ?string {
+    if (!preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $lunchEnd)) {
+        return 'enter the time the employee came back from lunch.';
+    }
+    $lunchEnd .= ':00';
+
+    $stmt = $conn->prepare("SELECT id, TimeIN, LunchStart, TimeOut FROM timepunches
+                             WHERE EmployeeID = ? AND Date = ? AND LunchStart IS NOT NULL AND LunchEnd IS NULL
+                             ORDER BY LunchStart LIMIT 1");
+    $stmt->bind_param("is", $edit['EmployeeID'], $edit['Date']);
+    $stmt->execute();
+    $punch = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    if (!$punch) {
+        return 'that punch no longer has an unfinished lunch — reload the page.';
+    }
+
+    $leS = hms_to_seconds($lunchEnd);
+    if ($leS <= hms_to_seconds($punch['LunchStart'])) {
+        return 'lunch end must be after lunch start (' . date('g:i a', strtotime($punch['LunchStart'])) . ').';
+    }
+    if ($punch['TimeOut'] !== null && $leS > hms_to_seconds($punch['TimeOut'])) {
+        return 'lunch end must be before clock-out (' . date('g:i a', strtotime($punch['TimeOut'])) . ').';
+    }
+
+    $total = calculateTotalHours($punch['TimeIN'], $punch['LunchStart'], $lunchEnd, $punch['TimeOut']);
+
+    $conn->begin_transaction();
+    $u = $conn->prepare("UPDATE timepunches SET LunchEnd = ?, TotalHours = ? WHERE id = ?");
+    $u->bind_param("sdi", $lunchEnd, $total, $punch['id']);
+    $u->execute();
+    $u->close();
+
+    $log = $conn->prepare("INSERT INTO punch_changelog (EmployeeID, Date, ChangedBy, FieldChanged, OldValue, NewValue, Reason) VALUES (?, ?, ?, 'LunchEnd', NULL, ?, 'Unfinished lunch resolved from review queue')");
+    $log->bind_param("isss", $edit['EmployeeID'], $edit['Date'], $admin, $lunchEnd);
+    $log->execute();
+    $log->close();
+
+    $s = $conn->prepare("UPDATE pending_edits SET Status = 'Approved', LunchEnd = ?, ReviewedAt = ?, ReviewedBy = ? WHERE ID = ?");
+    $s->bind_param("sssi", $lunchEnd, $now, $admin, $edit['ID']);
+    $s->execute();
+    $s->close();
+    $conn->commit();
+    return null;
+}
 $now = date('Y-m-d H:i:s');
 $canViewPrivate = canViewPrivateNotes($conn);
 
@@ -32,6 +82,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $edit = $stmt->get_result()->fetch_assoc();
 
             if (!$edit) continue;
+
+            // Unfinished lunch: the only resolution is entering when the employee came
+            // back. Approve/Reject alone would close the item and leave the day at 0 hours.
+            if ($edit['Source'] === 'incomplete_lunch') {
+                if ($field !== '__lunchend' || $edit['Status'] !== 'Pending') continue;
+                $err = resolveIncompleteLunch($conn, $edit, trim($_POST['lunch_end'][$editID] ?? ''), $admin, $now);
+                if ($err !== null) {
+                    header('Location: edits_timesheet.php?error=lunchend&details=' . urlencode($err));
+                    exit;
+                }
+                continue;
+            }
 
             if ($decision === 'Approved') {
                 // Update timepunches table
