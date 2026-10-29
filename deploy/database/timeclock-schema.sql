@@ -43,6 +43,7 @@ CREATE TABLE `users` (
   `Role` enum('employee','reports_only','super_admin') NOT NULL DEFAULT 'employee',
   `NotifyTimeOff` tinyint(1) NOT NULL DEFAULT 0,
   `NotifyTimesheetEdits` tinyint(1) NOT NULL DEFAULT 0,
+  `ScheduledStartTime` time DEFAULT NULL,
   PRIMARY KEY (`ID`),
   UNIQUE KEY `BadgeID` (`BadgeID`),
   UNIQUE KEY `PIN` (`PIN`)

@@ -87,6 +87,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Store blank Badge ID / PIN as NULL so they don't collide on the UNIQUE keys
     $badgeID = $badgeID !== '' ? $badgeID : null;
     $pin     = $pin !== '' ? $pin : null;
+    // Blank start time is NULL: '' is rejected by a TIME column in strict mode, and
+    // the tardies reports skip users only when it IS NULL
+    $scheduledStartTime = $scheduledStartTime !== '' ? $scheduledStartTime : null;
 
     // Insert user with default 2FA disabled and admin override ON
     $stmt = $conn->prepare("
