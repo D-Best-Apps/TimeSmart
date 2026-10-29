@@ -2,6 +2,7 @@
 require_once '../auth/db.php';
 require_once '../vendor/autoload.php';
 require_once __DIR__ . '/../functions/hours.php';
+require_once __DIR__ . '/../functions/pay_rules.php'; // punchRoundingActive()
 
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -13,6 +14,9 @@ $startDate = $_POST['start'] ?? '';
 $endDate = $_POST['end'] ?? '';
 $employeeID = $_POST['emp'] ?? '';
 $rounding = intval($_POST['rounding'] ?? 0);
+if (punchRoundingActive($conn)) {
+    $rounding = 0; // punches already rounded by shift / pay rules
+}
 $separatePages = intval($_POST['separate_pages'] ?? 0);
 
 if (!$startDate || !$endDate) {

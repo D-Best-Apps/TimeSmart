@@ -19,6 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $office    = trim($_POST['Office'] ?? '');
     $password  = $_POST['Password'] ?? '';
     $scheduledStartTime = trim($_POST['ScheduledStartTime'] ?? '');
+    $shiftID   = (int) ($_POST['ShiftID'] ?? 0);
 
     // Basic validation
     if (!$firstName || !$lastName || !$office || !$password) {
@@ -90,13 +91,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Blank start time is NULL: '' is rejected by a TIME column in strict mode, and
     // the tardies reports skip users only when it IS NULL
     $scheduledStartTime = $scheduledStartTime !== '' ? $scheduledStartTime : null;
+    // Shift must exist and be active; anything else means "no shift"
+    if ($shiftID > 0) {
+        $chk = $conn->prepare("SELECT ID FROM shifts WHERE ID = ? AND Archived = 0");
+        $chk->bind_param("i", $shiftID);
+        $chk->execute();
+        $chk->store_result();
+        $shiftID = $chk->num_rows > 0 ? $shiftID : null;
+        $chk->close();
+    } else {
+        $shiftID = null;
+    }
 
     // Insert user with default 2FA disabled and admin override ON
     $stmt = $conn->prepare("
-        INSERT INTO users (FirstName, LastName, BadgeID, PIN, Office, ClockStatus, Pass, TwoFAEnabled, AdminOverride2FA, ScheduledStartTime)
-        VALUES (?, ?, ?, ?, ?, 'Out', ?, 0, 1, ?)
+        INSERT INTO users (FirstName, LastName, BadgeID, PIN, Office, ClockStatus, Pass, TwoFAEnabled, AdminOverride2FA, ScheduledStartTime, ShiftID)
+        VALUES (?, ?, ?, ?, ?, 'Out', ?, 0, 1, ?, ?)
     ");
-    $stmt->bind_param("sssssss", $firstName, $lastName, $badgeID, $pin, $office, $hashed, $scheduledStartTime);
+    $stmt->bind_param("sssssssi", $firstName, $lastName, $badgeID, $pin, $office, $hashed, $scheduledStartTime, $shiftID);
 
     if ($stmt->execute()) {
         header("Location: manage_users.php");

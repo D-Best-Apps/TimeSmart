@@ -180,6 +180,8 @@ function setClockStatus($conn, $empID, $status) {
 // Worked-hours math comes from the single canonical source of truth so the
 // punch screens, admin edits, and every report compute hours identically.
 require_once __DIR__ . '/hours.php'; // calculateTotalHours(), reconcileClockStatus(), etc.
+// Shift rounding / auto-lunch: every clock-out re-applies the rules to the whole day.
+require_once __DIR__ . '/pay_rules.php'; // recomputePunchHours()
 
 /**
  * Logs a pending edit when a punch time is adjusted.
@@ -302,7 +304,7 @@ if (!empty($_POST['mode']) && $_POST['mode'] === 'kiosk' && !empty($_POST['TagID
     $stmt->close();
 
     // Get current open punch
-    $punch = $conn->prepare("SELECT ID, TimeIN, LunchStart, LunchEnd FROM timepunches WHERE EmployeeID = ? AND TimeOUT IS NULL ORDER BY Date DESC, TimeIN DESC LIMIT 1");
+    $punch = $conn->prepare("SELECT ID, Date, TimeIN, LunchStart, LunchEnd FROM timepunches WHERE EmployeeID = ? AND TimeOUT IS NULL ORDER BY Date DESC, TimeIN DESC LIMIT 1");
     $punch->bind_param("i", $empID);
     $punch->execute();
     $punch->store_result();
@@ -310,7 +312,7 @@ if (!empty($_POST['mode']) && $_POST['mode'] === 'kiosk' && !empty($_POST['TagID
     $status = 'new'; // default
 
     if ($punch->num_rows > 0) {
-        $punch->bind_result($punchID, $timeIn, $lunchStart, $lunchEnd);
+        $punch->bind_result($punchID, $punchDate, $timeIn, $lunchStart, $lunchEnd);
         $punch->fetch();
 
         if (empty($lunchStart)) {
@@ -398,6 +400,7 @@ if (!empty($_POST['mode']) && $_POST['mode'] === 'kiosk' && !empty($_POST['TagID
             $stmt->bind_param("ssdsi", $now, $lunchEnd, $total, $ip, $punchID);
             if (!$stmt->execute()) send_json_response(false, "DB error (clockout)", 500, $stmt->error);
             $stmt->close();
+            $total = recomputePunchHours($conn, $empID, $punchDate, $punchID) ?? $total;
             setClockStatus($conn, $empID, 'Out');
             echo json_encode([
                 'success' => true,
@@ -462,14 +465,14 @@ if (!empty($_POST['mode']) && $_POST['mode'] === 'quickclock') {
     qc_rl_reset($ip); // a valid PIN/badge clears any failure streak
 
     // Current open punch, if any
-    $punch = $conn->prepare("SELECT ID, TimeIN, LunchStart, LunchEnd FROM timepunches WHERE EmployeeID = ? AND TimeOUT IS NULL ORDER BY Date DESC, TimeIN DESC LIMIT 1");
+    $punch = $conn->prepare("SELECT ID, Date, TimeIN, LunchStart, LunchEnd FROM timepunches WHERE EmployeeID = ? AND TimeOUT IS NULL ORDER BY Date DESC, TimeIN DESC LIMIT 1");
     $punch->bind_param("i", $empID);
     $punch->execute();
     $punch->store_result();
     $hasOpen = $punch->num_rows > 0;
-    $punchID = $timeIn = $lunchStart = $lunchEnd = null;
+    $punchID = $punchDate = $timeIn = $lunchStart = $lunchEnd = null;
     if ($hasOpen) {
-        $punch->bind_result($punchID, $timeIn, $lunchStart, $lunchEnd);
+        $punch->bind_result($punchID, $punchDate, $timeIn, $lunchStart, $lunchEnd);
         $punch->fetch();
     }
     $punch->close();
@@ -494,6 +497,7 @@ if (!empty($_POST['mode']) && $_POST['mode'] === 'quickclock') {
         $stmt->bind_param("ssdsi", $now, $lunchEnd, $total, $ip, $punchID);
         if (!$stmt->execute()) { send_json_response(false, "DB error (clock out)", 500, $stmt->error); }
         $stmt->close();
+        $total = recomputePunchHours($conn, $empID, $punchDate, $punchID) ?? $total;
         setClockStatus($conn, $empID, 'Out');
         send_json_response(true, "👋 Goodbye, {$firstName} — Clocked OUT at " . date("g:i A", strtotime($now)) . " (" . number_format((float) $total, 2) . " hrs)",
             200, null, ['firstName' => $firstName, 'action' => 'out']);
@@ -640,7 +644,7 @@ $userStmt->close();
 
 
 // Find the last open punch record for the user to handle any ongoing shift (e.g., overnight)
-$punchStmt = $conn->prepare("SELECT TimeIN, LunchStart, LunchEnd FROM timepunches WHERE EmployeeID = ? AND TimeOUT IS NULL ORDER BY Date DESC, TimeIN DESC LIMIT 1");
+$punchStmt = $conn->prepare("SELECT ID, Date, TimeIN, LunchStart, LunchEnd FROM timepunches WHERE EmployeeID = ? AND TimeOUT IS NULL ORDER BY Date DESC, TimeIN DESC LIMIT 1");
 if ($punchStmt === false) { send_json_response(false, "DB prepare error (get open punch)", 500, $conn->error); }
 $punchStmt->bind_param("i", $empID);
 if (!$punchStmt->execute()) { send_json_response(false, "DB execute error (get open punch)", 500, $punchStmt->error); }
@@ -648,9 +652,11 @@ $punchStmt->store_result();
 
 $lastPunch = null;
 if ($punchStmt->num_rows > 0) {
-    $punchStmt->bind_result($timeIn, $lunchStart, $lunchEnd);
+    $punchStmt->bind_result($punchID, $punchDate, $timeIn, $lunchStart, $lunchEnd);
     $punchStmt->fetch();
     $lastPunch = [
+        'ID' => $punchID,
+        'Date' => $punchDate,
         'TimeIN' => $timeIn,
         'LunchStart' => $lunchStart,
         'LunchEnd' => $lunchEnd
@@ -791,6 +797,7 @@ switch ($action) {
         if (!$stmt->execute()) {
             send_json_response(false, "DB execute error (clockout)", 500, $stmt->error);
         }
+        $totalHours = recomputePunchHours($conn, $empID, $lastPunch['Date'], (int) $lastPunch['ID']) ?? $totalHours;
 
         setClockStatus($conn, $empID, 'Out');
         $message = "🕔 Clocked out at " . date("g:i A", strtotime($now));

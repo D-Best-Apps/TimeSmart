@@ -2,6 +2,7 @@
 session_start();
 require_once '../auth/db.php';
 require_once __DIR__ . '/../functions/hours.php';
+require_once __DIR__ . '/../functions/pay_rules.php'; // punchRoundingActive()
 require_once __DIR__ . '/../functions/time_off_hours.php';
 
 if (!isset($_SESSION['admin'])) {
@@ -9,7 +10,7 @@ if (!isset($_SESSION['admin'])) {
     exit;
 }
 
-// Default to the current Wed–Tue pay period
+// Default to the current work week
 $defaultStart = payPeriodStart(date('Y-m-d'));
 $defaultEnd = payPeriodEnd(date('Y-m-d'));
 
@@ -25,6 +26,11 @@ if (isset($_GET['dates']) && strpos($_GET['dates'], ' - ') !== false) {
 
 $employeeID = (isset($_GET['emp']) && is_numeric($_GET['emp'])) ? (int)$_GET['emp'] : '';
 $rounding = isset($_GET['rounding']) ? (int)$_GET['rounding'] : 0;
+// Punches already rounded by shift / pay rules: rounding the daily total again would double-round.
+$punchRounding = punchRoundingActive($conn);
+if ($punchRounding) {
+    $rounding = 0;
+}
 $separatePages = isset($_GET['separate_pages']) ? 1 : 0;
 
 // Fetch employees for dropdown
@@ -76,7 +82,7 @@ while ($row = $result->fetch_assoc()) {
 $employeeWeeklyHours = [];
 foreach ($rows as $row) {
     $empID = $row['EmployeeID'];
-    $weekStart = payPeriodStart($row['Date']); // Wed–Tue pay period
+    $weekStart = payPeriodStart($row['Date']); // work week (Admin > Pay Rules)
 
     if (!isset($employeeWeeklyHours[$empID])) {
         $employeeWeeklyHours[$empID] = [];
@@ -96,10 +102,10 @@ $perEmpOT = [];
 
 foreach ($employeeWeeklyHours as $empID2 => $weeks) {
     foreach ($weeks as $hours) {
-        $totalRegular  += min($hours, 40);
-        $totalOvertime += max($hours - 40, 0);
+        $totalRegular  += min($hours, overtimeWeeklyHours());
+        $totalOvertime += max($hours - overtimeWeeklyHours(), 0);
         $perEmpClocked[$empID2] = ($perEmpClocked[$empID2] ?? 0) + $hours;
-        $perEmpOT[$empID2]      = ($perEmpOT[$empID2]      ?? 0) + max($hours - 40, 0);
+        $perEmpOT[$empID2]      = ($perEmpOT[$empID2]      ?? 0) + max($hours - overtimeWeeklyHours(), 0);
     }
 }
 $totalHoursDecimal = $totalRegular + $totalOvertime;
@@ -188,6 +194,12 @@ require_once 'header.php';
                     </label>
                 </div>
 
+                <?php if ($punchRounding): ?>
+                <div class="field" style="flex: 1; font-size:0.85rem; color:var(--muted-text);">
+                    Hours are already rounded per punch by shift / pay rules.
+                    <input type="hidden" name="rounding" value="0">
+                </div>
+                <?php else: ?>
                 <div class="field" style="flex: 1;">
                     <label>Round to Nearest (min):
                         <select name="rounding">
@@ -199,6 +211,7 @@ require_once 'header.php';
                         </select>
                     </label>
                 </div>
+                <?php endif; ?>
 
                 <div class="field" style="flex: 1; align-self: end;">
                     <label>
@@ -239,11 +252,11 @@ require_once 'header.php';
                 <td><?= decimalToHM($totalHoursDecimal) ?></td>
             </tr>
             <tr class="summary-regular">
-                <td colspan="2">Regular Hours (≤ 40/week)</td>
+                <td colspan="2">Regular Hours (≤ <?= overtimeWeeklyHours() ?>/week)</td>
                 <td><?= decimalToHM($totalRegular) ?></td>
             </tr>
             <tr class="summary-overtime">
-                <td colspan="2">Overtime Hours (> 40/week)</td>
+                <td colspan="2">Overtime Hours (> <?= overtimeWeeklyHours() ?>/week)</td>
                 <td><?= decimalToHM($totalOvertime) ?></td>
             </tr>
         </table>
@@ -251,7 +264,7 @@ require_once 'header.php';
         <?php if (count($perEmpRows)): ?>
             <h3 style="margin-top:1.5rem;">Per Employee Total</h3>
             <p style="color:#555; font-size:0.85em; margin-top:-0.5rem;">
-              <strong>Excess</strong> = hours of Sick/Vacation that would need to be trimmed for the employee's weekly total to stay at 40 or under.
+              <strong>Excess</strong> = hours of Sick/Vacation that would need to be trimmed for the employee's weekly total to stay at <?= overtimeWeeklyHours() ?> or under.
             </p>
             <table>
                 <thead>

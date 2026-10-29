@@ -39,15 +39,15 @@ if (!$employeeID || !$from || !$to) {
     exit();
 }
 
-// Per-punch display total — delegates to the canonical calculation (functions/hours.php)
-// so the displayed value matches what gets stored on save and shown in every report.
-function calculatePunchTotalHours($timeIn, $lunchStart, $lunchEnd, $timeOut) {
-    return number_format(calculateTotalHours($timeIn, $lunchStart, $lunchEnd, $timeOut) ?? 0, 2);
+// Per-punch display total — the stored paid hours (after shift rounding and lunch
+// rules), so the displayed value matches every report.
+function punchPaidHours(array $punch): string {
+    return number_format((float) ($punch['TotalHours'] ?? 0), 2);
 }
 
         $totalWeeklyHours = 0;
         $overtimeHours = 0;
-        $standardWorkWeek = 40; // Assuming a 40-hour work week
+        $standardWorkWeek = overtimeWeeklyHours(); // Admin > Pay Rules
 
         // Fetch all punches for the given date range to calculate total hours and overtime
         $stmtTotal = $conn->prepare("SELECT TotalHours FROM timepunches WHERE EmployeeID = ? AND Date BETWEEN ? AND ?");
@@ -135,7 +135,7 @@ function calculatePunchTotalHours($timeIn, $lunchStart, $lunchEnd, $timeOut) {
                     <a href="https://www.google.com/maps?q=<?= $punch['LatitudeOut'] ?>,<?= $punch['LongitudeOut'] ?>" target="_blank" class="btn-view">View</a>
                 <?php endif; ?>
             </td>
-            <td class="total-cell" id="total-<?= $punch['id'] ?>"><?= calculatePunchTotalHours($punch['TimeIN'], $punch['LunchStart'], $punch['LunchEnd'], $punch['TimeOut']) ?></td>
+            <td class="total-cell" id="total-<?= $punch['id'] ?>"><?= punchPaidHours($punch) ?></td>
         </tr>
                 <?php endwhile; ?>
             <?php else: ?>

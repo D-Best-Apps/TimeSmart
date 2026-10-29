@@ -99,7 +99,7 @@ $html = '<h2 style="text-align:center; color:#0078D7;">Missed Days Report</h2>';
 $html .= "<p style='text-align:center;'><strong>Date Range:</strong> " . date("m/d/Y", strtotime($startDate)) . " to " . date("m/d/Y", strtotime($endDate)) . "</p>";
 
 $html .= '<p style="font-size:9px; background-color:#f0f8ff; padding:8px; border:1px solid #ccc;">
-<strong>Note:</strong> This report shows missed work days based on Wednesday-to-Tuesday pay periods. 
+<strong>Note:</strong> This report shows missed work days based on ' . workWeekLabel() . ' work weeks. 
 A full work week is 40 hours (5 days). Days worked are calculated as floor(hours / 8). 
 Incomplete pay periods are excluded. Pay periods with 0 hours worked (no clock-ins) are shown.
 </p>';

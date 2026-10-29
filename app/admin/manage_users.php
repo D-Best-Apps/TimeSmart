@@ -11,12 +11,14 @@ if (!isset($_SESSION['admin'])) {
 // Permission check
 require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('manage_users');
+require_once __DIR__ . '/../functions/pay_rules.php'; // listShifts(), shiftChip()
+require_once __DIR__ . '/../functions/csrf.php';
 
 /*
  * Fetch data for page
  */
 $users_result = $conn->query("
-    SELECT ID, FirstName, LastName, BadgeID, PIN, ClockStatus, Office, TwoFAEnabled, LockOut
+    SELECT ID, FirstName, LastName, BadgeID, PIN, ClockStatus, Office, TwoFAEnabled, LockOut, ShiftID
     FROM users
     ORDER BY LastName
 ");
@@ -30,6 +32,13 @@ $offices_result = $conn->query("SELECT OfficeName FROM Offices ORDER BY OfficeNa
 $offices_data = [];
 while ($row = $offices_result->fetch_assoc()) {
     $offices_data[] = $row;
+}
+$shifts = listShifts($conn, true);
+$activeShifts = array_filter($shifts, fn($s) => !$s['Archived']);
+$shiftFilter = $_GET['shift'] ?? '';
+if ($shiftFilter !== '') {
+    $users_data = array_values(array_filter($users_data, fn($u) =>
+        $shiftFilter === 'none' ? empty($u['ShiftID']) : (int) $u['ShiftID'] === (int) $shiftFilter));
 }
 $pageTitle = "Manage Users";
 $extraCSS = ["../css/manage_users.css"];
@@ -59,14 +68,46 @@ require_once 'header.php';
         </form>
     </div>
 
+    <?php if (isset($_GET['assigned'])): ?>
+        <div class="alert alert-success"><?= (int) $_GET['assigned'] ?> employee(s) updated.</div>
+    <?php endif; ?>
+
+    <form method="GET" style="display:flex; gap:.5rem; align-items:center; margin:0 0 .75rem;">
+        <label for="shiftFilter" style="margin:0;">Show</label>
+        <select id="shiftFilter" name="shift" onchange="this.form.submit()" style="width:auto;">
+            <option value="">Everyone</option>
+            <option value="none" <?= $shiftFilter === 'none' ? 'selected' : '' ?>>No shift</option>
+            <?php foreach ($shifts as $s): ?>
+                <option value="<?= (int) $s['ID'] ?>" <?= $shiftFilter === (string) $s['ID'] ? 'selected' : '' ?>>On <?= htmlspecialchars($s['Name']) ?></option>
+            <?php endforeach; ?>
+        </select>
+    </form>
+
+    <form method="POST" action="assign_shift.php" id="assignShiftForm"
+          style="display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; margin:0 0 .75rem;">
+        <?= csrf_field() ?>
+        <input type="hidden" name="return" value="<?= htmlspecialchars($shiftFilter) ?>">
+        <span id="assignCount">0 selected</span> —
+        <label for="assignShiftID" style="margin:0;">assign shift</label>
+        <select id="assignShiftID" name="ShiftID" style="width:auto;">
+            <option value="">No shift</option>
+            <?php foreach ($activeShifts as $s): ?>
+                <option value="<?= (int) $s['ID'] ?>"><?= htmlspecialchars($s['Name'] . ' — ' . shiftTimeRange($s)) ?></option>
+            <?php endforeach; ?>
+        </select>
+        <button type="submit" class="btn secondary small" id="assignShiftBtn" disabled>Assign</button>
+    </form>
+
     <table class="uman-table">
         <thead>
         <tr>
+            <th><input type="checkbox" id="selectAllUsers" title="Select all" style="width:auto;"></th>
             <th>Badge ID</th>
             <th>PIN</th>
             <th>Full Name</th>
             <th>Clock Status</th>
             <th>Office</th>
+            <th>Shift</th>
             <th>2FA</th>
             <th>
                 <span class="tooltip">Lockout
@@ -82,11 +123,13 @@ require_once 'header.php';
         <tbody>
         <?php foreach ($users_data as $user): ?>
             <tr>
+                <td><input type="checkbox" class="user-select" name="UserIDs[]" value="<?= (int) $user['ID'] ?>" form="assignShiftForm" style="width:auto;"></td>
                 <td><?= htmlspecialchars($user['BadgeID'] ?? '') ?></td>
                 <td><?= !empty($user['PIN']) ? '••••' : '' ?></td>
                 <td><?= htmlspecialchars(($user['FirstName'] ?? '') . ' ' . ($user['LastName'] ?? '')) ?></td>
                 <td><?= htmlspecialchars($user['ClockStatus'] ?? 'Out') ?></td>
                 <td><?= htmlspecialchars($user['Office'] ?? 'N/A') ?></td>
+                <td><?= shiftChip($shifts[(int) ($user['ShiftID'] ?? 0)] ?? null) ?></td>
                 <td><?= !empty($user['TwoFAEnabled']) ? '✅ Enabled' : '❌ Disabled' ?></td>
                 <td>
                     <form method="POST" action="update_2fa_status.php" style="display:inline;">
@@ -130,6 +173,12 @@ require_once 'header.php';
                 <option value="">Select Office</option>
                 <?php foreach ($offices_data as $office): ?>
                     <option value="<?= htmlspecialchars($office['OfficeName']) ?>"><?= htmlspecialchars($office['OfficeName']) ?></option>
+                <?php endforeach; ?>
+            </select>
+            <select name="ShiftID">
+                <option value="">No shift</option>
+                <?php foreach ($activeShifts as $s): ?>
+                    <option value="<?= (int) $s['ID'] ?>"><?= htmlspecialchars($s['Name'] . ' — ' . shiftTimeRange($s)) ?></option>
                 <?php endforeach; ?>
             </select>
             <input type="password" name="Password" placeholder="Initial Password" required>
@@ -185,6 +234,22 @@ require_once 'header.php';
 </div>
 
 <script src="../js/manage_users.js?v=1.4"></script>
+<script>
+// Bulk shift assignment: row checkboxes belong to #assignShiftForm via form=""
+(function () {
+    const boxes = () => document.querySelectorAll('.user-select');
+    function sync() {
+        const n = Array.from(boxes()).filter(b => b.checked).length;
+        document.getElementById('assignCount').textContent = n + ' selected';
+        document.getElementById('assignShiftBtn').disabled = n === 0;
+    }
+    document.getElementById('selectAllUsers').addEventListener('change', function () {
+        boxes().forEach(b => { b.checked = this.checked; });
+        sync();
+    });
+    boxes().forEach(b => b.addEventListener('change', sync));
+})();
+</script>
 
 <!-- Archive User Modal -->
 <div id="archiveModal" class="modal">

@@ -341,6 +341,34 @@ Stored in `settings` table:
 | `notify_timeoff_extra` | string | Extra addresses (comma-separated) notified on time-off requests, on top of opted-in admins | empty |
 | `notify_timesheet_edits_extra` | string | Extra addresses (comma-separated) notified on timesheet edit requests | empty |
 | `mail_admin_address` | string | Target of the **Save & Send Test Email** button only — not a notification recipient | empty |
+| `PayWeekStartDay` | int 1–7 | First day of the work week (ISO: Mon=1 … Sun=7). Overtime and report weeks follow it | 3 (Wednesday) |
+| `PayPeriodType` | `weekly` / `biweekly` | Pay frequency; sets the Payroll Totals report's default range | weekly |
+| `PayPeriodAnchor` | date | First day of any one bi-weekly pay period (must fall on `PayWeekStartDay`) | empty |
+| `OvertimeWeeklyHours` | decimal | Overtime after this many paid hours per work week | 40 |
+| `OvertimeDailyHours` | decimal | Daily overtime threshold, 0 = off. Engine support only — not on the Pay Rules page yet | 0 |
+| `DefaultRoundIncrement` | int | Round every punch of employees **without** a shift to this many minutes, 0 = off | 0 |
+| `DefaultRoundMode` | `nearest` / `up` / `down` | Direction for `DefaultRoundIncrement` | nearest |
+
+The pay-rule settings are edited on **Settings → Pay Rules** (super admins only).
+
+### Shifts, Rounding and Auto-Lunch
+
+Shifts are managed on **Settings → Shifts** and assigned per employee (`users.ShiftID`) on the
+Users page. A shift sets its start/end, days, rounding windows around the start and end, an
+increment for other punches, and a lunch rule (punched, auto-deduct, or auto-deduct unless
+punched). See [SHIFT_ROUNDING_PLAN.md](SHIFT_ROUNDING_PLAN.md) for the design.
+
+- Raw punches (`TimeIN`, `LunchStart`, `LunchEnd`, `TimeOut`) are never rewritten. The engine
+  (`app/functions/pay_rules.php`) stores `PaidIn`, `PaidOut`, `LunchDeductMin` and `RawHours`
+  beside them and writes **paid** hours to `TotalHours`, which every report reads.
+- Every write path re-applies the rules to the whole employee-day (`recomputeDayHours()`).
+- Editing a shift or a pay rule affects new punches only. **Shifts → Recalculate** re-applies
+  the current rules to a past date range (preview first; each change is logged).
+- Per punch, an admin can tick **Worked through lunch** (`LunchWaived`) or **Pay outside shift**
+  (`OutsideApproved`) on the timesheet.
+- With no shift and `DefaultRoundIncrement` = 0, paid hours equal actual hours, exactly as before.
+
+Test the engine without a database: `php deploy/scripts/test_pay_rules.php`.
 
 ### Notification Recipients
 

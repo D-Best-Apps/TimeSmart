@@ -91,10 +91,10 @@ require_once 'header.php';
 
     <div class="projection">
       <strong>Projected weekly totals (with current values):</strong>
-      <?php foreach ($proj as $w): $isOver = $w['projected'] > 40; ?>
+      <?php foreach ($proj as $w): $isOver = $w['projected'] > overtimeWeeklyHours(); ?>
         <div<?= $isOver ? ' class="over"' : '' ?>>
           wk of <?= date('m/d', strtotime($w['weekStart'])) ?>:
-          <?= sprintf('%.2f', $w['projected']) ?> hrs / 40<?= $isOver ? ' ⚠ over' : '' ?>
+          <?= sprintf('%.2f', $w['projected']) ?> hrs / <?= overtimeWeeklyHours() ?><?= $isOver ? ' ⚠ over' : '' ?>
         </div>
       <?php endforeach; ?>
     </div>

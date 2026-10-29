@@ -2,6 +2,7 @@
 require_once '../auth/db.php';
 require_once '../vendor/autoload.php';
 require_once __DIR__ . '/../functions/hours.php';
+require_once __DIR__ . '/../functions/pay_rules.php'; // punchRoundingActive()
 
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -13,6 +14,9 @@ $startDate = $_POST['start'] ?? '';
 $endDate = $_POST['end'] ?? '';
 $employeeID = $_POST['emp'] ?? '';
 $rounding = intval($_POST['rounding'] ?? 0);
+if (punchRoundingActive($conn)) {
+    $rounding = 0; // punches already rounded by shift / pay rules
+}
 
 if (!$startDate || !$endDate) {
     header('Location: ../error.php?code=400&message=' . urlencode('Start and end dates are required.'));
@@ -46,7 +50,7 @@ $byEmployee = [];
 while ($row = $result->fetch_assoc()) {
     $empId = (int) $row['EmpID'];
     $name = $row['FirstName'] . ' ' . $row['LastName'];
-    $weekStart = payPeriodStart($row['Date']); // Wed–Tue pay period
+    $weekStart = payPeriodStart($row['Date']); // work week (Admin > Pay Rules)
     $hours = roundToNearestMinutes((float) $row['DailyHours'], $rounding);
 
     if (!isset($byEmployee[$empId])) {
@@ -64,7 +68,7 @@ foreach ($byEmployee as $empId => &$data) {
     $data['totalOT'] = 0;
     foreach ($data['weeks'] as $hours) {
         $data['totalHours'] += $hours;
-        $data['totalOT'] += max(0, $hours - 40);
+        $data['totalOT'] += max(0, $hours - overtimeWeeklyHours());
     }
 }
 unset($data);
@@ -80,7 +84,7 @@ $spreadsheet = new Spreadsheet();
 $sheet = $spreadsheet->getActiveSheet();
 $sheet->setTitle('Overtime');
 
-$headers = ['Employee', 'Pay Period (Wed start)', 'Total Hours', 'Total (H:MM)', 'Overtime', 'OT (H:MM)'];
+$headers = ['Employee', 'Week (' . explode('–', workWeekLabel(true))[0] . ' start)', 'Total Hours', 'Total (H:MM)', 'Overtime', 'OT (H:MM)'];
 $sheet->fromArray($headers, null, 'A1');
 $sheet->getStyle('A1:F1')->applyFromArray([
     'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '0078D7']],
@@ -94,7 +98,7 @@ foreach (range('A', 'F') as $col) {
 $rowNum = 2;
 foreach ($byEmployee as $data) {
     foreach ($data['weeks'] as $weekStart => $hours) {
-        $ot = max(0, $hours - 40);
+        $ot = max(0, $hours - overtimeWeeklyHours());
         $sheet->setCellValue("A{$rowNum}", $data['name']);
         $sheet->setCellValue("B{$rowNum}", date('m/d/Y', strtotime($weekStart)));
         $sheet->setCellValue("C{$rowNum}", $hours);

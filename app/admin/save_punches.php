@@ -19,6 +19,8 @@ date_default_timezone_set('America/Chicago');
 
 // Canonical worked-hours / period / OT helpers (single source of truth).
 require_once __DIR__ . '/../functions/hours.php';
+// Shift rounding / auto-lunch: paid hours are recomputed per touched day after the saves.
+require_once __DIR__ . '/../functions/pay_rules.php';
 
 // Validate input
 if (!isset($_POST['employeeID'], $_POST['from'], $_POST['to'])) {
@@ -32,6 +34,7 @@ $to = $_POST['to'];
 
 $skipped = []; // rows blocked by validation errors
 $flagged = []; // rows stored but flagged as anomalies for approval
+$touchedDates = []; // days whose paid hours must be recomputed (siblings share lunch/snap rules)
 
 /**
  * Human label for a punch row in the save notices. The admin never sees punch IDs
@@ -75,6 +78,7 @@ try {
                 $deleteStmt = $conn->prepare("DELETE FROM timepunches WHERE id = ? AND EmployeeID = ?");
                 $deleteStmt->bind_param("ii", $punchId, $employeeID);
                 $deleteStmt->execute();
+                $touchedDates[$date] = true;
             }
         }
     }
@@ -94,6 +98,9 @@ try {
             // audit trail into the employee's view and erased those messages. This form
             // no longer touches Note at all.
             $reason   = trim($_POST['reason'][$punchId] ?? '') ?: null;
+            // Per-punch overrides of the shift rules (checkboxes, edit mode only)
+            $lunchWaived     = !empty($_POST['lunchwaived'][$punchId]) ? 1 : 0;
+            $outsideApproved = !empty($_POST['outsideapproved'][$punchId]) ? 1 : 0;
 
             $isNew    = strpos((string) $punchId, 'new-') === 0;
             $existing = null;
@@ -161,12 +168,15 @@ try {
 
             // Untouched rows are left exactly as they are: no changelog noise, and no
             // pre-existing bad row (a kiosk double-tap, say) blocking edits made elsewhere.
+            // TotalHours holds PAID hours once shift rules apply, so compare the raw figure.
             if ($existing
                 && $clockIn  === $existing['TimeIN']
                 && $lunchOut === $existing['LunchStart']
                 && $lunchIn  === $existing['LunchEnd']
                 && $clockOut === $existing['TimeOut']
-                && $sameHours($totalHours, $existing['TotalHours'])) {
+                && $lunchWaived     === (int) ($existing['LunchWaived'] ?? 0)
+                && $outsideApproved === (int) ($existing['OutsideApproved'] ?? 0)
+                && $sameHours($totalHours, $existing['RawHours'] ?? $existing['TotalHours'])) {
                 continue;
             }
 
@@ -184,10 +194,10 @@ try {
             if ($isNew) {
                 // Insert new punch record
                 $insertStmt = $conn->prepare("
-                    INSERT INTO timepunches (EmployeeID, Date, TimeIN, LunchStart, LunchEnd, TimeOut, TotalHours)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO timepunches (EmployeeID, Date, TimeIN, LunchStart, LunchEnd, TimeOut, TotalHours, LunchWaived, OutsideApproved)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
-                $insertStmt->bind_param("isssssd", $employeeID, $date, $clockIn, $lunchOut, $lunchIn, $clockOut, $totalHours);
+                $insertStmt->bind_param("isssssdii", $employeeID, $date, $clockIn, $lunchOut, $lunchIn, $clockOut, $totalHours, $lunchWaived, $outsideApproved);
                 $insertStmt->execute();
 
                 $newPunchId = $conn->insert_id;
@@ -200,20 +210,20 @@ try {
                 $logStmt->bind_param("issssss", $employeeID, $date, $adminUser, $field, $oldValue, $newValue, $reason);
                 $logStmt->execute();
             } else {
-                // Log only the fields that actually changed
+                // Log only the fields that actually changed. Paid TotalHours is logged
+                // after the day is recomputed below, so it reflects the shift rules.
                 $fields = [
-                    "TimeIN"     => $clockIn,
-                    "LunchStart" => $lunchOut,
-                    "LunchEnd"   => $lunchIn,
-                    "TimeOut"    => $clockOut,
-                    "TotalHours" => $totalHours
+                    "TimeIN"          => $clockIn,
+                    "LunchStart"      => $lunchOut,
+                    "LunchEnd"        => $lunchIn,
+                    "TimeOut"         => $clockOut,
+                    "LunchWaived"     => $lunchWaived,
+                    "OutsideApproved" => $outsideApproved,
                 ];
 
                 foreach ($fields as $field => $newVal) {
                     $oldVal = $existing[$field] ?? null;
-                    $changed = $field === 'TotalHours'
-                        ? !$sameHours($newVal, $oldVal)
-                        : (string) $newVal !== (string) $oldVal;
+                    $changed = (string) $newVal !== (string) $oldVal;
                     if ($changed) {
                         $logStmt = $conn->prepare("INSERT INTO punch_changelog (EmployeeID, Date, ChangedBy, FieldChanged, OldValue, NewValue, Reason) VALUES (?, ?, ?, ?, ?, ?, ?)");
                         $logStmt->bind_param("issssss", $employeeID, $date, $adminUser, $field, $oldVal, $newVal, $reason);
@@ -224,18 +234,32 @@ try {
                 // Update (with EmployeeID validation for security)
                 $updateStmt = $conn->prepare("
                     UPDATE timepunches
-                    SET TimeIN = ?, LunchStart = ?, LunchEnd = ?, TimeOut = ?, TotalHours = ?
+                    SET TimeIN = ?, LunchStart = ?, LunchEnd = ?, TimeOut = ?, LunchWaived = ?, OutsideApproved = ?
                     WHERE id = ? AND EmployeeID = ?
                 ");
-                $updateStmt->bind_param("ssssdii", $clockIn, $lunchOut, $lunchIn, $clockOut, $totalHours, $punchId, $employeeID);
+                $updateStmt->bind_param("ssssiiii", $clockIn, $lunchOut, $lunchIn, $clockOut, $lunchWaived, $outsideApproved, $punchId, $employeeID);
                 $updateStmt->execute();
             }
+            $touchedDates[$date] = true;
 
             if (!empty($rowAnoms)) {
                 $msg = implode('; ', array_column($rowAnoms, 'message'));
                 queuePunchReview($conn, $employeeID, $date, $clockOut, "Anomaly ({$date}): {$msg} — needs approval", 'anomaly');
                 $flagged[] = describePunchRow($date, $clockIn, $clockOut) . ': ' . $msg;
             }
+        }
+    }
+
+    // Re-apply the shift rules to every day that changed, and log the paid-hours result.
+    $adminUser = $_SESSION['admin'];
+    foreach (array_keys($touchedDates) as $date) {
+        foreach (recomputeDayHours($conn, $employeeID, $date) as $c) {
+            $old = $c['old'] === null ? null : (string) $c['old'];
+            $new = $c['new'] === null ? null : number_format($c['new'], 2, '.', '');
+            $why = 'Recomputed after edit';
+            $logStmt = $conn->prepare("INSERT INTO punch_changelog (EmployeeID, Date, ChangedBy, FieldChanged, OldValue, NewValue, Reason) VALUES (?, ?, ?, 'TotalHours', ?, ?, ?)");
+            $logStmt->bind_param("isssss", $employeeID, $date, $adminUser, $old, $new, $why);
+            $logStmt->execute();
         }
     }
 

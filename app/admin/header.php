@@ -81,10 +81,11 @@ $currentPage = basename($_SERVER['PHP_SELF']);
 
 <?php
 // Pages that live under the Settings dropdown — used for active-state highlight
-$settingsPages = ['settings.php', 'manage_users.php', 'manage_offices.php', 'manage_admins.php'];
+$settingsPages = ['settings.php', 'pay_rules.php', 'shifts.php', 'manage_users.php', 'manage_offices.php', 'manage_admins.php'];
 $settingsActive = in_array($currentPage, $settingsPages, true);
 $showSettingsMenu = checkPermission('manage_settings') || checkPermission('manage_users')
-                 || checkPermission('manage_offices') || checkPermission('manage_admins');
+                 || checkPermission('manage_offices') || checkPermission('manage_admins')
+                 || checkPermission('manage_pay_rules');
 ?>
 <header>
     <a href="reports.php" title="Admin home"><img src="/images/D-Best.png" alt="D-Best Logo" class="logo"></a>
@@ -108,6 +109,10 @@ $showSettingsMenu = checkPermission('manage_settings') || checkPermission('manag
             <div id="settingsMenu" class="nav-dropdown-menu hidden">
                 <?php if (checkPermission('manage_settings')): ?>
                 <a href="settings.php"<?= $currentPage == 'settings.php' ? ' class="active"' : '' ?>>⚙️ General Settings</a>
+                <?php endif; ?>
+                <?php if (checkPermission('manage_pay_rules')): ?>
+                <a href="pay_rules.php"<?= $currentPage == 'pay_rules.php' ? ' class="active"' : '' ?>>💵 Pay Rules</a>
+                <a href="shifts.php"<?= $currentPage == 'shifts.php' ? ' class="active"' : '' ?>>⏱️ Shifts</a>
                 <?php endif; ?>
                 <?php if (checkPermission('manage_users')): ?>
                 <a href="manage_users.php"<?= $currentPage == 'manage_users.php' ? ' class="active"' : '' ?>>👥 Users</a>

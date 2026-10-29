@@ -3,13 +3,14 @@
  * functions/hours.php
  *
  * SINGLE SOURCE OF TRUTH for all worked-hours math, time conversions,
- * pay-period boundaries (Wed–Tue), and overtime (weekly > 40).
+ * work-week boundaries (configurable, default Wed–Tue), and overtime (default weekly > 40).
  *
  * Do NOT reimplement any of these elsewhere — include this file instead:
  *   require_once __DIR__ . '/hours.php';   // from app/functions/*
  *   require_once __DIR__ . '/../functions/hours.php';  // from app/admin/*
  *
- * Pure functions (no DB/session) except reconcileClockStatus($conn, ...).
+ * Pure functions (no DB/session) except reconcileClockStatus($conn, ...) and the
+ * pay-rule settings readers below, which read the settings table once per request.
  */
 
 if (!defined('MAX_SHIFT_HOURS')) {
@@ -122,18 +123,75 @@ function roundToNearestMinutes(float $decimalHours, int $interval = 0): float {
     return round($roundedMinutes / 60, 2);
 }
 
-/** Wednesday on/before $date (pay period start). */
+/**
+ * A pay-rule setting (Admin > Pay Rules), read once per request from the global
+ * $conn every page already has. Falls back to $default when there is no connection
+ * or the row is missing, so these stay safe in CLI tests.
+ */
+function payRuleSetting(string $key, string $default): string {
+    static $cache = null;
+    if ($cache === null) {
+        $conn = $GLOBALS['conn'] ?? null;
+        if ($conn instanceof mysqli) {
+            // Only cache once a connection exists, so a call made before db.php is
+            // included doesn't pin the defaults for the rest of the request.
+            $cache = [];
+            try {
+                if ($res = $conn->query("SELECT SettingKey, SettingValue FROM settings")) {
+                    while ($row = $res->fetch_assoc()) {
+                        $cache[$row['SettingKey']] = $row['SettingValue'];
+                    }
+                }
+            } catch (mysqli_sql_exception $e) {
+                // settings table unavailable: defaults apply
+            }
+        }
+    }
+    if (func_num_args() === 3) {           // test hook: payRuleSetting(key, default, value)
+        $cache[$key] = func_get_arg(2);
+    }
+    $v = $cache[$key] ?? null;
+    return ($v === null || $v === '') ? $default : (string) $v;
+}
+
+/** First day of the work week, ISO-8601 (Mon=1 .. Sun=7). Default Wednesday. */
+function workWeekStartDay(): int {
+    $d = (int) payRuleSetting('PayWeekStartDay', '3');
+    return ($d >= 1 && $d <= 7) ? $d : 3;
+}
+
+/** Weekly overtime threshold in hours (default 40). */
+function overtimeWeeklyHours(): float {
+    $h = (float) payRuleSetting('OvertimeWeeklyHours', '40');
+    return $h > 0 ? $h : 40.0;
+}
+
+/** Daily overtime threshold in hours; 0 = no daily overtime. */
+function overtimeDailyHours(): float {
+    return max(0.0, (float) payRuleSetting('OvertimeDailyHours', '0'));
+}
+
+/** "Wednesday–Tuesday" for the configured work week. */
+function workWeekLabel(bool $short = false): string {
+    $fmt = $short ? 'D' : 'l';
+    $start = workWeekStartDay();
+    $end = $start === 1 ? 7 : $start - 1;
+    // 2024-01-01 was a Monday, so 2024-01-0N is ISO weekday N.
+    return date($fmt, strtotime("2024-01-0{$start}")) . '–' . date($fmt, strtotime("2024-01-0{$end}"));
+}
+
+/** First day of the work week containing $date (the "pay period" in report labels). */
 function payPeriodStart(string $date): string {
     $d = new DateTime($date);
-    $dow = (int) $d->format('N');      // Mon=1 .. Sun=7 ; Wed=3
-    $back = (($dow - 3) + 7) % 7;      // days since the most recent Wednesday
+    $dow = (int) $d->format('N');      // Mon=1 .. Sun=7
+    $back = (($dow - workWeekStartDay()) + 7) % 7; // days since the week started
     if ($back > 0) {
         $d->modify("-{$back} days");
     }
     return $d->format('Y-m-d');
 }
 
-/** Tuesday ending the pay period that contains $date. */
+/** Last day of the work week that contains $date. */
 function payPeriodEnd(string $date): string {
     return (new DateTime(payPeriodStart($date)))->modify('+6 days')->format('Y-m-d');
 }
@@ -143,7 +201,7 @@ function getPayPeriodStart(string $date): string { return payPeriodStart($date);
 function getPayPeriodEnd(string $date): string { return payPeriodEnd($date); }
 
 /**
- * List of Wed–Tue pay periods overlapping [$start,$end].
+ * List of work weeks overlapping [$start,$end].
  * @return array<int,array{start:string,end:string}>
  */
 function generatePayPeriods(string $start, string $end, bool $completeOnly = true): array {
@@ -162,22 +220,29 @@ function generatePayPeriods(string $start, string $end, bool $completeOnly = tru
 }
 
 /**
- * Weekly overtime on the Wed–Tue period. OT = max(0, periodHours - 40).
+ * Overtime per work week (Admin > Pay Rules). Daily OT, when enabled, is the hours
+ * over the daily threshold each day; weekly OT is the remaining (non-daily-OT)
+ * hours over the weekly threshold, so no hour is counted as overtime twice.
  * @param array<string,float> $dailyTotals  map 'Y-m-d' => decimal hours
  * @return array{weeks:array<string,array{hours:float,regular:float,ot:float}>,totalHours:float,totalRegular:float,totalOT:float}
  */
-function weeklyOvertime(array $dailyTotals): array {
+function weeklyOvertime(array $dailyTotals, ?float $weeklyLimit = null, ?float $dailyLimit = null): array {
+    $weeklyLimit ??= overtimeWeeklyHours();
+    $dailyLimit  ??= overtimeDailyHours();
     $weeks = [];
+    $dailyOT = [];
     foreach ($dailyTotals as $date => $hours) {
         $key = payPeriodStart($date);
-        $weeks[$key] = ($weeks[$key] ?? 0.0) + (float) $hours;
+        $weeks[$key]   = ($weeks[$key] ?? 0.0) + (float) $hours;
+        $dailyOT[$key] = ($dailyOT[$key] ?? 0.0) + ($dailyLimit > 0 ? max(0.0, (float) $hours - $dailyLimit) : 0.0);
     }
     ksort($weeks);
     $out = ['weeks' => [], 'totalHours' => 0.0, 'totalRegular' => 0.0, 'totalOT' => 0.0];
     foreach ($weeks as $key => $h) {
         $h   = round($h, 2);
-        $reg = min($h, 40.0);
-        $ot  = max($h - 40.0, 0.0);
+        $dOT = $dailyOT[$key];
+        $ot  = $dOT + max(($h - $dOT) - $weeklyLimit, 0.0);
+        $reg = $h - $ot;
         $out['weeks'][$key] = ['hours' => $h, 'regular' => round($reg, 2), 'ot' => round($ot, 2)];
         $out['totalHours']   += $h;
         $out['totalRegular'] += $reg;

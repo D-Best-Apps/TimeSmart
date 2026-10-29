@@ -134,7 +134,7 @@ ksort($employeeTotals);
         <hr>
 
         <div style="background: #f0f8ff; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
-            <strong>Note:</strong> This report shows missed work days based on Wednesday-to-Tuesday pay periods.
+            <strong>Note:</strong> This report shows missed work days based on <?= htmlspecialchars(workWeekLabel()) ?> work weeks.
             A full work week is 40 hours (5 days). Days worked are calculated as floor(hours / 8).
             Incomplete pay periods (current week) are excluded. Pay periods with 0 hours worked (no clock-ins) are shown.
         </div>

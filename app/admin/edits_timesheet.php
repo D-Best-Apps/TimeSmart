@@ -306,7 +306,7 @@ require_once 'header.php';
                           $rowProj = $projections[(int) $tor['ID']] ?? [];
                           $maxProj = 0;
                           foreach ($rowProj as $w) { if ($w['projected'] > $maxProj) $maxProj = $w['projected']; }
-                          $overLimit = $maxProj > 40;
+                          $overLimit = $maxProj > overtimeWeeklyHours();
                           $bg = $overLimit ? '#ffd6d6' : ($isAmendment ? '#fff8e1' : '');
                         ?>
                         <tr<?= $bg ? ' style="background-color:' . $bg . ';"' : '' ?>>
@@ -357,10 +357,10 @@ require_once 'header.php';
                             </td>
                             <td style="font-size:0.85rem; white-space:nowrap;">
                                 <?php foreach ($rowProj as $w): ?>
-                                    <?php $isOver = $w['projected'] > 40; ?>
+                                    <?php $isOver = $w['projected'] > overtimeWeeklyHours(); ?>
                                     <div<?= $isOver ? ' style="color:#b02a37; font-weight:bold;"' : '' ?>>
                                         wk of <?= date('m/d', strtotime($w['weekStart'])) ?>:
-                                        <?= fmtHM($w['projected']) ?> / 40<?= $isOver ? ' ⚠' : '' ?>
+                                        <?= fmtHM($w['projected']) ?> / <?= overtimeWeeklyHours() ?><?= $isOver ? ' ⚠' : '' ?>
                                     </div>
                                 <?php endforeach; ?>
                             </td>

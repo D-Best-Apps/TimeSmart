@@ -1,6 +1,7 @@
 <?php
 $pageTitle = "Reports";
 $extraCSS = ["../css/reports.css?v=3"];
+require_once __DIR__ . '/../functions/hours.php'; // workWeekLabel()
 require_once 'header.php';
 
 // Live status stats shown at the top (formerly the admin dashboard).
@@ -55,6 +56,12 @@ if ($statsResult && $statsRow = $statsResult->fetch_assoc()) {
         <h2>Available Reports</h2>
         <div class="reports-container">
             <div class="report-card">
+                <h3>Payroll Totals</h3>
+                <p>One line per employee for a pay period: regular, overtime, PTO, sick and total hours, ready to key into QuickBooks.</p>
+                <a href="payroll_totals.php">Open Payroll Totals</a>
+            </div>
+
+            <div class="report-card">
                 <h3>Summary Report</h3>
                 <p>View total hours, regular, and overtime hours across all employees or individually.</p>
                 <a href="summary.php">Open Summary</a>
@@ -68,7 +75,7 @@ if ($statsResult && $statsRow = $statsResult->fetch_assoc()) {
 
             <div class="report-card">
                 <h3>Missed Days Report</h3>
-                <p>Payroll tally of missed work days per employee, by Wednesday&ndash;Tuesday pay period (days worked = hours &divide; 8).</p>
+                <p>Payroll tally of missed work days per employee, by <?= htmlspecialchars(workWeekLabel()) ?> work week (days worked = hours &divide; 8).</p>
                 <a href="missed_days.php">Open Missed Days</a>
             </div>
 

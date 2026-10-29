@@ -6,12 +6,16 @@ error_reporting(E_ALL);
 require_once '../auth/db.php';
 require_once __DIR__ . '/tcpdf/tcpdf.php';
 require_once __DIR__ . '/../functions/hours.php';
+require_once __DIR__ . '/../functions/pay_rules.php'; // punchRoundingActive()
 require_once __DIR__ . '/../functions/time_off_hours.php';
 
 $start = $_POST['start'] ?? '';
 $end = $_POST['end'] ?? '';
 $emp = $_POST['emp'] ?? '';
 $rounding = intval($_POST['rounding'] ?? 0);
+if (punchRoundingActive($conn)) {
+    $rounding = 0; // punches already rounded by shift / pay rules
+}
 $separatePages = intval($_POST['separate_pages'] ?? 0);
 
 if (!$start || !$end) {
@@ -66,13 +70,13 @@ $perEmpOT = [];
 foreach ($grouped as $eid => $data) {
     $weekTotals = [];
     foreach ($data['rows'] as $r) {
-        $weekStart = payPeriodStart($r['Date']); // Wed–Tue pay period
+        $weekStart = payPeriodStart($r['Date']); // work week (Admin > Pay Rules)
         $weekTotals[$weekStart] = ($weekTotals[$weekStart] ?? 0) + $r['RoundedHours'];
     }
     $clocked = 0; $ot = 0;
     foreach ($weekTotals as $hrs) {
         $clocked += $hrs;
-        $ot      += max(0, $hrs - 40);
+        $ot      += max(0, $hrs - overtimeWeeklyHours());
     }
     $perEmpClocked[$eid] = $clocked;
     $perEmpOT[$eid]      = $ot;
@@ -144,7 +148,7 @@ if ($showSummary) {
     $summaryHtml .= "<p style='text-align:center;'><strong>Date Range:</strong> "
                   . date("m/d/Y", strtotime($start)) . " to " . date("m/d/Y", strtotime($end)) . "</p>";
     $summaryHtml .= '<h3>Per Employee Total</h3>';
-    $summaryHtml .= '<p style="font-size:9pt; color:#555;"><i>Excess = Sick/Vacation hours that need to be trimmed for the weekly total to stay at 40 or under.</i></p>';
+    $summaryHtml .= '<p style="font-size:9pt; color:#555;"><i>Excess = Sick/Vacation hours that need to be trimmed for the weekly total to stay at ' . overtimeWeeklyHours() . ' or under.</i></p>';
     $summaryHtml .= '<table border="1" cellpadding="5" cellspacing="0" style="width: 100%; border-collapse: collapse;">
                         <thead style="background-color: #e6f0ff;">
                             <tr>

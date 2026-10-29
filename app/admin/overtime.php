@@ -2,6 +2,7 @@
 session_start();
 require_once '../auth/db.php';
 require_once __DIR__ . '/../functions/hours.php';
+require_once __DIR__ . '/../functions/pay_rules.php'; // punchRoundingActive()
 
 if (!isset($_SESSION['admin'])) {
     header("Location: login.php");
@@ -23,6 +24,11 @@ if (isset($_GET['dates']) && strpos($_GET['dates'], ' - ') !== false) {
 
 $employeeID = (isset($_GET['emp']) && is_numeric($_GET['emp'])) ? (int)$_GET['emp'] : '';
 $rounding = isset($_GET['rounding']) ? (int)$_GET['rounding'] : 0;
+// Punches already rounded by shift / pay rules: rounding the daily total again would double-round.
+$punchRounding = punchRoundingActive($conn);
+if ($punchRounding) {
+    $rounding = 0;
+}
 
 $employeeList = $conn->query("SELECT ID, FirstName, LastName FROM users ORDER BY LastName");
 
@@ -60,7 +66,7 @@ $byEmployee = [];
 while ($row = $result->fetch_assoc()) {
     $empId = (int) $row['EmpID'];
     $name = $row['FirstName'] . ' ' . $row['LastName'];
-    $weekStart = payPeriodStart($row['Date']); // Wed–Tue pay period
+    $weekStart = payPeriodStart($row['Date']); // work week (Admin > Pay Rules)
     $hours = roundToNearestMinutes((float) $row['DailyHours'], $rounding);
 
     if (!isset($byEmployee[$empId])) {
@@ -78,7 +84,7 @@ foreach ($byEmployee as $empId => &$data) {
     $data['totalHours'] = 0;
     $data['totalOT'] = 0;
     foreach ($data['weeks'] as $week => $hours) {
-        $ot = max(0, $hours - 40);
+        $ot = max(0, $hours - overtimeWeeklyHours());
         $data['totalHours'] += $hours;
         $data['totalOT'] += $ot;
     }
@@ -122,6 +128,12 @@ require_once 'header.php';
                     </label>
                 </div>
 
+                <?php if ($punchRounding): ?>
+                <div class="field" style="flex: 1; font-size:0.85rem; color:var(--muted-text);">
+                    Hours are already rounded per punch by shift / pay rules.
+                    <input type="hidden" name="rounding" value="0">
+                </div>
+                <?php else: ?>
                 <div class="field" style="flex: 1;">
                     <label>Round to Nearest (min):
                         <select name="rounding">
@@ -133,6 +145,7 @@ require_once 'header.php';
                         </select>
                     </label>
                 </div>
+                <?php endif; ?>
 
                 <div class="buttons" style="align-self: end;">
                     <button type="submit">Filter</button>
@@ -145,13 +158,13 @@ require_once 'header.php';
 
         <h2>Overtime Report (<?= date('m/d/Y', strtotime($startDate)) ?> to <?= date('m/d/Y', strtotime($endDate)) ?>)</h2>
         <p style="color:#555; font-size:0.9em; margin-top:-10px;">
-            Pay periods run Wednesday–Tuesday. Overtime = hours over 40 per pay period. Hours are counted only for days within the selected range.
+            Work weeks run <?= htmlspecialchars(workWeekLabel()) ?>. Overtime = hours over <?= overtimeWeeklyHours() ?> per week. Hours are counted only for days within the selected range.
         </p>
         <table>
             <thead>
                 <tr>
                     <th>Employee</th>
-                    <th>Pay Period (Wed start)</th>
+                    <th>Week (<?= htmlspecialchars(explode('–', workWeekLabel(true))[0]) ?> start)</th>
                     <th>Total Hours</th>
                     <th>Overtime</th>
                 </tr>
@@ -167,7 +180,7 @@ require_once 'header.php';
                     <?php endif; ?>
                     <?php $isFirstEmployee = false; ?>
                     <?php foreach ($data['weeks'] as $weekStart => $hours): ?>
-                        <?php $ot = max(0, $hours - 40); ?>
+                        <?php $ot = max(0, $hours - overtimeWeeklyHours()); ?>
                         <tr<?= $ot > 0 ? ' style="background-color:#fff3cd;"' : '' ?>>
                             <td><?= htmlspecialchars($data['name']) ?></td>
                             <td><?= date('m/d/Y', strtotime($weekStart)) ?></td>

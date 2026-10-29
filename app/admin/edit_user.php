@@ -16,6 +16,7 @@ if (!isset($_SESSION['admin'])) {
 require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('manage_users');
 require_once __DIR__ . '/../functions/profile_photo.php';
+require_once __DIR__ . '/../functions/pay_rules.php'; // listShifts()
 
 $id = $_GET['id'] ?? null;
 if (!$id || !is_numeric($id)) {
@@ -40,6 +41,7 @@ $offices_data = [];
 while ($row = $offices_result->fetch_assoc()) {
     $offices_data[] = $row;
 }
+$shifts = listShifts($conn, true);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $firstName = trim($_POST['FirstName']);
@@ -114,6 +116,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $stmt->execute();
 
+        // Shift (blank = none). Only a shift that exists; an archived one can stay assigned.
+        $shiftID = (int) ($_POST['ShiftID'] ?? 0);
+        $shiftID = isset($shifts[$shiftID]) ? $shiftID : null;
+        $up = $conn->prepare("UPDATE users SET ShiftID = ? WHERE ID = ?");
+        $up->bind_param("ii", $shiftID, $id);
+        $up->execute();
+
         // Optional profile photo (also used on printed badges)
         [$photoOk, $photoRes] = save_profile_photo($_FILES['ProfilePhoto'] ?? null, (int) $id);
         if ($photoOk === false) {
@@ -177,6 +186,18 @@ require_once 'header.php';
             <select name="Office" required>
                 <?php foreach ($offices_data as $office): ?>
                     <option value="<?= htmlspecialchars($office['OfficeName']) ?>" <?= ($user['Office'] === $office['OfficeName']) ? 'selected' : '' ?>><?= htmlspecialchars($office['OfficeName']) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </label>
+
+        <label>Shift <small>(sets punch rounding and lunch — see Settings &rsaquo; Shifts)</small>
+            <select name="ShiftID">
+                <option value="">No shift (Pay Rules defaults)</option>
+                <?php foreach ($shifts as $s): ?>
+                    <?php if ($s['Archived'] && (int) $s['ID'] !== (int) ($user['ShiftID'] ?? 0)) continue; ?>
+                    <option value="<?= (int) $s['ID'] ?>" <?= (int) $s['ID'] === (int) ($user['ShiftID'] ?? 0) ? 'selected' : '' ?>>
+                        <?= htmlspecialchars($s['Name'] . ' — ' . shiftTimeRange($s) . ($s['Archived'] ? ' (archived)' : '')) ?>
+                    </option>
                 <?php endforeach; ?>
             </select>
         </label>

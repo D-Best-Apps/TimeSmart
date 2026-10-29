@@ -18,7 +18,7 @@ if (!$empID) {
 $start = $_GET['start'] ?? date('Y-m-d', strtotime('monday this week'));
 $end   = $_GET['end'] ?? date('Y-m-d', strtotime('friday this week'));
 
-$query = $conn->prepare("SELECT Date, TimeIN, LunchStart, LunchEnd, TimeOUT, Note FROM timepunches WHERE EmployeeID = ? AND Date BETWEEN ? AND ? ORDER BY Date DESC, TimeIN DESC");
+$query = $conn->prepare("SELECT Date, TimeIN, LunchStart, LunchEnd, TimeOUT, TotalHours, Note FROM timepunches WHERE EmployeeID = ? AND Date BETWEEN ? AND ? ORDER BY Date DESC, TimeIN DESC");
 $query->bind_param("sss", $empID, $start, $end);
 $query->execute();
 $result = $query->get_result();
@@ -34,13 +34,9 @@ while ($row = $result->fetch_assoc()) {
     $lunchStart = $row['LunchStart'] ? strtotime($row['Date'] . ' ' . $row['LunchStart']) : 0;
     $lunchEnd   = $row['LunchEnd'] ? strtotime($row['Date'] . ' ' . $row['LunchEnd']) : 0;
     
-    $workDuration = ($in && $out) ? $out - $in : 0;
-    $lunchDuration = ($lunchStart && $lunchEnd) ? $lunchEnd - $lunchStart : 0;
-    
-    $worked = $workDuration - $lunchDuration;
-    if ($worked < 0) {
-        $worked = 0;
-    }
+    // Paid hours as stored (after shift rounding and lunch rules), so the employee
+    // sees the same figure as payroll. Open or under-review punches show no hours yet.
+    $worked = ($out && $row['TotalHours'] !== null) ? (int) round((float) $row['TotalHours'] * 3600) : 0;
     
     $totalSeconds += $worked;
 

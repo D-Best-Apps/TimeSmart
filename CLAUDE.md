@@ -153,7 +153,14 @@ environment:
 
 ### Runtime Settings Table
 - `EnforceGPS` - Require GPS on clock actions (0/1)
+- Pay rules (`PayWeekStartDay`, `OvertimeWeeklyHours`, `DefaultRoundIncrement`, ...) - edited on **Settings → Pay Rules**
 - Queried via `/app/functions/get_setting.php`
+
+### Shifts and Paid Hours
+- Shifts (rounding windows, auto-lunch) are edited on **Settings → Shifts** and assigned on the Users page
+- Raw punch times are never changed; `timepunches.TotalHours` holds **paid** hours after shift rules
+- Engine tests (no DB needed): `php deploy/scripts/test_pay_rules.php`
+- See [docs/CONFIGURATION.md](docs/CONFIGURATION.md#shifts-rounding-and-auto-lunch)
 
 ### Configuration Files
 - `docker-compose.yml` - Container config + environment variables

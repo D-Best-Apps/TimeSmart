@@ -25,6 +25,7 @@
 require_once __DIR__ . '/../functions/cli_guard.php'; // CLI only — never over HTTP
 require_once __DIR__ . '/../auth/db.php';
 require_once __DIR__ . '/../functions/hours.php'; // canonical calculateTotalHours / reconcileClockStatus
+require_once __DIR__ . '/../functions/pay_rules.php'; // recomputeDayHours (shift rounding / auto-lunch)
 date_default_timezone_set('America/Chicago');
 
 // Configuration
@@ -172,6 +173,7 @@ function autoClockoutEmployees($conn) {
                 $upd->bind_param("sdsii", $clockOut, $totalHours, $note, $punchID, $employeeID);
                 $upd->execute();
                 $upd->close();
+                $totalHours = recomputePunchHours($conn, $employeeID, $date, $punchID) ?? $totalHours;
                 insertForcedOutReview($conn, $employeeID, $date, $clockOut, AUTO_CLOCKOUT_NOTE);
                 logAutoClockout($conn, $employeeID, $date, $clockOut, AUTO_CLOCKOUT_NOTE);
             }

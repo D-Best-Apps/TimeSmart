@@ -6,11 +6,15 @@ error_reporting(E_ALL);
 require_once '../auth/db.php';
 require_once __DIR__ . '/tcpdf/tcpdf.php';
 require_once __DIR__ . '/../functions/hours.php';
+require_once __DIR__ . '/../functions/pay_rules.php'; // punchRoundingActive()
 
 $start = $_POST['start'] ?? '';
 $end = $_POST['end'] ?? '';
 $emp = $_POST['emp'] ?? '';
 $rounding = intval($_POST['rounding'] ?? 0);
+if (punchRoundingActive($conn)) {
+    $rounding = 0; // punches already rounded by shift / pay rules
+}
 
 if (!$start || !$end) {
     header('Location: ../error.php?code=400&message=' . urlencode('Start and end dates are required.'));
@@ -44,7 +48,7 @@ $byEmployee = [];
 while ($row = $result->fetch_assoc()) {
     $empId = (int) $row['EmpID'];
     $name = $row['FirstName'] . ' ' . $row['LastName'];
-    $weekStart = payPeriodStart($row['Date']); // Wed–Tue pay period
+    $weekStart = payPeriodStart($row['Date']); // work week (Admin > Pay Rules)
     $hours = roundToNearestMinutes((float) $row['DailyHours'], $rounding);
 
     if (!isset($byEmployee[$empId])) {
@@ -62,7 +66,7 @@ foreach ($byEmployee as $empId => &$data) {
     $data['totalOT'] = 0;
     foreach ($data['weeks'] as $hours) {
         $data['totalHours'] += $hours;
-        $data['totalOT'] += max(0, $hours - 40);
+        $data['totalOT'] += max(0, $hours - overtimeWeeklyHours());
     }
 }
 unset($data);
@@ -98,12 +102,12 @@ if (empty($byEmployee)) {
         $html = '<h2 style="text-align:center; color:#0078D7;">Overtime Report</h2>';
         $html .= "<p><strong>Employee:</strong> {$name}<br>";
         $html .= "<strong>Date Range:</strong> {$rangeLabelHeader}<br>";
-        $html .= "<em>Pay periods run Wednesday–Tuesday. Overtime = hours over 40 per pay period. Hours counted only for days within the range.</em></p>";
+        $html .= "<em>Work weeks run " . workWeekLabel() . ". Overtime = hours over " . overtimeWeeklyHours() . " per week. Hours counted only for days within the range.</em></p>";
 
         $html .= '<table border="1" cellpadding="5" cellspacing="0" style="width:100%; border-collapse: collapse;">
                     <thead style="background-color: #e6f0ff;">
                         <tr>
-                            <th><b>Pay Period (Wed start)</b></th>
+                            <th><b>Week (' . explode('–', workWeekLabel(true))[0] . ' start)</b></th>
                             <th><b>Total Hours</b></th>
                             <th><b>Overtime</b></th>
                         </tr>
@@ -111,7 +115,7 @@ if (empty($byEmployee)) {
                     <tbody>';
 
         foreach ($data['weeks'] as $weekStart => $hours) {
-            $ot = max(0, $hours - 40);
+            $ot = max(0, $hours - overtimeWeeklyHours());
             $rowBg = $ot > 0 ? "style='background-color:#fff3cd;'" : '';
             $html .= "<tr $rowBg>
                         <td>" . date('m/d/Y', strtotime($weekStart)) . "</td>

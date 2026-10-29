@@ -15,7 +15,7 @@ requirePermission('view_attendance');
 
 date_default_timezone_set('America/Chicago');
 
-$startDate = $_GET['start'] ?? payPeriodStart(date('Y-m-d')); // current Wed–Tue pay period
+$startDate = $_GET['start'] ?? payPeriodStart(date('Y-m-d')); // current work week
 $endDate = $_GET['end'] ?? payPeriodEnd(date('Y-m-d'));
 $selectedEmp = $_GET['emp'] ?? 'all';
 $exportPDF = isset($_GET['export']) && $_GET['export'] === 'pdf';

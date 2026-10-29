@@ -15,6 +15,7 @@
 require_once __DIR__ . '/../functions/cli_guard.php'; // CLI only — never over HTTP
 require_once __DIR__ . '/../auth/db.php';
 require_once __DIR__ . '/../functions/hours.php'; // canonical calculateTotalHours / reconcileClockStatus
+require_once __DIR__ . '/../functions/pay_rules.php'; // recomputePunchHours (shift rounding / auto-lunch)
 date_default_timezone_set('America/Chicago');
 
 // Configuration
@@ -155,6 +156,7 @@ function scheduledClockOut($conn) {
         $updateStmt->bind_param("sdii", $clockOutTime, $totalHours, $punchID, $employeeID);
         $updateStmt->execute();
         $updateStmt->close();
+        $totalHours = recomputePunchHours($conn, $employeeID, $date, $punchID) ?? $totalHours;
 
         // Log to changelog (audit), then reconcile the denormalized status -> 'Out'
         logAutoClockout($conn, $employeeID, $date, $clockOutTime);

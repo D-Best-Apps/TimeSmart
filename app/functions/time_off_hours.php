@@ -91,14 +91,15 @@ function timeOffTotalsByEmployee(mysqli $conn, string $periodStart, string $peri
 }
 
 /**
- * For each Wed–Tue pay period overlapping [periodStart, periodEnd], compute how many
- * hours of time-off would need to be trimmed to keep the weekly total at 40
+ * For each work week overlapping [periodStart, periodEnd], compute how many
+ * hours of time-off would need to be trimmed to keep the weekly total at the
+ * overtime threshold (Admin > Pay Rules, default 40)
  * or under. This is the bookkeeper's "adjust this down" signal on the summary
  * report — it directly answers "how much PTO/Sick do I need to cut?"
  *
- * For each period: allowable_TO = max(0, 40 - clocked); excess = max(0, TO - allowable).
- * If clocked is already at/over 40 from work, the entire TO is excess (because
- * TO can't legitimately push past 40).
+ * For each period: allowable_TO = max(0, threshold - clocked); excess = max(0, TO - allowable).
+ * If clocked is already at/over the threshold from work, the entire TO is excess (because
+ * TO can't legitimately push past it).
  *
  * Returns periods where excess > 0:
  *   [['weekStart' => 'YYYY-MM-DD', 'clocked' => float, 'timeOff' => float, 'excess' => float], ...]
@@ -109,7 +110,7 @@ function weeklyTimeOffExcess(mysqli $conn, int $empID, string $periodStart, stri
     $cursor = new DateTime($periodStart);
     $endDt  = new DateTime($periodEnd);
     while ($cursor <= $endDt) {
-        $wsStr = payPeriodStart($cursor->format('Y-m-d')); // Wed–Tue pay period
+        $wsStr = payPeriodStart($cursor->format('Y-m-d')); // work week (Admin > Pay Rules)
         $weStr = payPeriodEnd($cursor->format('Y-m-d'));
         if (isset($seen[$wsStr])) { $cursor->modify('+7 days'); continue; }
         $seen[$wsStr] = true;
@@ -132,7 +133,7 @@ function weeklyTimeOffExcess(mysqli $conn, int $empID, string $periodStart, stri
             $timeOff += timeOffHoursInPeriod($r, $wsStr, $weStr, $defaultDayHours);
         }
 
-        $allowable = max(0.0, 40 - $clocked);
+        $allowable = max(0.0, overtimeWeeklyHours() - $clocked);
         $excess    = max(0.0, $timeOff - $allowable);
 
         if ($excess > 0.001) {
@@ -152,13 +153,13 @@ function weeklyTimeOffExcess(mysqli $conn, int $empID, string $periodStart, stri
 /**
  * For a proposed time-off request (could be new or an amendment), compute the
  * projected weekly hour totals (clocked + already-approved time-off + this
- * request) for every Wed–Tue pay period the request touches. Used to warn the
- * employee / admin when approval would push the period over 40 hours.
+ * request) for every work week the request touches. Used to warn the
+ * employee / admin when approval would push the week into overtime.
  *
  * Returns: [
  *   [
- *     'weekStart' => 'YYYY-MM-DD' (Wednesday),
- *     'weekEnd'   => 'YYYY-MM-DD' (Tuesday),
+ *     'weekStart' => 'YYYY-MM-DD' (first day of the work week),
+ *     'weekEnd'   => 'YYYY-MM-DD' (last day),
  *     'clocked'   => float,
  *     'priorTimeOff' => float,   // approved Sick/PTO already on record (excludes $excludeRequestID)
  *     'thisRequest'  => float,   // hours this request contributes to this week
@@ -187,7 +188,7 @@ function projectedWeeklyHours(
         'EndTime'   => $reqEndTime   ?: null,
     ];
 
-    // Determine the set of Wed–Tue pay periods the request spans
+    // Determine the set of work weeks the request spans
     $weeks = [];
     $d = new DateTime($reqStartDate);
     $end = new DateTime($reqEndDate);

@@ -20,16 +20,17 @@ $sql = "
         u.ID as EmployeeID,
         u.FirstName, 
         u.LastName,
-        u.ScheduledStartTime,
+        COALESCE(s.StartTime, u.ScheduledStartTime) AS ShiftStart, -- the shift's start, else the legacy per-user time
         tp.Date,
         MIN(tp.TimeIN) as FirstClockIn,
         DAYOFWEEK(tp.Date) as DayOfWeek
     FROM timepunches tp
     JOIN users u ON u.ID = tp.EmployeeID
+    LEFT JOIN shifts s ON s.ID = u.ShiftID
     WHERE tp.TimeIN IS NOT NULL
       AND tp.Date BETWEEN ? AND ?
       AND DAYOFWEEK(tp.Date) BETWEEN 2 AND 6
-      AND u.ScheduledStartTime IS NOT NULL
+      AND COALESCE(s.StartTime, u.ScheduledStartTime) IS NOT NULL
 ";
 
 $params = [$startDate, $endDate];
@@ -42,7 +43,7 @@ if ($employeeID !== '') {
 }
 
 $sql .= " GROUP BY tp.EmployeeID, tp.Date
-          HAVING FirstClockIn > u.ScheduledStartTime
+          HAVING FirstClockIn > ShiftStart
           ORDER BY tp.Date ASC";
 
 $stmt = $conn->prepare($sql);
@@ -63,7 +64,7 @@ while ($row = $result->fetch_assoc()) {
     $empID = $row['EmployeeID'];
     $empName = $row['FirstName'] . ' ' . $row['LastName'];
     $date = $row['Date'];
-    $scheduledTime = $row['ScheduledStartTime'];
+    $scheduledTime = $row['ShiftStart'];
     $actualTime = $row['FirstClockIn'];
     
     $scheduledDateTime = new DateTime($date . ' ' . $scheduledTime);
@@ -154,7 +155,7 @@ $html .= "<p style='text-align:center;'><strong>Date Range:</strong> " . date("m
 
 $html .= '<p style="font-size:8px; background-color:#fff3cd; padding:8px; border:1px solid #ffc107;">
 <strong>Note:</strong> This report tracks tardies based on scheduled start times for weekdays only (Mon-Fri). 
-Tardies are grouped by pay period (Wednesday-Tuesday). Only employees with a scheduled start time are included. 
+Tardies are grouped by work week (' . workWeekLabel() . '). Only employees with a scheduled start time are included. 
 Incomplete pay periods are excluded.
 </p>';
 

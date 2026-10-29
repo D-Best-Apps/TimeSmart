@@ -13,6 +13,7 @@ DROP TABLE IF EXISTS `settings`;
 DROP TABLE IF EXISTS `admins`;
 DROP TABLE IF EXISTS `users`;
 DROP TABLE IF EXISTS `Offices`;
+DROP TABLE IF EXISTS `shifts`;
 DROP TABLE IF EXISTS `user-archive`;
 SET FOREIGN_KEY_CHECKS = 1;
 
@@ -44,6 +45,7 @@ CREATE TABLE `users` (
   `NotifyTimeOff` tinyint(1) NOT NULL DEFAULT 0,
   `NotifyTimesheetEdits` tinyint(1) NOT NULL DEFAULT 0,
   `ScheduledStartTime` time DEFAULT NULL,
+  `ShiftID` int(11) DEFAULT NULL,
   PRIMARY KEY (`ID`),
   UNIQUE KEY `BadgeID` (`BadgeID`),
   UNIQUE KEY `PIN` (`PIN`)
@@ -152,10 +154,38 @@ CREATE TABLE `timepunches` (
   `AccuracyOut` float DEFAULT NULL,
   `IPAddressOut` varchar(45) DEFAULT NULL,
   `TotalHours` decimal(5,2) DEFAULT NULL,
+  `ShiftID` int(11) DEFAULT NULL,
+  `PaidIn` time DEFAULT NULL,
+  `PaidOut` time DEFAULT NULL,
+  `LunchDeductMin` smallint(6) DEFAULT NULL,
+  `LunchWaived` tinyint(1) NOT NULL DEFAULT 0,
+  `OutsideApproved` tinyint(1) NOT NULL DEFAULT 0,
+  `RawHours` decimal(5,2) DEFAULT NULL,
   `Note` text DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `EmployeeID` (`EmployeeID`),
   CONSTRAINT `timepunches_ibfk_1` FOREIGN KEY (`EmployeeID`) REFERENCES `users` (`ID`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `shifts` (
+  `ID` int(11) NOT NULL AUTO_INCREMENT,
+  `Name` varchar(100) NOT NULL,
+  `Color` varchar(7) NOT NULL DEFAULT '#0a4a6b',
+  `StartTime` time NOT NULL,
+  `EndTime` time NOT NULL,
+  `Days` set('Mon','Tue','Wed','Thu','Fri','Sat','Sun') NOT NULL DEFAULT 'Mon,Tue,Wed,Thu,Fri',
+  `EarlyInMinutes` smallint(6) NOT NULL DEFAULT 0,
+  `LateInGraceMinutes` smallint(6) NOT NULL DEFAULT 0,
+  `EarlyOutGraceMinutes` smallint(6) NOT NULL DEFAULT 0,
+  `LateOutMinutes` smallint(6) NOT NULL DEFAULT 0,
+  `OutsidePolicy` enum('actual','cap') NOT NULL DEFAULT 'actual',
+  `RoundIncrement` tinyint(4) NOT NULL DEFAULT 0,
+  `RoundMode` enum('nearest','up','down') NOT NULL DEFAULT 'nearest',
+  `LunchMode` enum('punched','auto','auto_unless_punched') NOT NULL DEFAULT 'punched',
+  `LunchMinutes` smallint(6) NOT NULL DEFAULT 30,
+  `LunchMinWorkedHours` decimal(4,2) NOT NULL DEFAULT 6.00,
+  `Archived` tinyint(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`ID`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE `login_logs` (

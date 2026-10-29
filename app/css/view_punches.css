@@ -147,3 +147,10 @@ select.reason-dropdown {
     color: var(--muted-text);
     padding: 2.5rem 1rem;
 }
+
+/* Shift rules: paid time / lunch / flag notes under punches, per-punch overrides */
+.timesheet-table .vp-paid,
+.vp-paid { color: var(--muted-text); font-size: 0.8rem; line-height: 1.3; margin-top: 0.15rem; }
+.vp-overrides { margin-top: 0.35rem; font-size: 0.8rem; }
+.vp-overrides label { display: block; white-space: nowrap; }
+.vp-overrides input { width: auto; margin-right: 0.25rem; }

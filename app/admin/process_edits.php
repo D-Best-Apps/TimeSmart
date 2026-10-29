@@ -10,6 +10,7 @@ if (!isset($_SESSION['admin'])) {
 // Permission check
 require_once __DIR__ . '/../functions/check_permission.php';
 require_once __DIR__ . '/../functions/hours.php'; // canonical calculateTotalHours
+require_once __DIR__ . '/../functions/pay_rules.php'; // recomputeDayHours (shift rounding / auto-lunch)
 requirePermission('approve_edits');
 
 require_once __DIR__ . '/../functions/csrf.php';
@@ -53,6 +54,7 @@ function resolveIncompleteLunch(mysqli $conn, array $edit, string $lunchEnd, str
     $u->bind_param("sdi", $lunchEnd, $total, $punch['id']);
     $u->execute();
     $u->close();
+    recomputeDayHours($conn, (int) $edit['EmployeeID'], $edit['Date']);
 
     $log = $conn->prepare("INSERT INTO punch_changelog (EmployeeID, Date, ChangedBy, FieldChanged, OldValue, NewValue, Reason) VALUES (?, ?, ?, 'LunchEnd', NULL, ?, 'Unfinished lunch resolved from review queue')");
     $log->bind_param("isss", $edit['EmployeeID'], $edit['Date'], $admin, $lunchEnd);
@@ -109,21 +111,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     $update->bind_param("sis", $requested, $employeeID, $date);
                     $update->execute();
 
-                    // Recompute stored TotalHours from the (now updated) times so the
+                    // Recompute stored hours from the (now updated) times so the
                     // canonical column never goes stale after an approved time edit.
                     if ($field !== 'Note') {
-                        $rs = $conn->prepare("SELECT id, TimeIN, LunchStart, LunchEnd, TimeOut FROM timepunches WHERE EmployeeID = ? AND Date = ?");
-                        $rs->bind_param("is", $employeeID, $date);
-                        $rs->execute();
-                        $punchRows = $rs->get_result()->fetch_all(MYSQLI_ASSOC);
-                        $rs->close();
-                        foreach ($punchRows as $pr) {
-                            $th = calculateTotalHours($pr['TimeIN'], $pr['LunchStart'], $pr['LunchEnd'], $pr['TimeOut']);
-                            $u = $conn->prepare("UPDATE timepunches SET TotalHours = ? WHERE id = ?");
-                            $u->bind_param("di", $th, $pr['id']);
-                            $u->execute();
-                            $u->close();
-                        }
+                        recomputeDayHours($conn, (int) $employeeID, $date);
                     }
                 }
             }

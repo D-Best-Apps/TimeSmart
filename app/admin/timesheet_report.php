@@ -4,9 +4,10 @@
  * Accessible to reports_only role (requires view_reports permission)
  */
 
+require_once '../auth/db.php'; // before hours.php is used: the week start comes from settings
 require_once __DIR__ . '/../functions/hours.php';
 
-// Default to the current Wed–Tue pay period
+// Default to the current work week
 $defaultStart = payPeriodStart(date('Y-m-d'));
 $defaultEnd = payPeriodEnd(date('Y-m-d'));
 

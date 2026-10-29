@@ -72,12 +72,13 @@ function updateTotals() {
 
     const weeklyTotalEl = document.getElementById('weekly-total');
     const weeklyOvertimeEl = document.getElementById('weekly-overtime');
+    const otLimit = window.VP_OT_WEEKLY_HOURS || 40; // Admin > Pay Rules
 
     if (weeklyTotalEl) {
         weeklyTotalEl.innerText = weeklyTotal.toFixed(2) + "h";
     }
     if (weeklyOvertimeEl) {
-        weeklyOvertimeEl.innerText = (weeklyTotal > 40 ? (weeklyTotal - 40).toFixed(2) : "0.00") + "h";
+        weeklyOvertimeEl.innerText = (weeklyTotal > otLimit ? (weeklyTotal - otLimit).toFixed(2) : "0.00") + "h";
     }
 }
 
