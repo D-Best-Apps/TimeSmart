@@ -68,22 +68,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    // The kiosk takes a badge scan or a PIN in the same box, so a PIN may never equal
+    // a badge number (this employee's or anyone else's), and the other way round.
+    if ($badgeID !== '' && $badgeID === $pin) {
+        header('Location: ../error.php?code=400&message=' . urlencode('PIN and Badge ID must be different.'));
+        exit;
+    }
+
     // Uniqueness checks (excluding this same user)
     if ($badgeID !== '') {
-        $chk = $conn->prepare("SELECT ID FROM users WHERE BadgeID = ? AND ID <> ?");
-        $chk->bind_param("si", $badgeID, $id);
+        $chk = $conn->prepare("SELECT ID FROM users WHERE (BadgeID = ? OR PIN = ?) AND ID <> ?");
+        $chk->bind_param("ssi", $badgeID, $badgeID, $id);
         $chk->execute();
         $chk->store_result();
         if ($chk->num_rows > 0) {
             $chk->close();
-            header('Location: ../error.php?code=400&message=' . urlencode('Badge ID already exists.'));
+            header('Location: ../error.php?code=400&message=' . urlencode('Badge ID already exists (as a badge or as a PIN).'));
             exit;
         }
         $chk->close();
     }
     if ($pin !== '') {
-        $chk = $conn->prepare("SELECT ID FROM users WHERE PIN = ? AND ID <> ?");
-        $chk->bind_param("si", $pin, $id);
+        $chk = $conn->prepare("SELECT ID FROM users WHERE (PIN = ? OR BadgeID = ?) AND ID <> ?");
+        $chk->bind_param("ssi", $pin, $pin, $id);
         $chk->execute();
         $chk->store_result();
         if ($chk->num_rows > 0) {

@@ -22,7 +22,9 @@
   Built-in support for TOTP 2FA (Google Authenticator, Authy).
   
 - **Kiosk Mode**  
-  Badge/NFC scanning for PIN-less time clock stations.
+  iPad time clock station: scan a badge (with a keyboard-emulating badge/NFC reader) or tap a PIN
+  on the on-screen keypad. One scan clocks in, ends lunch or clocks out; it only asks when the
+  next step is a choice (start lunch or go home).
 
 - **Legal Pages**  
   Includes Privacy Policy and Terms of Use pages.

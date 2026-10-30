@@ -231,21 +231,90 @@ function qc_rl_record_fail($ip) {
 }
 function qc_rl_reset($ip) { $f = qc_rl_path($ip); if (is_file($f)) { @unlink($f); } }
 
+/**
+ * Kiosk: find the employee for a scanned badge or a typed PIN (one box takes both).
+ * A value is matched as a BadgeID, and (when kiosk PINs are on) as a 4-6 digit PIN.
+ *
+ * PIN guessing: wrong PINs count toward the throttle above, keyed on the real
+ * connection address (REMOTE_ADDR — a spoofable X-Forwarded-For can't dodge it), and
+ * a success does NOT reset the count, so a known PIN can't be used to keep guessing.
+ * Badge misreads don't count: badge numbers are too long to guess, and a busy kiosk
+ * shouldn't lock itself at shift change. Ends the request with an error on failure.
+ * @return array{0:int,1:string} [employee ID, first name]
+ */
+function kiosk_identify(mysqli $conn, string $value): array {
+    $device = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
+    $wait = qc_rl_blocked_for($device);
+    if ($wait > 0) {
+        send_json_response(false, "🚫 Too many wrong PINs. Wait {$wait}s, or scan your badge.", 429);
+    }
+    $value = trim($value);
+    if ($value === '') {
+        send_json_response(false, "Scan your badge or enter your PIN.", 400);
+    }
+    $isPin = preg_match('/^\d{4,6}$/', $value) && getSettingValue('KioskPinEnabled', $conn) !== '0';
+
+    $stmt = $conn->prepare("SELECT ID, FirstName FROM users WHERE BadgeID = ? OR (? = 1 AND PIN = ?) LIMIT 2");
+    $pinFlag = $isPin ? 1 : 0;
+    $stmt->bind_param("sis", $value, $pinFlag, $value);
+    $stmt->execute();
+    $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    $stmt->close();
+
+    if (count($rows) > 1) {
+        // One employee's PIN equals another's badge (Add/Edit User now prevent this,
+        // but older data may have it). Refuse rather than punch the wrong person.
+        error_log("Kiosk: value matches more than one employee (badge and PIN) — fix in Manage Users");
+        send_json_response(false, "⚠️ That code belongs to more than one person. Use your badge, and ask an admin to change your PIN.", 409);
+    }
+    if ($rows) {
+        return [(int) $rows[0]['ID'], (string) $rows[0]['FirstName']];
+    }
+    if ($isPin) {
+        qc_rl_record_fail($device);
+    }
+    send_json_response(false, $isPin ? "❌ PIN or badge not recognized." : "❌ Badge not recognized.", 404);
+}
+
+/**
+ * Kiosk double-scan guard: seconds since this employee's last punch (in, lunch or
+ * out), or null if none today. A second tap of the same badge within a minute would
+ * otherwise immediately do the opposite punch (clock in, then straight back out).
+ */
+function kiosk_seconds_since_last_punch(mysqli $conn, int $empID): ?array {
+    $stmt = $conn->prepare("SELECT Date, TimeIN, LunchStart, LunchEnd, TimeOUT FROM timepunches WHERE EmployeeID = ? ORDER BY Date DESC, TimeIN DESC LIMIT 1");
+    $stmt->bind_param("i", $empID);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    if (!$row) {
+        return null;
+    }
+    $best = null;
+    foreach (['TimeOUT' => 'Clocked out', 'LunchEnd' => 'Lunch ended', 'LunchStart' => 'Lunch started', 'TimeIN' => 'Clocked in'] as $col => $label) {
+        if (empty($row[$col])) continue;
+        $ts = strtotime($row['Date'] . ' ' . $row[$col]);
+        if ($ts > time() + 60) $ts -= 86400; // overnight: the time belongs to the next day's clock
+        if ($best === null || $ts > $best[0]) $best = [$ts, $label, $row[$col]];
+    }
+    if ($best === null) {
+        return null;
+    }
+    $ago = time() - $best[0];
+    if ($ago < 0 || $ago > 86400) {
+        return null;
+    }
+    return ['seconds' => $ago, 'label' => $best[1], 'time' => $best[2]];
+}
+
+/** Kiosk button labels for each punch action. */
+const KIOSK_ACTION_LABELS = [
+    'clockin' => 'Clock In', 'lunchstart' => 'Start Lunch', 'lunchend' => 'End Lunch', 'clockout' => 'Clock Out',
+];
+
 // --- Check TagID Status (kiosk_status) ---
 if (!empty($_POST['mode']) && $_POST['mode'] === 'kiosk_status' && !empty($_POST['TagID'])) {
-    $tagID = trim($_POST['TagID']);
-
-    // Lookup user (badge value is stored in BadgeID, formerly TagID)
-    $stmt = $conn->prepare("SELECT ID, FirstName FROM users WHERE BadgeID = ?");
-    if (!$stmt) send_json_response(false, "DB prepare error", 500, $conn->error);
-    $stmt->bind_param("s", $tagID);
-    $stmt->execute();
-    $stmt->store_result();
-    $stmt->bind_result($empID, $firstName);
-    if (!$stmt->fetch()) {
-        send_json_response(false, "❌ Tag not recognized.");
-    }
-    $stmt->close();
+    [$empID, $firstName] = kiosk_identify($conn, (string) $_POST['TagID']);
 
     // Determine current punch status
     $punch = $conn->prepare("SELECT TimeIN, LunchStart, LunchEnd, TimeOUT FROM timepunches WHERE EmployeeID = ? ORDER BY Date DESC, TimeIN DESC LIMIT 1");
@@ -294,23 +363,16 @@ if (!empty($_POST['mode']) && $_POST['mode'] === 'kiosk_status' && !empty($_POST
 }
 
 // --- Kiosk Mode Support ---
-if (!empty($_POST['mode']) && $_POST['mode'] === 'kiosk' && !empty($_POST['TagID'])) {
-    $tagID = trim($_POST['TagID']);
+//   mode=kiosk_scan  one request per scan/PIN: if only one next step makes sense it is
+//                    done at once; otherwise the choices come back for the kiosk to show
+//   mode=kiosk       do the posted action (a button the employee pressed), if it is
+//                    valid right now; no action = the default next step
+if (!empty($_POST['mode']) && in_array($_POST['mode'], ['kiosk', 'kiosk_scan'], true) && !empty($_POST['TagID'])) {
     $now   = date("H:i:s");
     $date  = date("Y-m-d");
     $ip    = get_client_ip();
 
-    // Lookup user by badge (stored in BadgeID, formerly TagID)
-    $stmt = $conn->prepare("SELECT ID, FirstName FROM users WHERE BadgeID = ?");
-    if (!$stmt) send_json_response(false, "DB prepare error (kiosk lookup)", 500, $conn->error);
-    $stmt->bind_param("s", $tagID);
-    if (!$stmt->execute()) send_json_response(false, "DB execute error (kiosk lookup)", 500, $stmt->error);
-    $stmt->store_result();
-    $stmt->bind_result($empID, $firstName);
-    if (!$stmt->fetch()) {
-        send_json_response(false, "❌ Tag not recognized.", 404);
-    }
-    $stmt->close();
+    [$empID, $firstName] = kiosk_identify($conn, (string) $_POST['TagID']);
 
     // Get current open punch
     $punch = $conn->prepare("SELECT ID, Date, TimeIN, LunchStart, LunchEnd FROM timepunches WHERE EmployeeID = ? AND TimeOUT IS NULL ORDER BY Date DESC, TimeIN DESC LIMIT 1");
@@ -326,16 +388,49 @@ if (!empty($_POST['mode']) && $_POST['mode'] === 'kiosk' && !empty($_POST['TagID
 
         if (empty($lunchStart)) {
             // Auto-lunch shift: no lunch punches, the second scan clocks out
-            $status = shiftSkipsLunchPunch($conn, (int) $empID) ? 'clockout' : 'lunchstart';
+            $choices = shiftSkipsLunchPunch($conn, (int) $empID) ? ['clockout'] : ['lunchstart', 'clockout'];
         } elseif (empty($lunchEnd)) {
-            $status = 'lunchend';
+            $choices = ['lunchend', 'clockout'];
         } else {
-            $status = 'clockout';
+            $choices = ['clockout'];
         }
     } else {
-        $status = 'clockin';
+        $choices = ['clockin'];
     }
     $punch->close();
+
+    $requested = (string) ($_POST['action'] ?? '');
+    if ($_POST['mode'] === 'kiosk_scan') {
+        // Same badge again within a minute: a double tap or reader double-read, not a
+        // request for the opposite punch. (Buttons, mode=kiosk, are deliberate and skip this.)
+        $last = kiosk_seconds_since_last_punch($conn, (int) $empID);
+        if ($last !== null && $last['seconds'] < 60) {
+            send_json_response(true, "✅ Already done — " . strtolower($last['label']) . " at " . date("g:i A", strtotime($last['time'])), 200, null, ['firstName' => $firstName]);
+        }
+        // On lunch, a scan means "back from lunch" (the common case, one step).
+        $oneStep = count($choices) === 1 || $choices[0] === 'lunchend';
+        if (!$oneStep) {
+            send_json_response(true, "Choose what to do.", 200, null, [
+                'firstName' => $firstName,
+                'needsChoice' => true,
+                'choices' => array_map(fn($a) => ['action' => $a, 'label' => KIOSK_ACTION_LABELS[$a]], $choices),
+                'since' => !empty($timeIn) ? date('g:i A', strtotime($timeIn)) : null,
+            ]);
+        }
+        $status = $choices[0];
+    } elseif ($requested === '') {
+        $status = $choices[0];
+    } elseif (in_array($requested, $choices, true)) {
+        $status = $requested;
+    } else {
+        $why = [
+            'clockin'    => "You're already clocked in.",
+            'lunchstart' => in_array('clockin', $choices, true) ? "You're not clocked in." : "You can't start lunch right now.",
+            'lunchend'   => "You're not on lunch.",
+            'clockout'   => "You're not clocked in.",
+        ][$requested] ?? "That isn't available right now.";
+        send_json_response(false, "⚠️ {$why}", 409, null, ['firstName' => $firstName]);
+    }
 
     // Execute the appropriate action
     switch ($status) {

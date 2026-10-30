@@ -149,6 +149,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $stmt->execute();
     $settings['QuickBadgeEnabled'] = $quickBadgeVal;
 
+    // Kiosk PIN entry (on unless turned off: absent setting = '1')
+    $kioskPinVal = !empty($_POST['KioskPinEnabled']) ? '1' : '0';
+    $stmt = $conn->prepare("INSERT INTO settings (SettingKey, SettingValue) VALUES (?, ?) ON DUPLICATE KEY UPDATE SettingValue = ?");
+    $key = 'KioskPinEnabled';
+    $stmt->bind_param("sss", $key, $kioskPinVal, $kioskPinVal);
+    $stmt->execute();
+    $settings['KioskPinEnabled'] = $kioskPinVal;
+
     // Home-page widget toggles
     $weatherEnabledVal = !empty($_POST['WeatherEnabled']) ? '1' : '0';
     $stmt = $conn->prepare("INSERT INTO settings (SettingKey, SettingValue) VALUES (?, ?) ON DUPLICATE KEY UPDATE SettingValue = ?");
@@ -290,6 +298,17 @@ require_once 'header.php';
                 <p style="color:#666; font-size:0.85em; margin:0.25rem 0 0;">
                     On: at least 7 characters and 3 of 4 character types — uppercase, lowercase, number, symbol (recommended for online installs).
                     Off: at least 2 characters, any (for offline / air-gapped installs).
+                </p>
+            </div>
+            <div class="field">
+                <label>
+                    <input type="checkbox" name="KioskPinEnabled" value="1" <?= ($settings['KioskPinEnabled'] ?? '1') !== '0' ? 'checked' : '' ?>>
+                    Kiosk accepts PINs
+                </label>
+                <p style="color:#666; font-size:0.85em; margin:0.25rem 0 0;">
+                    The <a href="../kiosk/" target="_blank">kiosk</a> takes a badge scan or a PIN typed on its keypad.
+                    Turn off to allow badges only. Wrong PINs lock the kiosk device out for a minute after 10 tries in 5 minutes.
+                    For large sites, use 6-digit PINs: 4-digit PINs are easier to guess when many employees have one.
                 </p>
             </div>
             <div class="buttons">

@@ -7,7 +7,7 @@ This file provides guidance for operating and managing the TimeSmart application
 D-BEST TimeSmart is a PHP-based employee timekeeping system with three main interfaces:
 - **Admin Portal** (`/admin/`) - User management, timesheet approval, reporting
 - **Employee Portal** (`/user/`) - Clock in/out, timesheet viewing, edit requests
-- **Kiosk Mode** (`/kiosk/`) - Badge/NFC scanning for PIN-less clocking
+- **Kiosk Mode** (`/kiosk/`) - iPad station: badge scan or on-screen PIN pad, one scan per punch
 
 **Tech Stack:** PHP 8.3, MySQL/MariaDB, Nginx, Docker, TOTP 2FA
 

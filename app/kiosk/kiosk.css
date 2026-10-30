@@ -221,3 +221,52 @@ h1 {
     padding: 1rem 0.5rem;
   }
 }
+
+/* ---- iPad keypad: one box for a badge scan or a PIN ---- */
+#currentTime { margin-bottom: 1.25rem; }
+#scanBox { margin-bottom: 1rem; }
+#tagInput {
+  -webkit-text-security: disc;   /* PINs show as dots */
+  caret-color: transparent;
+  letter-spacing: 0.3em;
+}
+#tagInput::placeholder { letter-spacing: normal; color: #aaa; }
+
+.keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: clamp(0.6rem, 2vw, 1rem);
+  max-width: 460px;
+  margin: 1.25rem auto 0;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;    /* no double-tap zoom delay */
+}
+.keypad button {
+  font-size: clamp(1.8rem, 6vw, 2.6rem);
+  font-weight: 600;
+  height: clamp(70px, 11vh, 96px);
+  border: none;
+  border-radius: 14px;
+  background: #4a4a4a;
+  color: #fff;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.06s ease, background 0.06s ease;
+}
+.keypad button.pressed { transform: scale(0.94); background: #5d5d5d; }
+.keypad .key-back { background: #3a3a3a; }
+.keypad .key-enter { background: #1e8e3e; }
+.keypad .key-enter.pressed { background: #26a84b; }
+
+/* Choice panel: big buttons, the likely one first and highlighted */
+.action-buttons { touch-action: manipulation; }
+.action-buttons .action-btn,
+.action-buttons .cancel-button { box-sizing: border-box; }
+.action-buttons .action-btn {
+  font-size: clamp(1.4rem, 4vw, 2rem);
+  padding: 1.4rem 2rem;
+  min-width: 42%;
+}
+.action-buttons .action-btn.primary { background-color: #1e8e3e; }
+.action-buttons .cancel-button { min-width: 42%; }
