@@ -13,6 +13,9 @@ if (isset($_GET['status'])) {
         $statusMessage = '<div class="alert alert-info">No changes were submitted.</div>';
     }
 }
+if (!empty($_GET['locked'])) {
+    $statusMessage .= '<div class="alert alert-danger">' . (int) $_GET['locked'] . ' change(s) were not sent: payroll for those days has already been run. Ask your supervisor to correct them.</div>';
+}
 
 if (isset($_GET['email_status'])) {
     $emailStatus = $_GET['email_status'];

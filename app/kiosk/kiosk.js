@@ -50,7 +50,7 @@ document.addEventListener("DOMContentLoaded", () => {
         clockPanel.classList.remove("hidden");
         scanBox.classList.add("hidden");
 
-        renderActionButtons();
+        renderActionButtons(!!data.autoLunch);
       })
       .catch(() => showOverlay(false, "❌ Network error"));
     }, 500);
@@ -104,13 +104,14 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("tagInput").focus();
 }
 
-function renderActionButtons() {
+// autoLunch: the employee's shift takes lunch out automatically, so no lunch buttons
+function renderActionButtons(autoLunch) {
   const actions = [
     { key: "clockin", label: "Clock In" },
     { key: "lunchstart", label: "Lunch Start" },
     { key: "lunchend", label: "Lunch End" },
     { key: "clockout", label: "Clock Out" }
-  ];
+  ].filter(a => !autoLunch || (a.key !== "lunchstart" && a.key !== "lunchend"));
 
   const container = document.querySelector(".action-buttons");
   container.innerHTML = '';

@@ -101,6 +101,45 @@ function payPeriodRange(string $date, array $policy): array {
     return [payPeriodStart($date), payPeriodEnd($date)];
 }
 
+/**
+ * Last day of the most recent closed payroll, or null. Punches dated on or before it
+ * can't be edited, approved or recalculated: payroll was already run on those hours.
+ * Live clock-ins/outs are never blocked. Set from Payroll Totals, cleared on Pay Rules.
+ */
+function payrollLockedThrough(mysqli $conn): ?string {
+    static $cache = false;
+    if ($cache !== false) {
+        return $cache;
+    }
+    $cache = null;
+    try {
+        $stmt = $conn->prepare("SELECT SettingValue FROM settings WHERE SettingKey = 'PayrollLockedThrough'");
+        $stmt->execute();
+        $v = $stmt->get_result()->fetch_column();
+        $stmt->close();
+        if (is_string($v) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $v)) {
+            $cache = $v;
+        }
+    } catch (mysqli_sql_exception $e) {
+        // settings unavailable: nothing is locked
+    }
+    return $cache;
+}
+
+/** Is $date ('Y-m-d') inside a closed payroll period? */
+function isPayrollLocked(mysqli $conn, ?string $date): bool {
+    $lock = payrollLockedThrough($conn);
+    return $lock !== null && $date !== null && $date !== '' && $date <= $lock;
+}
+
+/** Set (or with null, clear) the payroll lock date. */
+function setPayrollLockedThrough(mysqli $conn, ?string $date): void {
+    $stmt = $conn->prepare("INSERT INTO settings (SettingKey, SettingValue) VALUES ('PayrollLockedThrough', ?) ON DUPLICATE KEY UPDATE SettingValue = VALUES(SettingValue)");
+    $stmt->bind_param("s", $date);
+    $stmt->execute();
+    $stmt->close();
+}
+
 /** Round seconds-since-midnight to an increment of $minutes (0 = unchanged). */
 function roundToIncrement(int $sec, int $minutes, string $mode): int {
     if ($minutes <= 0) return $sec;
@@ -374,6 +413,16 @@ function recomputeDayHours(mysqli $conn, int $empID, string $date, bool $dryRun 
 }
 
 /**
+ * Whether the employee's shift takes lunch out automatically with no lunch punch
+ * ('auto' mode). The kiosk and dashboard then offer only Clock In / Clock Out.
+ * 'auto_unless_punched' keeps the lunch buttons: punching lunch is how they opt out.
+ */
+function shiftSkipsLunchPunch(mysqli $conn, int $empID): bool {
+    $shift = employeeShift($conn, $empID);
+    return $shift !== null && $shift['LunchMode'] === 'auto';
+}
+
+/**
  * recomputeDayHours() for the day of one punch, then return that punch's paid hours
  * (for the "Worked: 8.00 hrs" message after a clock-out).
  */
@@ -394,7 +443,15 @@ function recomputePunchHours(mysqli $conn, int $empID, string $date, int $punchI
  * With $dryRun nothing is written. Writes are logged to punch_changelog as $changedBy.
  */
 function recomputeRange(mysqli $conn, string $from, string $to, ?int $shiftID = null, bool $dryRun = true, string $changedBy = 'SYSTEM'): array {
-    $sql = "SELECT DISTINCT tp.EmployeeID, tp.Date, u.FirstName, u.LastName
+    // Never re-price a closed payroll period
+    $lock = payrollLockedThrough($conn);
+    if ($lock !== null && $from <= $lock) {
+        $from = (new DateTime($lock))->modify('+1 day')->format('Y-m-d');
+        if ($from > $to) {
+            return [];
+        }
+    }
+    $sql ="SELECT DISTINCT tp.EmployeeID, tp.Date, u.FirstName, u.LastName
               FROM timepunches tp JOIN users u ON u.ID = tp.EmployeeID
              WHERE tp.Date BETWEEN ? AND ? AND tp.TimeIN IS NOT NULL AND tp.TimeOut IS NOT NULL";
     $types = "ss";

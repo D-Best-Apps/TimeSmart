@@ -174,6 +174,11 @@ require_once 'header.php';
             ⛔ <strong>Lunch end not saved:</strong> <?= htmlspecialchars($_GET['details'] ?? 'enter a valid time.') ?>
         </div>
     <?php endif; ?>
+    <?php if (($_GET['error'] ?? '') === 'locked'): ?>
+        <div class="alert alert-danger" style="margin-bottom:1rem;">
+            ⛔ <strong>Not approved:</strong> <?= htmlspecialchars($_GET['details'] ?? 'payroll for that date is closed.') ?>
+        </div>
+    <?php endif; ?>
     <?php if (($_GET['error'] ?? '') === 'csrf'): ?>
         <div class="alert alert-danger" style="margin-bottom:1rem;">
             ⛔ <strong>Not saved:</strong> this page had been open too long and the request was

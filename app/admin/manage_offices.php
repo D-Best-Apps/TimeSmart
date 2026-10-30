@@ -11,8 +11,11 @@ if (!isset($_SESSION['admin'])) {
 // Permission check
 require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('manage_offices');
+require_once __DIR__ . '/../functions/pay_rules.php'; // listShifts(), shiftChip()
+require_once __DIR__ . '/../functions/csrf.php';
 
-$offices_result = $conn->query("SELECT ID, OfficeName, AllowedIPs FROM Offices ORDER BY OfficeName");
+$offices_result = $conn->query("SELECT ID, OfficeName, AllowedIPs, DefaultShiftID FROM Offices ORDER BY OfficeName");
+$shifts = listShifts($conn, true);
 $offices_data = [];
 while ($row = $offices_result->fetch_assoc()) {
     $offices_data[] = $row;
@@ -51,6 +54,8 @@ require_once 'header.php';
         </div>
     <?php elseif (isset($_GET['ips_saved'])): ?>
         <div class="alert alert-success">Allowed IPs updated.</div>
+    <?php elseif (isset($_GET['shift_saved'])): ?>
+        <div class="alert alert-success">Default shift updated. It applies to employees added to this office from now on.</div>
     <?php elseif (!empty($_GET['error'])): ?>
         <div class="alert alert-danger"><?= htmlspecialchars($_GET['error']) ?></div>
     <?php endif; ?>
@@ -66,6 +71,7 @@ require_once 'header.php';
         <tr>
             <th>Office Name</th>
             <th>Allowed IPs</th>
+            <th>Default Shift <span style="font-weight:normal; font-size:0.8rem;">(for new hires)</span></th>
             <th>Actions</th>
         </tr>
         </thead>
@@ -85,6 +91,20 @@ require_once 'header.php';
                     <?php else: ?>
                         <span style="color:var(--muted-text);">any (unrestricted)</span>
                     <?php endif; ?>
+                </td>
+                <td>
+                    <form method="POST" action="update_office_shift.php" style="display:flex; gap:.35rem; align-items:center;">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="ID" value="<?= (int) $office['ID'] ?>">
+                        <select name="DefaultShiftID" onchange="this.form.submit()" style="width:auto;" aria-label="Default shift for <?= htmlspecialchars($office['OfficeName']) ?>">
+                            <option value="">None</option>
+                            <?php foreach ($shifts as $s): ?>
+                                <?php if ($s['Archived'] && (int) $s['ID'] !== (int) ($office['DefaultShiftID'] ?? 0)) continue; ?>
+                                <option value="<?= (int) $s['ID'] ?>" <?= (int) $s['ID'] === (int) ($office['DefaultShiftID'] ?? 0) ? 'selected' : '' ?>><?= htmlspecialchars($s['Name']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <noscript><button type="submit" class="btn secondary small">Save</button></noscript>
+                    </form>
                 </td>
                 <td>
                     <button type="button" class="btn secondary small"

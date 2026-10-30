@@ -7,7 +7,7 @@
 3. Report total hours and overtime hours
 4. Give a per-period total for keying into QuickBooks payroll (no integration)
 
-Status: Phase 0 shipped. Phase 1 built (§6): shifts, rounding, auto-lunch, Pay Rules, Payroll Totals, plus the Recalculate tool and bulk shift assignment from Phase 2. Not yet built: kiosk lunch-button hiding, Rounding Audit report, office default shift, daily OT on the Pay Rules page, pay-period locking.
+Status: Phases 0–2 built (§6), except daily overtime on the Pay Rules page, which waits on the client's answer to question 7 (§9). The engine already supports it; every overtime report would need to switch to per-day figures first.
 
 ---
 

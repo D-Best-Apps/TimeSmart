@@ -23,6 +23,9 @@ $admin = $_SESSION['admin'];
  * recompute TotalHours, log it, and close the item. Returns an error message or null.
  */
 function resolveIncompleteLunch(mysqli $conn, array $edit, string $lunchEnd, string $admin, string $now): ?string {
+    if (isPayrollLocked($conn, $edit['Date'])) {
+        return 'payroll for ' . date('m/d/Y', strtotime($edit['Date'])) . ' is closed. Reopen it on Settings › Pay Rules first.';
+    }
     if (!preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $lunchEnd)) {
         return 'enter the time the employee came back from lunch.';
     }
@@ -95,6 +98,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     exit;
                 }
                 continue;
+            }
+
+            // Closed payroll period: an approval would change hours already paid
+            // (A note doesn't change hours, so it can still be approved.)
+            if ($decision === 'Approved' && $field !== 'Note' && isPayrollLocked($conn, $edit['Date'])) {
+                header('Location: edits_timesheet.php?error=locked&details=' . urlencode('Payroll for ' . date('m/d/Y', strtotime($edit['Date'])) . ' is closed. Reopen it on Settings › Pay Rules to approve this change, or reject it.'));
+                exit;
             }
 
             if ($decision === 'Approved') {

@@ -14,6 +14,12 @@ if (!$empID) {
     exit;
 }
 
+// Auto-lunch shift: hide the lunch punch buttons (Settings > Shifts)
+require_once __DIR__ . '/../functions/pay_rules.php';
+$myShift = employeeShift($conn, (int) $empID);
+$autoLunch = $myShift !== null && $myShift['LunchMode'] === 'auto';
+$autoLunchMinutes = $autoLunch ? (int) $myShift['LunchMinutes'] : 0;
+
 // Punch history
 $start = $_GET['start'] ?? date('Y-m-d', strtotime('monday this week'));
 $end   = $_GET['end'] ?? date('Y-m-d', strtotime('friday this week'));
@@ -231,10 +237,17 @@ $timeOffHistory = $torStmt->get_result()->fetch_all(MYSQLI_ASSOC);
                 <input type="text" id="note" placeholder="Optional note...">
                 <div class="punch-buttons">
                     <button class="clockin" onclick="submitAction('clockin')">Clock In</button>
+                    <?php if ($autoLunch): ?>
+                    <!-- Auto-lunch shift: lunch is taken out automatically, so no lunch punches -->
+                    <?php else: ?>
                     <button class="lunchstart" onclick="submitAction('lunchstart')">Lunch Start</button>
                     <button class="lunchend" onclick="submitAction('lunchend')">Lunch End</button>
+                    <?php endif; ?>
                     <button class="clockout" onclick="submitAction('clockout')">Clock Out</button>
                 </div>
+                <?php if ($autoLunch): ?>
+                <p style="font-size:0.85em; color:#666; margin:0.5rem 0 0;">Lunch (<?= (int) $autoLunchMinutes ?> min) is taken out automatically on your shift.</p>
+                <?php endif; ?>
             </div>
         </div>
 

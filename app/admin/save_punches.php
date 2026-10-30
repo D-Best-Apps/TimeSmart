@@ -63,6 +63,10 @@ try {
             
             if ($punch) {
                 $date = $punch['Date'];
+                if (isPayrollLocked($conn, $date)) {
+                    $skipped[] = describePunchRow($date, $punch['TimeIN'], $punch['TimeOut']) . ': payroll for this date is closed';
+                    continue;
+                }
                 
                 // Log the deletion in changelog
                 $logStmt = $conn->prepare("INSERT INTO punch_changelog (EmployeeID, Date, ChangedBy, FieldChanged, OldValue, NewValue, Reason) VALUES (?, ?, ?, ?, ?, ?, ?)");
@@ -177,6 +181,23 @@ try {
                 && $lunchWaived     === (int) ($existing['LunchWaived'] ?? 0)
                 && $outsideApproved === (int) ($existing['OutsideApproved'] ?? 0)
                 && $sameHours($totalHours, $existing['RawHours'] ?? $existing['TotalHours'])) {
+                continue;
+            }
+
+            // Closed payroll period: hours were already paid, so the row can't change.
+            // A row whose times and flags weren't touched is skipped silently — its stored
+            // hours can differ from a fresh calculation (e.g. an unfinished lunch left at 0).
+            if (isPayrollLocked($conn, $date)) {
+                $touched = !$existing
+                    || $clockIn  !== $existing['TimeIN']
+                    || $lunchOut !== $existing['LunchStart']
+                    || $lunchIn  !== $existing['LunchEnd']
+                    || $clockOut !== $existing['TimeOut']
+                    || $lunchWaived     !== (int) ($existing['LunchWaived'] ?? 0)
+                    || $outsideApproved !== (int) ($existing['OutsideApproved'] ?? 0);
+                if ($touched) {
+                    $skipped[] = describePunchRow($date, $clockIn, $clockOut) . ': payroll for this date is closed';
+                }
                 continue;
             }
 

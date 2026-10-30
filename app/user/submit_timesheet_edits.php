@@ -3,6 +3,7 @@ session_start();
 require '../auth/db.php';
 require_once '../vendor/autoload.php';
 require_once __DIR__ . '/../functions/notify_recipients.php';
+require_once __DIR__ . '/../functions/pay_rules.php'; // isPayrollLocked()
 date_default_timezone_set('America/Chicago');
 
 use PHPMailer\PHPMailer\PHPMailer;
@@ -74,6 +75,12 @@ foreach ($entries as $entry) {
 
             $notesSaved++;
         }
+        continue;
+    }
+
+    // Closed payroll period: time changes can't be requested (notes above still save)
+    if (!empty($changes) && isPayrollLocked($conn, $date)) {
+        $lockedSkipped = ($lockedSkipped ?? 0) + 1;
         continue;
     }
 
@@ -193,6 +200,7 @@ if ($inserted > 0) {
 }
 
 $status = $inserted ? 'submitted' : ($notesSaved ? 'note_saved' : 'nochange');
-header("Location: timesheet.php?status=" . $status . "&email_status=" . urlencode($emailStatus));
+header("Location: timesheet.php?status=" . $status . "&email_status=" . urlencode($emailStatus)
+    . (!empty($lockedSkipped) ? '&locked=' . (int) $lockedSkipped : ''));
 exit;
 ?>

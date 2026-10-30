@@ -28,7 +28,7 @@ while ($row = $users_result->fetch_assoc()) {
     $users_data[] = $row;
 }
 
-$offices_result = $conn->query("SELECT OfficeName FROM Offices ORDER BY OfficeName");
+$offices_result = $conn->query("SELECT OfficeName, DefaultShiftID FROM Offices ORDER BY OfficeName");
 $offices_data = [];
 while ($row = $offices_result->fetch_assoc()) {
     $offices_data[] = $row;
@@ -169,13 +169,14 @@ require_once 'header.php';
             <input type="text" name="LastName" placeholder="Last Name" required>
             <input type="text" name="BadgeID" placeholder="Badge ID (optional)" autocomplete="off" data-1p-ignore="true" data-lpignore="true">
             <input type="text" name="PIN" placeholder="PIN — 4-6 digits (optional)" inputmode="numeric" pattern="\d{4,6}" maxlength="6" autocomplete="off" data-1p-ignore="true" data-lpignore="true">
-            <select name="Office" required>
+            <select name="Office" required onchange="var d = this.options[this.selectedIndex].dataset.defaultShift; if (d !== undefined) document.getElementById('addUserShift').value = d;">
                 <option value="">Select Office</option>
                 <?php foreach ($offices_data as $office): ?>
-                    <option value="<?= htmlspecialchars($office['OfficeName']) ?>"><?= htmlspecialchars($office['OfficeName']) ?></option>
+                    <?php $def = (int) ($office['DefaultShiftID'] ?? 0); $def = isset($activeShifts[$def]) ? $def : ''; ?>
+                    <option value="<?= htmlspecialchars($office['OfficeName']) ?>" data-default-shift="<?= $def ?>"><?= htmlspecialchars($office['OfficeName']) ?></option>
                 <?php endforeach; ?>
             </select>
-            <select name="ShiftID">
+            <select name="ShiftID" id="addUserShift" aria-label="Shift">
                 <option value="">No shift</option>
                 <?php foreach ($activeShifts as $s): ?>
                     <option value="<?= (int) $s['ID'] ?>"><?= htmlspecialchars($s['Name'] . ' — ' . shiftTimeRange($s)) ?></option>

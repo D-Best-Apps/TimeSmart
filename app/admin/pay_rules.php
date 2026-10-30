@@ -20,6 +20,21 @@ $weekdays = [1 => 'Monday', 2 => 'Tuesday', 3 => 'Wednesday', 4 => 'Thursday', 5
 $increments = [0 => 'Off (exact minute)', 5 => '5 minutes', 6 => '6 minutes (1/10 hour)', 10 => '10 minutes', 15 => '15 minutes (1/4 hour)'];
 $message = '';
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'reopen') {
+    require_csrf('pay_rules.php');
+    // Move the payroll lock back to a chosen day, or clear it
+    $back = trim((string) ($_POST['ReopenThrough'] ?? ''));
+    $d = DateTime::createFromFormat('Y-m-d', $back);
+    $current = payrollLockedThrough($conn);
+    if ($back === '') {
+        setPayrollLockedThrough($conn, null);
+    } elseif ($d && $d->format('Y-m-d') === $back && $current !== null && $back < $current) {
+        setPayrollLockedThrough($conn, $back);
+    }
+    header('Location: pay_rules.php?reopened=1');
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_csrf('pay_rules.php');
 
@@ -76,6 +91,9 @@ $form = $_SERVER['REQUEST_METHOD'] === 'POST' ? [
     'roundIncrement' => (int) ($_POST['DefaultRoundIncrement'] ?? 0),
     'roundMode'      => $_POST['DefaultRoundMode'] ?? 'nearest',
 ] : $policy;
+if (isset($_GET['reopened'])) {
+    $message = '<div class="alert alert-success">Payroll lock updated.</div>';
+}
 if (isset($_GET['saved'])) {
     $message = '<div class="alert alert-success">Pay rules saved. They apply to punches from now on; use <a href="shifts.php">Shifts &rsaquo; Recalculate</a> to re-apply them to past days.</div>';
 }
@@ -151,6 +169,27 @@ require_once 'header.php';
     <div class="buttons">
         <button type="submit" class="btn primary">Save Pay Rules</button>
     </div>
+</form>
+
+<?php $lockedThrough = payrollLockedThrough($conn); ?>
+<form method="POST" class="settings-form" style="margin-top:2rem;">
+    <?= csrf_field() ?>
+    <input type="hidden" name="action" value="reopen">
+    <h2>Closed Payroll</h2>
+    <?php if ($lockedThrough === null): ?>
+        <p>No payroll has been closed yet. Close a pay period from the <a href="payroll_totals.php">Payroll Totals</a> report once it's been paid.</p>
+    <?php else: ?>
+        <p>Payroll is closed through <strong><?= htmlspecialchars(date('l, m/d/Y', strtotime($lockedThrough))) ?></strong>.
+           Punches up to that day can't be edited, approved or recalculated.</p>
+        <div class="field">
+            <label for="ReopenThrough">To correct a closed day, move the lock back to</label>
+            <input type="date" id="ReopenThrough" name="ReopenThrough" max="<?= htmlspecialchars((new DateTime($lockedThrough))->modify('-1 day')->format('Y-m-d')) ?>" style="max-width:12rem;">
+            <p>Leave blank to remove the lock entirely. Changing paid hours after payroll was run means correcting them in payroll too.</p>
+        </div>
+        <div class="buttons">
+            <button type="submit" class="btn secondary" onclick="return confirm('Reopen closed payroll days for editing?')">Reopen</button>
+        </div>
+    <?php endif; ?>
 </form>
 
 <?php require_once 'footer.php'; ?>

@@ -252,6 +252,7 @@ if (!empty($_POST['mode']) && $_POST['mode'] === 'kiosk_status' && !empty($_POST
     $punch->bind_param("i", $empID);
     $punch->execute();
     $punch->store_result();
+    $punch->bind_result($timeIn, $lunchStart, $lunchEnd, $timeOut);
     $status = 'Out';
     $action = 'clockin';
     $actionText = 'Clock In';
@@ -274,12 +275,20 @@ if (!empty($_POST['mode']) && $_POST['mode'] === 'kiosk_status' && !empty($_POST
 
     $punch->close();
 
+    // Auto-lunch shift: lunch is taken out automatically, so the next action is clock-out
+    $autoLunch = shiftSkipsLunchPunch($conn, (int) $empID);
+    if ($autoLunch && $action === 'lunchstart') {
+        $action = 'clockout';
+        $actionText = 'Clock Out';
+    }
+
     echo json_encode([
         'success' => true,
         'firstName' => $firstName,
         'status' => $status,
         'action' => $action,
-        'actionText' => $actionText
+        'actionText' => $actionText,
+        'autoLunch' => $autoLunch
     ]);
     exit;
 }
@@ -316,7 +325,8 @@ if (!empty($_POST['mode']) && $_POST['mode'] === 'kiosk' && !empty($_POST['TagID
         $punch->fetch();
 
         if (empty($lunchStart)) {
-            $status = 'lunchstart';
+            // Auto-lunch shift: no lunch punches, the second scan clocks out
+            $status = shiftSkipsLunchPunch($conn, (int) $empID) ? 'clockout' : 'lunchstart';
         } elseif (empty($lunchEnd)) {
             $status = 'lunchend';
         } else {
@@ -689,6 +699,9 @@ switch ($action) {
         break;
 
     case "lunchstart":
+        if (shiftSkipsLunchPunch($conn, (int) $empID)) {
+            send_json_response(false, "🍽️ Lunch is taken out automatically on your shift — no need to punch it. Just clock out at the end of the day.", 400);
+        }
         if ($userStatus !== 'In') { send_json_response(false, "⚠️ You must be clocked in to start lunch.", 400); }
         if (!$lastPunch || !empty($lastPunch['LunchStart'])) { send_json_response(false, "⚠️ No active punch, or lunch already started.", 400); }
         

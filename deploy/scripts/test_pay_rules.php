@@ -156,5 +156,14 @@ payRuleSetting('OvertimeWeeklyHours', '40', '38');
 $ot = weeklyOvertime($week);
 check('weekly threshold setting', 6.0, $ot['totalOT']);
 
+echo "Pay periods\n";
+payRuleSetting('PayWeekStartDay', '3', '1'); // Monday weeks
+$bi = ['periodType' => 'biweekly', 'periodAnchor' => '2026-11-02'];
+check('bi-weekly, anchor day', ['2026-11-02', '2026-11-15'], payPeriodRange('2026-11-02', $bi));
+check('bi-weekly, last day', ['2026-11-02', '2026-11-15'], payPeriodRange('2026-11-15', $bi));
+check('bi-weekly, next period', ['2026-11-16', '2026-11-29'], payPeriodRange('2026-11-16', $bi));
+check('bi-weekly, before anchor', ['2026-10-19', '2026-11-01'], payPeriodRange('2026-10-25', $bi));
+check('weekly follows work week', ['2026-11-02', '2026-11-08'], payPeriodRange('2026-11-05', ['periodType' => 'weekly', 'periodAnchor' => null]));
+
 echo "\n{$count} checks, {$failures} failed\n";
 exit($failures ? 1 : 0);

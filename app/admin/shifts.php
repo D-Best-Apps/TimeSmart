@@ -377,7 +377,8 @@ $sel = fn($a, $b) => (string) $a === (string) $b ? 'selected' : '';
 
     <h2 style="margin-top:2rem;">Recalculate past days</h2>
     <p class="muted">Re-apply the current shift and pay rules to punches already recorded — for example after changing a shift
-        mid-week. Preview first; applying is logged in each employee's change history.</p>
+        mid-week. Preview first; applying is logged in each employee's change history.
+        <?php if ($lk = payrollLockedThrough($conn)): ?>Days in closed payroll (through <?= htmlspecialchars(date('m/d/Y', strtotime($lk))) ?>) are skipped.<?php endif; ?></p>
     <?php
         $rFrom = $recalc['from'] ?? payPeriodStart(date('Y-m-d'));
         $rTo   = $recalc['to'] ?? date('Y-m-d');

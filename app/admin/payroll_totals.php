@@ -18,7 +18,26 @@ require_once __DIR__ . '/../functions/hours.php';
 require_once __DIR__ . '/../functions/pay_rules.php';
 require_once __DIR__ . '/../functions/time_off_hours.php';
 
+require_once __DIR__ . '/../functions/csrf.php';
+
 date_default_timezone_set('America/Chicago');
+
+// "Close payroll": lock every punch dated on/before the period end (super admins)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'close') {
+    require_csrf('payroll_totals.php');
+    requirePermission('manage_pay_rules', 'payroll_totals.php');
+    $through = (string) ($_POST['through'] ?? '');
+    $d = DateTime::createFromFormat('Y-m-d', $through);
+    // Only finished days: today's punches are still coming in, and live clock-outs are never blocked
+    if ($d && $d->format('Y-m-d') === $through && $through < date('Y-m-d')) {
+        $current = payrollLockedThrough($conn);
+        if ($current === null || $through > $current) {
+            setPayrollLockedThrough($conn, $through);
+        }
+    }
+    header('Location: payroll_totals.php?' . http_build_query(['period' => 'custom', 'start' => $_POST['start'] ?? '', 'end' => $through, 'closed' => 1]));
+    exit;
+}
 
 $policy = payPolicy($conn);
 $okDate = fn($d) => is_string($d) && ($x = DateTime::createFromFormat('Y-m-d', $d)) && $x->format('Y-m-d') === $d;
@@ -143,6 +162,10 @@ if ($format === 'xlsx') {
     exit;
 }
 
+$lockedThrough = payrollLockedThrough($conn);
+$isClosed  = $lockedThrough !== null && $end <= $lockedThrough;
+$canClose  = checkPermission('manage_pay_rules') && !$isClosed && $end < date('Y-m-d');
+
 $qs = fn(array $extra) => htmlspecialchars('payroll_totals.php?' . http_build_query(['period' => 'custom', 'start' => $start, 'end' => $end] + $extra));
 
 $pageTitle = "Payroll Totals";
@@ -184,6 +207,13 @@ require_once 'header.php';
         </span>
         <button type="submit" class="btn primary">Show</button>
     </form>
+
+    <?php if (isset($_GET['closed']) && $isClosed): ?>
+        <div class="alert alert-success">Payroll closed through <?= htmlspecialchars(date('m/d/Y', strtotime($lockedThrough))) ?>. Punches up to that date can no longer be edited, approved or recalculated.</div>
+    <?php endif; ?>
+    <?php if ($isClosed): ?>
+        <div class="pt-warn" style="background:#eef3f6; border-color:#d5e0e8; color:inherit;">🔒 This period is closed (payroll closed through <?= htmlspecialchars(date('m/d/Y', strtotime($lockedThrough))) ?>). These totals won't change.</div>
+    <?php endif; ?>
 
     <?php if (!$alignedStart || !$alignedEnd): ?>
         <div class="pt-warn">These dates cut through a work week (weeks run <?= htmlspecialchars(workWeekLabel()) ?>). Overtime only counts hours inside the dates shown, so it may be understated.</div>
@@ -229,6 +259,17 @@ require_once 'header.php';
         Decimal hours. Overtime is hours over <?= overtimeWeeklyHours() ?> per <?= htmlspecialchars(workWeekLabel()) ?> week.
         Worked hours are paid hours after shift rounding and lunch rules. PTO and sick are approved time off and don't count toward overtime.
     </p>
+    <?php if ($canClose): ?>
+    <form method="POST" style="margin-top:1rem;"
+          onsubmit="return confirm(<?= htmlspecialchars(json_encode(($unresolved ? array_sum($unresolved) . ' punch(es) are still unfinished and will be left at 0 hours. ' : '') . 'Close payroll through ' . date('m/d/Y', strtotime($end)) . '? Punches up to that date will be locked.'), ENT_QUOTES) ?>)">
+        <?= csrf_field() ?>
+        <input type="hidden" name="action" value="close">
+        <input type="hidden" name="start" value="<?= htmlspecialchars($start) ?>">
+        <input type="hidden" name="through" value="<?= htmlspecialchars($end) ?>">
+        <button type="submit" class="btn primary">🔒 Close payroll through <?= htmlspecialchars(date('m/d/Y', strtotime($end))) ?></button>
+        <span style="color:var(--muted-text); font-size:.85rem; margin-left:.5rem;">After you've entered these totals in payroll. Locks the hours so they can't change afterwards.</span>
+    </form>
+    <?php endif; ?>
     <?php endif; ?>
 </div>
 

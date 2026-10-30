@@ -348,6 +348,7 @@ Stored in `settings` table:
 | `OvertimeDailyHours` | decimal | Daily overtime threshold, 0 = off. Engine support only — not on the Pay Rules page yet | 0 |
 | `DefaultRoundIncrement` | int | Round every punch of employees **without** a shift to this many minutes, 0 = off | 0 |
 | `DefaultRoundMode` | `nearest` / `up` / `down` | Direction for `DefaultRoundIncrement` | nearest |
+| `PayrollLockedThrough` | date | Punches dated on/before this day can't be edited, approved or recalculated. Set by **Close payroll** on Payroll Totals; moved back or cleared on Pay Rules | empty |
 
 The pay-rule settings are edited on **Settings → Pay Rules** (super admins only).
 
@@ -367,6 +368,12 @@ punched). See [SHIFT_ROUNDING_PLAN.md](SHIFT_ROUNDING_PLAN.md) for the design.
 - Per punch, an admin can tick **Worked through lunch** (`LunchWaived`) or **Pay outside shift**
   (`OutsideApproved`) on the timesheet.
 - With no shift and `DefaultRoundIncrement` = 0, paid hours equal actual hours, exactly as before.
+- On a shift whose lunch mode is **Take lunch out automatically**, the kiosk and the employee
+  dashboard offer only Clock In / Clock Out, and the second badge scan clocks out.
+- Each office can have a default shift (`Offices.DefaultShiftID`, set on the Offices page). It
+  pre-selects the shift when adding an employee to that office; existing employees are unchanged.
+- **Reports → Rounding Audit** compares actual and paid time per employee (auto-deducted lunch
+  shown separately), to show the rounding policy is neutral over time.
 
 Test the engine without a database: `php deploy/scripts/test_pay_rules.php`.
 

@@ -130,6 +130,14 @@ unset($_SESSION['punch_save_notice']);
     $emptyColspan = $dataCols + 1; // + total column (read-only); edit adds reason+action below
 ?>
 
+<?php $lockedThrough = payrollLockedThrough($conn); ?>
+<?php if ($editMode && $lockedThrough !== null && date('Y-m-d', strtotime($from)) <= $lockedThrough): ?>
+    <div class="alert" style="margin-bottom:1rem; background:#eef3f6; padding:10px; border-radius:5px;">
+        🔒 Payroll is closed through <strong><?= htmlspecialchars(date('m/d/Y', strtotime($lockedThrough))) ?></strong>, so those days can't be edited.
+        A super admin can reopen it on <a href="pay_rules.php">Settings › Pay Rules</a>.
+    </div>
+<?php endif; ?>
+
 <!-- Timesheet card -->
 <div class="vp-card">
     <div class="vp-card-header">
@@ -231,20 +239,22 @@ unset($_SESSION['punch_save_notice']);
                             if ($punch['RawHours'] !== null && $punch['TotalHours'] !== null && abs((float) $punch['RawHours'] - (float) $punch['TotalHours']) >= 0.005) {
                                 $rowNotes[] = 'Actual ' . number_format((float) $punch['RawHours'], 2);
                             }
+                            // Closed payroll: shown read-only (save_punches.php rejects changes anyway)
+                            $rowLocked = $editMode && isPayrollLocked($conn, $date);
                 ?>
                 <tr>
                     <td><?= $day->format('m/d/Y') ?></td>
 
-                    <td><?php if ($editMode): ?><input type="time" name="clockin[<?= $punch['id'] ?>]" value="<?= $clockIn ?>" step="60"><?php else: ?><?= $disp($clockIn) ?><?php endif; ?><?= $paidNote($clockIn, $punch['PaidIn'] ?? null) ?></td>
+                    <td><?php if ($editMode): ?><input type="time" name="clockin[<?= $punch['id'] ?>]" value="<?= $clockIn ?>" step="60"<?= $rowLocked ? ' readonly' : '' ?>><?php else: ?><?= $disp($clockIn) ?><?php endif; ?><?= $paidNote($clockIn, $punch['PaidIn'] ?? null) ?></td>
                     <?php if ($showLocations): ?><td><?= $locCell($punch['LatitudeIN'] ?? null, $punch['LongitudeIN'] ?? null) ?></td><?php endif; ?>
 
-                    <td><?php if ($editMode): ?><input type="time" name="lunchout[<?= $punch['id'] ?>]" value="<?= $lunchOut ?>" step="60"><?php else: ?><?= $disp($lunchOut) ?><?php endif; ?></td>
+                    <td><?php if ($editMode): ?><input type="time" name="lunchout[<?= $punch['id'] ?>]" value="<?= $lunchOut ?>" step="60"<?= $rowLocked ? ' readonly' : '' ?>><?php else: ?><?= $disp($lunchOut) ?><?php endif; ?></td>
                     <?php if ($showLocations): ?><td><?= $locCell($punch['LatitudeLunchStart'] ?? null, $punch['LongitudeLunchStart'] ?? null) ?></td><?php endif; ?>
 
-                    <td><?php if ($editMode): ?><input type="time" name="lunchin[<?= $punch['id'] ?>]" value="<?= $lunchIn ?>" step="60"><?php else: ?><?= $disp($lunchIn) ?><?php endif; ?></td>
+                    <td><?php if ($editMode): ?><input type="time" name="lunchin[<?= $punch['id'] ?>]" value="<?= $lunchIn ?>" step="60"<?= $rowLocked ? ' readonly' : '' ?>><?php else: ?><?= $disp($lunchIn) ?><?php endif; ?></td>
                     <?php if ($showLocations): ?><td><?= $locCell($punch['LatitudeLunchEnd'] ?? null, $punch['LongitudeLunchEnd'] ?? null) ?></td><?php endif; ?>
 
-                    <td><?php if ($editMode): ?><input type="time" name="clockout[<?= $punch['id'] ?>]" value="<?= $clockOut ?>" step="60"><?php else: ?><?= $disp($clockOut) ?><?php endif; ?><?= $paidNote($clockOut, $punch['PaidOut'] ?? null) ?></td>
+                    <td><?php if ($editMode): ?><input type="time" name="clockout[<?= $punch['id'] ?>]" value="<?= $clockOut ?>" step="60"<?= $rowLocked ? ' readonly' : '' ?>><?php else: ?><?= $disp($clockOut) ?><?php endif; ?><?= $paidNote($clockOut, $punch['PaidOut'] ?? null) ?></td>
                     <?php if ($showLocations): ?><td><?= $locCell($punch['LatitudeOut'] ?? null, $punch['LongitudeOut'] ?? null) ?></td><?php endif; ?>
 
                     <td>
@@ -252,7 +262,13 @@ unset($_SESSION['punch_save_notice']);
                         <?php if ($rowNotes): ?><div class="vp-paid"><?= implode('<br>', array_map('htmlspecialchars', $rowNotes)) ?></div><?php endif; ?>
                     </td>
 
-                    <?php if ($editMode): ?>
+                    <?php if ($editMode && $rowLocked): ?>
+                    <td class="vp-paid">🔒 Payroll closed
+                        <input type="hidden" name="lunchwaived[<?= $punch['id'] ?>]" value="<?= (int) $punch['LunchWaived'] ?>">
+                        <input type="hidden" name="outsideapproved[<?= $punch['id'] ?>]" value="<?= (int) $punch['OutsideApproved'] ?>">
+                    </td>
+                    <td></td>
+                    <?php elseif ($editMode): ?>
                     <td>
                         <select name="reason[<?= $punch['id'] ?>]" class="reason-dropdown">
                             <option value="">Select reason...</option>

@@ -62,6 +62,12 @@ if ($statsResult && $statsRow = $statsResult->fetch_assoc()) {
             </div>
 
             <div class="report-card">
+                <h3>Rounding Audit</h3>
+                <p>Actual vs paid time per employee, to show shift rounding is fair over time. Auto-deducted lunch is shown separately.</p>
+                <a href="rounding_audit.php">Open Rounding Audit</a>
+            </div>
+
+            <div class="report-card">
                 <h3>Summary Report</h3>
                 <p>View total hours, regular, and overtime hours across all employees or individually.</p>
                 <a href="summary.php">Open Summary</a>
