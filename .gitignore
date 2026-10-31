@@ -38,5 +38,8 @@ backups/
 !deploy/database/*.sql
 !deploy/database/migrations/*.sql
 
+# Portable Windows dev environment (deploy/dev/setup.ps1)
+.devenv/
+
 # Runtime artifacts
 app/supervisord.pid

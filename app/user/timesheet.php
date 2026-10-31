@@ -61,6 +61,10 @@ function tsPaidNote(?string $raw, ?string $paid): string {
     if (!$raw || !$paid || substr($raw, 0, 5) === substr($paid, 0, 5)) return '';
     return '<div style="font-size:0.78em; color:#666;">Paid ' . date('g:i a', strtotime($paid)) . '</div>';
 }
+/** 'H:i' for a time input; '' when the punch has no such time (e.g. no lunch punched). */
+function tsInputTime(?string $t): string {
+    return $t ? date('H:i', strtotime($t)) : '';
+}
 function tsFmtRange(string $s, string $e): string {
     if ($s === $e) return date('m/d/Y', strtotime($s));
     return date('m/d/Y', strtotime($s)) . ' &ndash; ' . date('m/d/Y', strtotime($e));
@@ -145,10 +149,10 @@ function tsFmtRange(string $s, string $e): string {
                   <?= date('m/d/Y', strtotime($row['Date'])) ?>
                   <input type="hidden" name="entries[<?= $i ?>][Date]" value="<?= $row['Date'] ?>">
                 </td>
-                <td><input type="time" name="entries[<?= $i ?>][TimeIN]" value="<?= date('H:i', strtotime($row['TimeIN'])) ?>" data-original="<?= date('H:i', strtotime($row['TimeIN'])) ?>"><?= tsPaidNote($row['TimeIN'], $row['PaidIn'] ?? null) ?></td>
-                <td><input type="time" name="entries[<?= $i ?>][LunchStart]" value="<?= date('H:i', strtotime($row['LunchStart'])) ?>" data-original="<?= date('H:i', strtotime($row['LunchStart'])) ?>"></td>
-                <td><input type="time" name="entries[<?= $i ?>][LunchEnd]" value="<?= date('H:i', strtotime($row['LunchEnd'])) ?>" data-original="<?= date('H:i', strtotime($row['LunchEnd'])) ?>"></td>
-                <td><input type="time" name="entries[<?= $i ?>][TimeOut]" value="<?= date('H:i', strtotime($row['TimeOut'])) ?>" data-original="<?= date('H:i', strtotime($row['TimeOut'])) ?>"><?= tsPaidNote($row['TimeOut'], $row['PaidOut'] ?? null) ?></td>
+                <td><input type="time" name="entries[<?= $i ?>][TimeIN]" value="<?= tsInputTime($row['TimeIN']) ?>" data-original="<?= tsInputTime($row['TimeIN']) ?>"><?= tsPaidNote($row['TimeIN'], $row['PaidIn'] ?? null) ?></td>
+                <td><input type="time" name="entries[<?= $i ?>][LunchStart]" value="<?= tsInputTime($row['LunchStart']) ?>" data-original="<?= tsInputTime($row['LunchStart']) ?>"></td>
+                <td><input type="time" name="entries[<?= $i ?>][LunchEnd]" value="<?= tsInputTime($row['LunchEnd']) ?>" data-original="<?= tsInputTime($row['LunchEnd']) ?>"></td>
+                <td><input type="time" name="entries[<?= $i ?>][TimeOut]" value="<?= tsInputTime($row['TimeOut']) ?>" data-original="<?= tsInputTime($row['TimeOut']) ?>"><?= tsPaidNote($row['TimeOut'], $row['PaidOut'] ?? null) ?></td>
                 <td style="white-space:nowrap;">
                   <?= $row['TotalHours'] !== null ? tsFmtHours((float) $row['TotalHours']) : '&mdash;' ?>
                   <?php
@@ -156,7 +160,7 @@ function tsFmtRange(string $s, string $e): string {
                     if ((int) ($row['LunchDeductMin'] ?? 0) > $punchedLunch):
                   ?><div style="font-size:0.78em; color:#666;">Lunch &minus;<?= (int) $row['LunchDeductMin'] ?> min</div><?php endif; ?>
                 </td>
-                <td><input type="text" name="entries[<?= $i ?>][Note]" value="<?= htmlspecialchars($row['Note']) ?>"></td>
+                <td><input type="text" name="entries[<?= $i ?>][Note]" value="<?= htmlspecialchars($row['Note'] ?? '') ?>"></td>
                 <td><input type="text" name="entries[<?= $i ?>][Reason]" placeholder="Only required if edited" class="reason-field"></td>
               </tr>
             <?php endforeach; ?>

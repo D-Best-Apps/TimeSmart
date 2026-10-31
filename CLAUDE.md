@@ -40,6 +40,9 @@ docker restart <container_name>
 docker exec <container_name> supervisorctl restart all
 ```
 
+**Local demo on Windows (no Docker):** `deploy\dev\setup.ps1` then `deploy\dev\start.ps1` runs a portable
+PHP + MariaDB copy with demo data; `deploy\dev\uninstall.ps1` removes it. See [docs/DEMO.md](docs/DEMO.md).
+
 **Development Workflow:**
 1. Edit files in `app/` directory on host
 2. Changes appear immediately in browser (no rebuild needed!)

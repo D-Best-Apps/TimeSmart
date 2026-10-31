@@ -16,7 +16,8 @@ error_reporting(E_ALL);
 session_set_cookie_params([
     'lifetime' => 0,
     'path'     => '/',
-    'secure'   => true,
+    // HTTPS-only, except the local dev server (deploy/dev) which serves plain http
+    'secure'   => ($_ENV['SESSION_COOKIE_SECURE'] ?? '1') !== '0',
     'httponly' => true,
     'samesite' => 'Strict',
 ]);

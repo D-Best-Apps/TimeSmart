@@ -19,5 +19,11 @@ if ($conn->connect_error) {
 
 // Configure connection
 $conn->set_charset('utf8mb4');
-$conn->query("SET time_zone = '{$tz}'");
+// Named zones need the server's time zone tables (often not loaded, e.g. MariaDB on
+// Windows); fall back to the zone's current UTC offset, which PHP knows.
+try {
+    $conn->query("SET time_zone = '{$tz}'");
+} catch (mysqli_sql_exception $e) {
+    $conn->query("SET time_zone = '" . date('P') . "'");
+}
 ?>

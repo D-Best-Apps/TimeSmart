@@ -141,15 +141,22 @@ if [ "$MYSQL_AVAILABLE" = true ]; then
         echo -e "${YELLOW}📦 Creating database...${NC}"
         
         # Replace database name in schema
-        sed "s/DB_NAME_PLACEHOLDER/$DB_NAME/g" deploy/database/schema.sql > /tmp/timeclock-schema-temp.sql
-        
+        sed "s/DB_NAME_PLACEHOLDER/$DB_NAME/g" deploy/database/timeclock-schema.sql > /tmp/timeclock-schema-temp.sql
+
+        # The schema already includes every migration: record them as applied, or the
+        # first update.sh would replay them all against the current schema and fail.
+        echo "USE \`$DB_NAME\`;" >> /tmp/timeclock-schema-temp.sql
+        for f in deploy/database/migrations/*.sql; do
+            echo "INSERT IGNORE INTO schema_migrations (filename) VALUES ('$(basename "$f")');" >> /tmp/timeclock-schema-temp.sql
+        done
+
         # Create database
         if mysql -h "$db_host" -u "$db_user" -p"$db_pass" < /tmp/timeclock-schema-temp.sql 2>/dev/null; then
             rm /tmp/timeclock-schema-temp.sql
             echo -e "${GREEN}✓ Database created and initialized${NC}"
         else
             echo -e "${RED}✗ Failed to create database${NC}"
-            echo "You can create it manually later using: deploy/database/schema.sql"
+            echo "You can create it manually later using: deploy/database/timeclock-schema.sql"
         fi
     else
         echo -e "${YELLOW}⚠ Skipping database creation${NC}"
@@ -157,7 +164,7 @@ if [ "$MYSQL_AVAILABLE" = true ]; then
     fi
 else
     echo -e "\n${YELLOW}⚠ MySQL client not available - skipping database creation${NC}"
-    echo "Please create database '$DB_NAME' manually using: deploy/database/schema.sql"
+    echo "Please create database '$DB_NAME' manually using: deploy/database/timeclock-schema.sql"
 fi
 
 # ========================
