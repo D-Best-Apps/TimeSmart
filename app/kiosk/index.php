@@ -4,13 +4,15 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Kiosk">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <title>Kiosk TimeSmart</title>
   <link rel="stylesheet" href="kiosk.css?v=2" />
-  <link rel="icon" type="image/png" href="/images/D-Best.png">
-    <link rel="apple-touch-icon" href="/images/D-Best.png">
-  <link rel="icon" type="image/png" href="../images/D-Best-favicon.png">
-    <link rel="apple-touch-icon" href="../images/D-Best-favicon.png">
-    <link rel="manifest" href="/manifest.json">
+  <link rel="icon" type="image/png" href="../images/D-Best.png">
+  <link rel="apple-touch-icon" href="../images/D-Best.png">
+  <!-- The kiosk's own manifest so "Add to Home Screen" opens /kiosk/, not the site's /index.php -->
+  <link rel="manifest" href="manifest.json">
 </head>
 <body>
   <div class="container">

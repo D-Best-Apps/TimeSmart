@@ -1,0 +1,19 @@
+{
+  "name": "TimeSmart Kiosk",
+  "short_name": "Kiosk",
+  "description": "Badge scan or PIN clock-in station",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#2e2e2e",
+  "theme_color": "#2e2e2e",
+  "icons": [
+    {
+      "src": "../images/D-Best.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
