@@ -2,6 +2,8 @@
 // Router for PHP's built-in web server (deploy/dev/start.ps1), mirroring the
 // production nginx rules in deploy/docker/nginx.conf:
 //   - /scripts/ is never served (CLI-only cron scripts)
+//   - a directory without its trailing slash redirects to it (/kiosk -> /kiosk/), so
+//     the page's relative links (kiosk.css, kiosk.js) resolve inside the directory
 //   - extensionless URLs fall back to the .php file (try_files $uri.php)
 $path = rawurldecode(parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?? '/');
 $root = $_SERVER['DOCUMENT_ROOT'];
@@ -9,6 +11,11 @@ $root = $_SERVER['DOCUMENT_ROOT'];
 if (str_starts_with($path, '/scripts/') || preg_match('#/\.ht#', $path)) {
     http_response_code(403);
     exit('Forbidden');
+}
+if ($path !== '/' && !str_ends_with($path, '/') && is_dir($root . $path)) {
+    $query = parse_url($_SERVER['REQUEST_URI'], PHP_URL_QUERY);
+    header('Location: ' . $path . '/' . ($query !== null ? '?' . $query : ''), true, 301);
+    return true;
 }
 if ($path !== '/' && !file_exists($root . $path) && is_file($root . $path . '.php')) {
     $_SERVER['SCRIPT_NAME'] = $_SERVER['PHP_SELF'] = $path . '.php';
