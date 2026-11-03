@@ -56,11 +56,29 @@ On the kiosk, type a PIN on the keypad and tap ✓, or type a badge number the s
   - 2nd Shift 3:30p–midnight: punched lunch, so the kiosk asks *Start Lunch / Clock Out*
     mid-shift; time past the shift isn't paid unless approved.
   - Office 8:00a–4:30p: no rounding, lunch taken out unless punched.
-- **About three weeks of punches** ending today, with some late arrivals, people staying late,
-  and today's shift still on the clock.
-- **Waiting for an admin:** a missing lunch-end punch for Riley, a timesheet change request
-  from Alex, and a pending PTO request.
+- **About three weeks of punches** ending today, and today's shift still on the clock:
+  - Overtime: Alex and Jordan stay late most days, and Jordan works Saturday mornings.
+  - Late arrivals: Taylor and Riley are often late (Tardies report).
+  - Absences: Sam has an unexcused no-show the week before last.
+- **Waiting on Pending Approvals:**
+  - four timesheet change requests (a wrong clock-in, missed clock-outs, late lunch);
+  - Riley's missing lunch-end punch;
+  - three PTO requests.
+- **Already decided:** approved, denied (with the reason) and withdrawn time off,
+  including a partial day. Also approved and rejected change requests, which employees see
+  on their dashboard.
+- **History:** about ten admin corrections, each with its reason and the paid hours before and
+  after, plus employee notes:
+  - a time fix;
+  - a missed punch added;
+  - a duplicate deleted;
+  - "worked through lunch";
+  - overtime approved past the shift.
+- **Payroll:** the week before last is closed, so those days are read-only. Last week is open for
+  review. Use Payroll Totals to show the QuickBooks numbers and to close it.
 - **Work week Monday–Sunday**, overtime after 40 hours.
+- Date-range reports such as Tardies default to *this month*. Early in a month, pick a range
+  that covers the last few weeks.
 
 The data is made by `deploy/scripts/seed_demo.php`, which refuses to run on a database that
 already has users.
