@@ -87,11 +87,12 @@ $people = [
     ['Jamie',  'Chen',     'employee', 'Plant', '1st',  '100002', '1002', 'Machine Operator'],
     ['Morgan', 'Lee',      'employee', 'Plant', '1st',  '100003', '1003', 'Assembler'],
     ['Taylor', 'Brooks',   'employee', 'Plant', '1st',  '100004', '1004', 'Assembler'],
-    ['Casey',  'Nguyen',   'employee', 'Plant', '1st',  '100005', '1005', 'Quality Tech'],
+    // Casey's and Quinn's badge numbers are the two physical demo badges (what the reader sends)
+    ['Casey',  'Nguyen',   'employee', 'Plant', '1st',  '0024986116', '1005', 'Quality Tech'],
     ['Jordan', 'Patel',    'employee', 'Plant', '1st',  '100006', '1006', 'Forklift Operator'],
     ['Riley',  'Johnson',  'employee', 'Plant', '2nd',  '100007', '1007', 'Machine Operator'],
     ['Avery',  'Kim',      'employee', 'Plant', '2nd',  '100008', '1008', 'Assembler'],
-    ['Quinn',  'Martinez', 'employee', 'Plant', '2nd',  '100009', '1009', 'Maintenance'],
+    ['Quinn',  'Martinez', 'employee', 'Plant', '2nd',  '0022479364', '1009', 'Maintenance'],
     ['Sam',    'Ortiz',    'employee', 'Plant', null,   '100010', '1010', 'Shipping'],
 ];
 $hash = password_hash(DEMO_PASSWORD, PASSWORD_BCRYPT, ['cost' => 10]);

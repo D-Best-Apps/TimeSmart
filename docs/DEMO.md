@@ -39,15 +39,16 @@ Sign in at <http://localhost:8080/user/login.php> with the full name and the pas
 | Jamie Chen | Employee | 1st Shift | 100002 | 1002 |
 | Morgan Lee | Employee | 1st Shift | 100003 | 1003 |
 | Taylor Brooks | Employee | 1st Shift | 100004 | 1004 |
-| Casey Nguyen | Employee | 1st Shift | 100005 | 1005 |
+| Casey Nguyen | Employee | 1st Shift | 0024986116 (demo badge) | 1005 |
 | Jordan Patel | Employee | 1st Shift | 100006 | 1006 |
 | Riley Johnson | Employee | 2nd Shift | 100007 | 1007 |
 | Avery Kim | Employee | 2nd Shift | 100008 | 1008 |
-| Quinn Martinez | Employee | 2nd Shift | 100009 | 1009 |
+| Quinn Martinez | Employee | 2nd Shift | 0022479364 (demo badge) | 1009 |
 | Sam Ortiz | Employee | none | 100010 | 1010 |
 
 On the kiosk, type a PIN on the keypad and tap ✓, or type a badge number the same way
-(a USB/Bluetooth badge reader "types" it the same way).
+(a USB/Bluetooth badge reader "types" it the same way). The two physical demo badges
+are set up as Casey and Quinn.
 
 ## What's in the demo
 
