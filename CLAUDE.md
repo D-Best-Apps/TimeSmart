@@ -9,7 +9,7 @@ D-BEST TimeSmart is a PHP-based employee timekeeping system with three main inte
 - **Employee Portal** (`/user/`) - Clock in/out, timesheet viewing, edit requests
 - **Kiosk Mode** (`/kiosk/`) - iPad station: badge scan or on-screen PIN pad, one scan per punch
 
-**Tech Stack:** PHP 8.3, MySQL/MariaDB, Nginx, Docker, TOTP 2FA
+**Tech Stack:** PHP 8.3, MySQL/MariaDB, Nginx, Docker, email-code 2FA
 
 ## Common Commands
 
@@ -77,8 +77,7 @@ composer update
 # Required packages:
 # - phpoffice/phpspreadsheet (Excel export)
 # - tecnickcom/tcpdf (PDF exports, attendance, badge printing)
-# - spomky-labs/otphp (2FA TOTP)
-# - endroid/qr-code (QR code generation)
+# - phpmailer/phpmailer (email: 2FA codes, time-off notices)
 # - vlucas/phpdotenv (environment variables)
 ```
 

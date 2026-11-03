@@ -19,7 +19,7 @@
   Generate and export attendance data (PDF, Excel, summary reports).
   
 - **Two-Factor Authentication (2FA)**  
-  Built-in support for TOTP 2FA (Google Authenticator, Authy).
+  One-time login codes sent by email, with backup recovery codes.
   
 - **Kiosk Mode**  
   iPad time clock station: scan a badge (with a keyboard-emulating badge/NFC reader) or tap a PIN

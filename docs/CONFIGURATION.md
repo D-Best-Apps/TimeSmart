@@ -465,21 +465,14 @@ if (password_verify($input, $hash)) {
 
 ### Two-Factor Authentication
 
-Using `spomky-labs/otphp`:
+2FA emails a 6-digit login code (`app/functions/email_otp.php`), so it needs outgoing email
+configured. Codes are stored hashed and expire after 10 minutes:
 
 ```php
-use OTPHP\TOTP;
+require_once __DIR__ . '/../functions/email_otp.php';
 
-// Generate secret
-$totp = TOTP::create();
-$secret = $totp->getSecret();
-
-// Generate QR code URL
-$uri = $totp->getProvisioningUri('admin@timesmart.com', 'TimeSmart');
-
-// Verify code
-$totp = TOTP::create($secret);
-$valid = $totp->verify($code, null, 30);  // 30 second window
+sendEmailOtp($conn, $userId, $email, $firstName);   // after the password check
+$valid = verifyEmailOtp($conn, $userId, $code);     // on verify_2fa.php
 ```
 
 ### CSRF Protection
