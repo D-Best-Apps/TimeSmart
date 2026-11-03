@@ -1,7 +1,7 @@
 <?php
 session_start();
 require_once '../auth/db.php';
-require_once './tcpdf/tcpdf.php';
+require_once __DIR__ . '/../vendor/tecnickcom/tcpdf/tcpdf.php'; // Composer package tecnickcom/tcpdf
 require_once __DIR__ . '/../functions/time_off_hours.php';
 
 if (!isset($_SESSION['admin'])) {

@@ -76,6 +76,7 @@ composer update
 
 # Required packages:
 # - phpoffice/phpspreadsheet (Excel export)
+# - tecnickcom/tcpdf (PDF exports, attendance, badge printing)
 # - spomky-labs/otphp (2FA TOTP)
 # - endroid/qr-code (QR code generation)
 # - vlucas/phpdotenv (environment variables)

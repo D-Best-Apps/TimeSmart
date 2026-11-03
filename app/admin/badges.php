@@ -126,7 +126,7 @@ if (isset($_GET['print'])) {
     $ids    = array_values(array_filter(array_map('intval', (array) ($_GET['ids'] ?? []))));
     $orient = (($_GET['orient'] ?? 'h') === 'v') ? 'v' : 'h';          // h = landscape, v = portrait
     $media  = (($_GET['media'] ?? 'sheet') === 'card') ? 'card' : 'sheet'; // sheet = Letter, card = one CR80 page
-    require_once './tcpdf/tcpdf.php';
+    require_once __DIR__ . '/../vendor/tecnickcom/tcpdf/tcpdf.php'; // Composer package tecnickcom/tcpdf
 
     $company = getSettingValue('CompanyName', $conn);
     if ($company === null || $company === '') { $company = 'D-Best TimeSmart'; }

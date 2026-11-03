@@ -5,7 +5,7 @@
  */
 session_start();
 require_once '../auth/db.php';
-require_once __DIR__ . '/tcpdf/tcpdf.php';
+require_once __DIR__ . '/../vendor/tecnickcom/tcpdf/tcpdf.php'; // Composer package tecnickcom/tcpdf
 require_once __DIR__ . '/../functions/check_permission.php';
 
 // Check admin authentication

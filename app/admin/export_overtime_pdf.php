@@ -4,7 +4,7 @@ ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
 require_once '../auth/db.php';
-require_once __DIR__ . '/tcpdf/tcpdf.php';
+require_once __DIR__ . '/../vendor/tecnickcom/tcpdf/tcpdf.php'; // Composer package tecnickcom/tcpdf
 require_once __DIR__ . '/../functions/hours.php';
 require_once __DIR__ . '/../functions/pay_rules.php'; // punchRoundingActive()
 
