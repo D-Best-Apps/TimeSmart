@@ -208,24 +208,35 @@ require_once 'header.php';
                     </tr>
                 </thead>
                 <tbody>
+                    <?php
+                    // A request that changes several times (e.g. lunch start and end) is one
+                    // decision: its rows share one Approve/Reject that covers every change.
+                    $rowsPerRequest = array_count_values(array_column($edits, 'ID'));
+                    $prevID = null;
+                    ?>
                     <?php foreach ($edits as $edit): ?>
+                        <?php $first = $edit['ID'] !== $prevID; $prevID = $edit['ID']; $span = $rowsPerRequest[$edit['ID']]; ?>
                         <tr>
-                            <td><?= htmlspecialchars($edit['FirstName'] . ' ' . $edit['LastName']) ?></td>
-                            <td><?= htmlspecialchars($edit['Date']) ?></td>
+                            <?php if ($first): ?>
+                            <td rowspan="<?= $span ?>"><?= htmlspecialchars($edit['FirstName'] . ' ' . $edit['LastName']) ?></td>
+                            <td rowspan="<?= $span ?>"><?= htmlspecialchars($edit['Date']) ?></td>
+                            <?php endif; ?>
                             <td><strong><?= htmlspecialchars($edit['Field']) ?></strong></td>
                             <td><?= htmlspecialchars($edit['Original']) ?></td>
                             <td style="color:#0078D7;"><strong><?= htmlspecialchars($edit['Requested']) ?></strong></td>
-                            <td><?= htmlspecialchars($edit['Note']) ?: '-' ?></td>
-                            <td class="note-box"><?= htmlspecialchars($edit['Reason']) ?></td>
+                            <?php if ($first): ?>
+                            <td rowspan="<?= $span ?>"><?= htmlspecialchars($edit['Note']) ?: '-' ?></td>
+                            <td rowspan="<?= $span ?>" class="note-box"><?= htmlspecialchars($edit['Reason']) ?></td>
                             <?php if ($canViewPrivate): ?>
-                            <td>
+                            <td rowspan="<?= $span ?>">
                                 <textarea name="private_note[<?= (int) $edit['ID'] ?>]" maxlength="2000" rows="2" placeholder="Admin-only — not shown to employee" style="width:160px; padding:4px;"><?= htmlspecialchars($edit['AdminPrivateNote']) ?></textarea>
                             </td>
                             <?php endif; ?>
-                            <td class="action-buttons">
-                                <button type="submit" class="approve-btn" name="action[<?= $edit['ID'] ?>][<?= $edit['Field'] ?>]" value="approve">Approve</button>
-                                <button type="submit" class="reject-btn" name="action[<?= $edit['ID'] ?>][<?= $edit['Field'] ?>]" value="reject">Reject</button>
+                            <td rowspan="<?= $span ?>" class="action-buttons">
+                                <button type="submit" class="approve-btn" name="action[<?= (int) $edit['ID'] ?>][__request]" value="approve"><?= $span > 1 ? "Approve all {$span}" : 'Approve' ?></button>
+                                <button type="submit" class="reject-btn" name="action[<?= (int) $edit['ID'] ?>][__request]" value="reject">Reject</button>
                             </td>
+                            <?php endif; ?>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>

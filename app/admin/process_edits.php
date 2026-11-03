@@ -71,6 +71,87 @@ function resolveIncompleteLunch(mysqli $conn, array $edit, string $lunchEnd, str
     $conn->commit();
     return null;
 }
+// The time fields an employee request can change: pending_edits' column names, which
+// are also what edits_timesheet.php posts ('TimeOut', not 'TimeOUT': that spelling
+// never matched, so approved clock-outs used to be dropped).
+const REQUEST_FIELDS = ['TimeIN', 'LunchStart', 'LunchEnd', 'TimeOut'];
+
+/**
+ * The fields of a request that actually change the punch, compared at minute
+ * precision the way edits_timesheet.php lists them.
+ */
+function requestedFieldChanges(mysqli $conn, array $edit): array {
+    $stmt = $conn->prepare("SELECT TimeIN, LunchStart, LunchEnd, TimeOut FROM timepunches WHERE EmployeeID = ? AND Date = ? ORDER BY TimeIN LIMIT 1");
+    $stmt->bind_param("is", $edit['EmployeeID'], $edit['Date']);
+    $stmt->execute();
+    $punch = $stmt->get_result()->fetch_assoc() ?: [];
+    $stmt->close();
+
+    $fields = [];
+    foreach (REQUEST_FIELDS as $field) {
+        if ($edit[$field] === null || $edit[$field] === '') continue;
+        $orig = !empty($punch[$field]) ? date('H:i', strtotime($punch[$field])) : '';
+        if (date('H:i', strtotime($edit[$field])) !== $orig) {
+            $fields[] = $field;
+        }
+    }
+    return $fields;
+}
+
+/**
+ * Write a request's approved fields to the employee's punch for that day, recompute
+ * paid hours once, and log it like a direct edit on the punch editor
+ * (save_punches.php): each field's old and new value, then the paid hours if they moved.
+ */
+function applyApprovedFields(mysqli $conn, array $edit, array $fields, string $admin): void {
+    if (!$fields) return;
+    $employeeID = (int) $edit['EmployeeID'];
+    $date = $edit['Date'];
+    $why = 'Approved employee request: ' . $edit['Reason'];
+    $dayHours = function () use ($conn, $employeeID, $date) {
+        $q = $conn->prepare("SELECT SUM(TotalHours) FROM timepunches WHERE EmployeeID = ? AND Date = ?");
+        $q->bind_param("is", $employeeID, $date);
+        $q->execute();
+        $v = $q->get_result()->fetch_column();
+        $q->close();
+        return $v;
+    };
+    $log = $conn->prepare("INSERT INTO punch_changelog (EmployeeID, Date, ChangedBy, FieldChanged, OldValue, NewValue, Reason) VALUES (?, ?, ?, ?, ?, ?, ?)");
+
+    $hoursBefore = $dayHours();
+    foreach ($fields as $field) {
+        $requested = $edit[$field];
+        $before = $conn->prepare("SELECT `$field` FROM timepunches WHERE EmployeeID = ? AND Date = ? ORDER BY TimeIN LIMIT 1");
+        $before->bind_param("is", $employeeID, $date);
+        $before->execute();
+        $old = $before->get_result()->fetch_column();
+        $old = $old === false ? null : $old;
+        $before->close();
+
+        $update = $conn->prepare("UPDATE timepunches SET `$field` = ? WHERE EmployeeID = ? AND Date = ?");
+        $update->bind_param("sis", $requested, $employeeID, $date);
+        $update->execute();
+        $update->close();
+
+        $log->bind_param("issssss", $employeeID, $date, $admin, $field, $old, $requested, $why);
+        $log->execute();
+    }
+
+    // Recompute stored hours from the (now updated) times so the
+    // canonical column never goes stale after an approved time edit.
+    if ($fields !== ['Note']) {
+        recomputeDayHours($conn, $employeeID, $date);
+        $hoursAfter = $dayHours();
+        if ((string) $hoursBefore !== (string) $hoursAfter) {
+            $hoursField = 'TotalHours';
+            $recomputed = 'Recomputed after edit';
+            $log->bind_param("issssss", $employeeID, $date, $admin, $hoursField, $hoursBefore, $hoursAfter, $recomputed);
+            $log->execute();
+        }
+    }
+    $log->close();
+}
+
 $now = date('Y-m-d H:i:s');
 $canViewPrivate = canViewPrivateNotes($conn);
 
@@ -107,26 +188,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 exit;
             }
 
+            // An employee request is decided once (a double-submit or stale page is a no-op)
+            if ($edit['Source'] === 'employee' && $edit['Status'] !== 'Pending') continue;
+
             if ($decision === 'Approved') {
-                // Update timepunches table
-                $employeeID = $edit['EmployeeID'];
-                $date = $edit['Date'];
-
-                // Sanitize column name
-                $allowedFields = ['TimeIN', 'LunchStart', 'LunchEnd', 'TimeOUT', 'Note'];
-                if (in_array($field, $allowedFields)) {
-                    $requested = $edit[$field];
-                    $sql = "UPDATE timepunches SET `$field` = ? WHERE EmployeeID = ? AND Date = ?";
-                    $update = $conn->prepare($sql);
-                    $update->bind_param("sis", $requested, $employeeID, $date);
-                    $update->execute();
-
-                    // Recompute stored hours from the (now updated) times so the
-                    // canonical column never goes stale after an approved time edit.
-                    if ($field !== 'Note') {
-                        recomputeDayHours($conn, (int) $employeeID, $date);
-                    }
+                // '__request' approves every time the request changes (the page shows one
+                // Approve per request); a single field name still works for one field.
+                if ($field === '__request') {
+                    $fields = requestedFieldChanges($conn, $edit);
+                } elseif (in_array($field, REQUEST_FIELDS, true) || $field === 'Note') {
+                    $fields = [$field];
+                } else {
+                    $fields = [];
                 }
+                $conn->begin_transaction();
+                applyApprovedFields($conn, $edit, $fields, $admin);
+                $conn->commit();
             }
 
             // Update pending_edits status. This marks the entire request as processed.
