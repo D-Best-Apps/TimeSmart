@@ -1,232 +1,256 @@
 #!/bin/bash
 #
 # D-BEST TimeSmart Installation Script
-# Creates a new TimeSmart installation with volume-mounted application files
 #
+# Clones TimeSmart into ./Timeclock-<Company>, writes its .env, creates the
+# database (on this host's MariaDB/MySQL, or one you point it at), builds and
+# starts the container, and creates the first admin or loads demo data.
+#
+#   cd /opt && sudo bash <(curl -s https://raw.githubusercontent.com/D-Best-App/Timesmart/main/deploy/scripts/install.sh)
+#
+# The app container publishes no ports. Put a reverse proxy (Nginx Proxy
+# Manager, Caddy) or a cloudflared container on the timesmart-net network in
+# front of it; logins need HTTPS (secure session cookies).
 
-set -e  # Exit on error
+set -euo pipefail
 
-# Color codes for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
+
+REPO_URL="${TIMESMART_REPO:-https://github.com/D-Best-App/Timesmart.git}"   # override to test a fork/branch
+NETWORK="timesmart-net"
+NETWORK_SUBNET="172.19.0.0/16"   # trusted for real-IP by deploy/docker/nginx.conf
+
+die()  { echo -e "${RED}✗ $*${NC}" >&2; exit 1; }
+ok()   { echo -e "${GREEN}✓ $*${NC}"; }
+warn() { echo -e "${YELLOW}⚠ $*${NC}"; }
+ask()  { local __v; read -r -p "$1" __v; echo "${__v:-$2}"; }
+yes_no() { local a; a=$(ask "$1 (y/n) [${2}]: " "$2"); [ "$a" = "y" ] || [ "$a" = "Y" ]; }
 
 echo -e "${BLUE}"
 echo "╔═══════════════════════════════════════╗"
-echo "║   D-BEST TimeSmart Installation      ║"
-echo "╔═══════════════════════════════════════╗"
+echo "║   D-BEST TimeSmart Installation       ║"
+echo "╚═══════════════════════════════════════╝"
 echo -e "${NC}"
 
 # ========================
-# Prerequisites Check
+# Prerequisites
 # ========================
 echo -e "${YELLOW}Checking prerequisites...${NC}"
+command -v docker >/dev/null || die "Docker is not installed: curl -fsSL https://get.docker.com | sh"
+docker info >/dev/null 2>&1 || die "Docker is not running, or this user can't use it (try sudo)."
+docker compose version >/dev/null 2>&1 || die "The Docker Compose plugin is missing (apt-get install docker-compose-plugin)."
+command -v git >/dev/null || die "Git is not installed: apt-get install git"
 
-if ! command -v docker &> /dev/null; then
-    echo -e "${RED}✗ Error: Docker is not installed.${NC}"
-    echo "Please install Docker first: https://docs.docker.com/engine/install/"
-    exit 1
-fi
-
-if ! docker info > /dev/null 2>&1; then
-    echo -e "${RED}✗ Error: Docker is not running.${NC}"
-    echo "Please start Docker and try again."
-    exit 1
-fi
-
-if ! command -v git &> /dev/null; then
-    echo -e "${RED}✗ Error: Git is not installed.${NC}"
-    echo "Please install git first: sudo apt-get install git"
-    exit 1
-fi
-
-if ! command -v mysql &> /dev/null; then
-    echo -e "${YELLOW}⚠ Warning: MySQL client not found.${NC}"
-    echo "You'll need to create the database manually."
-    MYSQL_AVAILABLE=false
-else
-    MYSQL_AVAILABLE=true
-fi
-
-echo -e "${GREEN}✓ Prerequisites check passed${NC}\n"
-
-# ========================
-# Collect Information
-# ========================
-echo -e "${BLUE}Please provide installation details:${NC}"
-
-# Company name
-read -p "Enter company name (e.g., Acme Corp): " company_name
-if [ -z "$company_name" ]; then
-    echo -e "${RED}✗ Company name cannot be empty${NC}"
-    exit 1
-fi
-
-# Sanitize company name for directory/container name
-SAFE_NAME=$(echo "$company_name" | sed 's/[^a-zA-Z0-9]/-/g')
-INSTALL_DIR="Timeclock-$SAFE_NAME"
-CONTAINER_NAME="Timeclock-$SAFE_NAME"
-
-# Check if directory already exists
-if [ -d "$INSTALL_DIR" ]; then
-    echo -e "${YELLOW}⚠ Warning: Directory $INSTALL_DIR already exists${NC}"
-    read -p "Do you want to continue and overwrite? (y/n): " continue_install
-    if [ "$continue_install" != "y" ]; then
-        echo "Installation cancelled."
-        exit 0
-    fi
-fi
-
-# Database configuration
-echo -e "\n${BLUE}Database Configuration:${NC}"
-read -p "Database host (default: 172.17.0.1): " db_host
-db_host=${db_host:-172.17.0.1}
-
-read -p "Database user (default: timeclock): " db_user
-db_user=${db_user:-timeclock}
-
-read -s -p "Database password: " db_pass
+MYSQL_BIN=""
+for b in mariadb mysql; do command -v "$b" >/dev/null && { MYSQL_BIN="$b"; break; }; done
+ok "Prerequisites check passed"
 echo
 
-if [ -z "$db_pass" ]; then
-    echo -e "${RED}✗ Database password cannot be empty${NC}"
-    exit 1
-fi
+# ========================
+# Install details
+# ========================
+company_name=$(ask "Company name (e.g. Acme Corp): " "")
+[ -n "$company_name" ] || die "Company name cannot be empty"
 
+SAFE_NAME=$(echo "$company_name" | sed 's/[^a-zA-Z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//')
+INSTALL_DIR="$(pwd)/Timeclock-$SAFE_NAME"
+CONTAINER_NAME="Timeclock-$SAFE_NAME"
 DB_NAME="timeclock-$SAFE_NAME"
 
-# Timezone
-read -p "Database timezone (default: America/Chicago): " db_timezone
-db_timezone=${db_timezone:-America/Chicago}
-
-# ========================
-# Clone Repository
-# ========================
-echo -e "\n${YELLOW}📥 Cloning TimeSmart repository...${NC}"
-
-if [ -d "$INSTALL_DIR" ]; then
-    rm -rf "$INSTALL_DIR"
+if [ -e "$INSTALL_DIR" ]; then
+    die "$INSTALL_DIR already exists. Remove it first (deploy/scripts/remove.sh) or pick another name."
+fi
+if docker container inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
+    die "A container named $CONTAINER_NAME already exists."
 fi
 
-git clone https://github.com/D-Best-App/Timesmart.git "$INSTALL_DIR"
+db_timezone=$(ask "Timezone [America/Chicago]: " "America/Chicago")
+[ -f "/usr/share/zoneinfo/$db_timezone" ] || warn "'$db_timezone' is not in /usr/share/zoneinfo here; make sure it is a valid zone name."
+
+echo -e "\n${BLUE}Database${NC}"
+echo "  1) MariaDB/MySQL on this server: create the database and its own user now (needs root)"
+echo "  2) An existing database server: enter its host and a user that can create the database"
+db_mode=$(ask "Choose 1 or 2 [1]: " "1")
+
+DB_USER="timeclock"
+if [ "$db_mode" = "1" ]; then
+    [ -n "$MYSQL_BIN" ] || die "No mariadb/mysql client found. Install the server first: apt-get install mariadb-server"
+    [ "$(id -u)" = "0" ] || die "Option 1 needs root (to reach MariaDB as root and configure it). Re-run with sudo."
+    DB_HOST="host.docker.internal"
+    # One user per install: a shared user would get its password reset by the next install
+    DB_USER=$(echo "tc_$SAFE_NAME" | tr '[:upper:]-' '[:lower:]_' | cut -c1-32)
+    DB_PASS=$(head -c 512 /dev/urandom | tr -dc 'A-Za-z0-9' | cut -c1-28)
+else
+    DB_HOST=$(ask "Database host (as seen from the container) [host.docker.internal]: " "host.docker.internal")
+    DB_USER=$(ask "Database user [timeclock]: " "timeclock")
+    read -r -s -p "Database password: " DB_PASS; echo
+    [ -n "$DB_PASS" ] || die "Database password cannot be empty"
+fi
+case "$DB_PASS" in *"'"*) die "The database password may not contain a single quote (').";; esac
+
+# ========================
+# Clone
+# ========================
+echo -e "\n${YELLOW}📥 Cloning TimeSmart...${NC}"
+git clone -q "$REPO_URL" "$INSTALL_DIR"
 cd "$INSTALL_DIR"
+ok "Cloned into $INSTALL_DIR"
 
-echo -e "${GREEN}✓ Repository cloned${NC}"
-
-# ========================
-# Configure Docker Compose
-# ========================
-echo -e "\n${YELLOW}🐳 Configuring Docker container...${NC}"
-
-# Replace placeholders in docker-compose.yml
-sed -i "s/COMPANY_NAME_PLACEHOLDER/$CONTAINER_NAME/g" docker-compose.yml
-sed -i "s|DB_HOST_PLACEHOLDER|$db_host|g" docker-compose.yml
-sed -i "s/DB_NAME_PLACEHOLDER/$DB_NAME/g" docker-compose.yml
-sed -i "s/DB_USER_PLACEHOLDER/$db_user/g" docker-compose.yml
-sed -i "s/DB_PASS_PLACEHOLDER/$db_pass/g" docker-compose.yml
-sed -i "s|America/Chicago|$db_timezone|g" docker-compose.yml
-
-echo -e "${GREEN}✓ Docker configuration created${NC}"
+# Per-install settings: docker-compose.yml stays untouched so updates pull cleanly.
+umask 077
+cat > .env <<EOF
+# TimeSmart install settings for docker-compose.yml (see .env.example)
+CONTAINER_NAME='$CONTAINER_NAME'
+DB_HOST='$DB_HOST'
+DB_NAME='$DB_NAME'
+DB_USER='$DB_USER'
+DB_PASS='$DB_PASS'
+DB_TIMEZONE='$db_timezone'
+EOF
+umask 022
+ok "Wrote .env (readable by its owner only)"
 
 # ========================
-# Create Database
+# Database
 # ========================
-if [ "$MYSQL_AVAILABLE" = true ]; then
-    echo -e "\n${BLUE}Database Setup:${NC}"
-    read -p "Create database '$DB_NAME'? (y/n): " create_db
-    
-    if [ "$create_db" = "y" ]; then
-        echo -e "${YELLOW}📦 Creating database...${NC}"
-        
-        # Replace database name in schema
-        sed "s/DB_NAME_PLACEHOLDER/$DB_NAME/g" deploy/database/timeclock-schema.sql > /tmp/timeclock-schema-temp.sql
+schema_sql() {
+    sed "s/DB_NAME_PLACEHOLDER/$DB_NAME/g" deploy/database/timeclock-schema.sql
+    # The schema already includes every migration: record them as applied, or the
+    # first update.sh would replay them against the current schema and fail.
+    echo "USE \`$DB_NAME\`;"
+    for f in deploy/database/migrations/*.sql; do
+        echo "INSERT IGNORE INTO schema_migrations (filename) VALUES ('$(basename "$f")');"
+    done
+}
 
-        # The schema already includes every migration: record them as applied, or the
-        # first update.sh would replay them all against the current schema and fail.
-        echo "USE \`$DB_NAME\`;" >> /tmp/timeclock-schema-temp.sql
-        for f in deploy/database/migrations/*.sql; do
-            echo "INSERT IGNORE INTO schema_migrations (filename) VALUES ('$(basename "$f")');" >> /tmp/timeclock-schema-temp.sql
-        done
-
-        # Create database
-        if mysql -h "$db_host" -u "$db_user" -p"$db_pass" < /tmp/timeclock-schema-temp.sql 2>/dev/null; then
-            rm /tmp/timeclock-schema-temp.sql
-            echo -e "${GREEN}✓ Database created and initialized${NC}"
+echo -e "\n${YELLOW}📦 Setting up the database...${NC}"
+if [ "$db_mode" = "1" ]; then
+    # Containers reach the host over the Docker bridge, so the server must not be
+    # bound to 127.0.0.1 only. Listen on all interfaces and let the firewall keep
+    # 3306 closed to everything except Docker networks.
+    listening=$(ss -ltnH 2>/dev/null | awk '{print $4}')
+    if ! grep -qE '^(0\.0\.0\.0|\*|\[::\]):3306$' <<<"$listening"; then
+        warn "The database server only listens on localhost, so containers can't reach it."
+        if yes_no "Make it listen for Docker containers (adds a MariaDB config file and restarts it)?" "y"; then
+            conf_dir=/etc/mysql/mariadb.conf.d; [ -d "$conf_dir" ] || conf_dir=/etc/mysql/conf.d
+            printf '[mysqld]\nbind-address = 0.0.0.0\n' > "$conf_dir/60-timesmart.cnf"
+            systemctl restart mariadb 2>/dev/null || systemctl restart mysql
+            ok "Database server now listens on all interfaces"
         else
-            echo -e "${RED}✗ Failed to create database${NC}"
-            echo "You can create it manually later using: deploy/database/timeclock-schema.sql"
+            warn "Skipped: the app won't connect until the server listens on the Docker bridge."
         fi
-    else
-        echo -e "${YELLOW}⚠ Skipping database creation${NC}"
-        echo "Remember to create the database manually: $DB_NAME"
     fi
+    if command -v ufw >/dev/null && [[ "$(ufw status 2>/dev/null)" == *"Status: active"* ]]; then
+        ufw allow from 172.16.0.0/12 to any port 3306 proto tcp >/dev/null
+        ok "Firewall: 3306 open to Docker networks only"
+    else
+        warn "No active ufw firewall: make sure port 3306 is not reachable from the internet."
+    fi
+    # Named time zones for SET time_zone (harmless if already loaded)
+    command -v mysql_tzinfo_to_sql >/dev/null && mysql_tzinfo_to_sql /usr/share/zoneinfo 2>/dev/null | "$MYSQL_BIN" mysql || true
+
+    "$MYSQL_BIN" <<EOF
+CREATE USER IF NOT EXISTS '$DB_USER'@'172.%' IDENTIFIED BY '$DB_PASS';
+ALTER USER '$DB_USER'@'172.%' IDENTIFIED BY '$DB_PASS';
+EOF
+    schema_sql | "$MYSQL_BIN"
+    "$MYSQL_BIN" -e "GRANT ALL PRIVILEGES ON \`$DB_NAME\`.* TO '$DB_USER'@'172.%'; FLUSH PRIVILEGES;"
+    ok "Database $DB_NAME created; user $DB_USER@172.% can reach it from containers"
 else
-    echo -e "\n${YELLOW}⚠ MySQL client not available - skipping database creation${NC}"
-    echo "Please create database '$DB_NAME' manually using: deploy/database/timeclock-schema.sql"
+    if [ -n "$MYSQL_BIN" ] && yes_no "Create database '$DB_NAME' on $DB_HOST now?" "y"; then
+        host_for_client="$DB_HOST"; [ "$DB_HOST" = "host.docker.internal" ] && host_for_client="127.0.0.1"
+        schema_sql | MYSQL_PWD="$DB_PASS" "$MYSQL_BIN" -h "$host_for_client" -u "$DB_USER" \
+            || die "Database creation failed. Create it by hand from deploy/database/timeclock-schema.sql, then re-run from 'docker compose up -d'."
+        ok "Database $DB_NAME created"
+    else
+        warn "Create database '$DB_NAME' yourself from deploy/database/timeclock-schema.sql before signing in."
+    fi
 fi
 
 # ========================
-# Start Container
+# Container
 # ========================
-echo -e "\n${BLUE}Container Deployment:${NC}"
-read -p "Start Docker container now? (y/n): " start_container
+echo -e "\n${YELLOW}🐳 Starting the container...${NC}"
+if ! docker network inspect "$NETWORK" >/dev/null 2>&1; then
+    docker network create --subnet "$NETWORK_SUBNET" "$NETWORK" >/dev/null 2>&1 \
+        || docker network create "$NETWORK" >/dev/null
+    ok "Created Docker network $NETWORK"
+fi
+if ! docker image inspect dbest25/timesmart:latest >/dev/null 2>&1; then
+    echo "Building the TimeSmart image (a few minutes on a small server)..."
+    docker compose build -q
+fi
+docker compose up -d
+sleep 3
+docker exec "$CONTAINER_NAME" composer install --no-dev --optimize-autoloader -q -d /var/www/html
+docker exec "$CONTAINER_NAME" chown -R www-data:www-data /var/www/html/vendor
+ok "Container $CONTAINER_NAME is running"
 
-if [ "$start_container" = "y" ]; then
-    echo -e "${YELLOW}🚀 Starting container...${NC}"
-    
-    docker compose up -d
-    
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}✓ Container started successfully${NC}"
-        
-        # Wait for container to be ready
-        sleep 3
-        
-        # Install PHP dependencies
-        echo -e "${YELLOW}📦 Installing PHP dependencies...${NC}"
-        docker exec "$CONTAINER_NAME" composer install --no-dev --optimize-autoloader -d /var/www/html
-        docker exec "$CONTAINER_NAME" chown -R www-data:www-data /var/www/html/vendor
-        echo -e "${GREEN}✓ Dependencies installed${NC}"
-        
-        # Get container IP
-        CONTAINER_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$CONTAINER_NAME")
-        
-        echo -e "\n${GREEN}╔═══════════════════════════════════════╗${NC}"
-        echo -e "${GREEN}║      Installation Complete!          ║${NC}"
-        echo -e "${GREEN}╚═══════════════════════════════════════╝${NC}"
-        echo -e "${BLUE}Company:${NC} $company_name"
-        echo -e "${BLUE}Container:${NC} $CONTAINER_NAME"
-        echo -e "${BLUE}Database:${NC} $DB_NAME"
-        echo -e "${BLUE}Container IP:${NC} $CONTAINER_IP"
-        echo -e "${BLUE}Access URL:${NC} http://$CONTAINER_IP"
-        echo ""
-        echo -e "${YELLOW}Default credentials:${NC}"
-        echo "  Admin: admin / password"
-        echo "  (Change these immediately after first login!)"
-        echo ""
-        echo -e "${BLUE}Installation directory:${NC} $(pwd)"
-        echo ""
-        echo -e "${GREEN}Next steps:${NC}"
-        echo "1. Access the application at http://$CONTAINER_IP"
-        echo "2. Log in with default admin credentials"
-        echo "3. Change the default password immediately"
-        echo "4. Configure your settings in the admin panel"
-        echo ""
-        echo -e "${YELLOW}Note:${NC} Application files are volume-mounted from ./app/"
-        echo "Any changes to files will be reflected immediately without rebuilding."
-        echo ""
-        echo "For backup configuration, see: deploy/scripts/backup.sh"
-        echo "For documentation, see: docs/INSTALLATION.md"
-    else
-        echo -e "${RED}✗ Failed to start container${NC}"
-        exit 1
-    fi
+# Runs a repo script with the app's DB settings (deploy/ isn't mounted in the app container)
+run_repo_php() {
+    # </dev/null: otherwise the container swallows the rest of the installer's input
+    docker compose run --rm -T --no-deps -v "$INSTALL_DIR":/repo -w /repo "$@" </dev/null
+}
+
+# ========================
+# First admin or demo data
+# ========================
+echo -e "\n${BLUE}Accounts${NC}"
+if yes_no "Load demo data instead of a real first admin (demo employees, punches, approvals)?" "n"; then
+    run_repo_php app php -d variables_order=EGPCS deploy/scripts/seed_demo.php
+    ADMIN_HINT="Demo logins: see docs/DEMO.md (e.g. 'Pat Admin', password Demo123!)"
 else
-    echo -e "${YELLOW}⚠ Skipping container startup${NC}"
-    echo "You can start it later with: cd $INSTALL_DIR && docker compose up -d"
+    echo "Create the first super admin. Users sign in with their full name, e.g. 'Jane Smith'."
+    admin_first=$(ask "First name: " "")
+    admin_last=$(ask "Last name: " "")
+    admin_email=$(ask "Email (for sign-in codes; optional): " "")
+    while :; do
+        read -r -s -p "Password: " admin_pass; echo
+        read -r -s -p "Repeat password: " admin_pass2; echo
+        [ -n "$admin_pass" ] && [ "$admin_pass" = "$admin_pass2" ] && break
+        warn "Passwords were empty or didn't match; try again."
+    done
+    run_repo_php -e ADMIN_FIRST="$admin_first" -e ADMIN_LAST="$admin_last" \
+        -e ADMIN_EMAIL="$admin_email" -e ADMIN_PASS="$admin_pass" \
+        app php -d variables_order=EGPCS deploy/scripts/create_admin.php
+    unset admin_pass admin_pass2
+    ADMIN_HINT="Sign in as '$admin_first $admin_last' with the password you just set"
 fi
 
+# ========================
+# Scheduled jobs
+# ========================
+echo -e "\n${BLUE}Scheduled jobs${NC}"
+echo "Auto clock-out closes punches left open on a past day (clock-out set to 5:00 PM,"
+echo "each one queued for admin review). Skip it if you run overnight shifts."
+if yes_no "Schedule auto clock-out daily at 5:15 AM?" "n"; then
+    line="15 5 * * * $INSTALL_DIR/deploy/scripts/auto_clockout_wrapper.sh >> /var/log/timeclock-auto-clockout-$SAFE_NAME.log 2>&1"
+    { crontab -l 2>/dev/null | grep -vF "$INSTALL_DIR/deploy/scripts/auto_clockout_wrapper.sh" || true; echo "$line"; } | crontab -
+    ok "Cron job added (crontab -l to review)"
+fi
+
+# ========================
+# Done
+# ========================
+echo -e "\n${GREEN}╔═══════════════════════════════════════╗${NC}"
+echo -e "${GREEN}║      Installation Complete!           ║${NC}"
+echo -e "${GREEN}╚═══════════════════════════════════════╝${NC}"
+echo -e "${BLUE}Company:${NC}    $company_name"
+echo -e "${BLUE}Directory:${NC}  $INSTALL_DIR"
+echo -e "${BLUE}Container:${NC}  $CONTAINER_NAME  (Docker network $NETWORK, port 80, no host ports)"
+echo -e "${BLUE}Database:${NC}   $DB_NAME"
+echo -e "${BLUE}Accounts:${NC}   $ADMIN_HINT"
 echo ""
-echo -e "${BLUE}For more information, visit:${NC} https://github.com/D-Best-App/Timesmart"
+echo -e "${GREEN}Next steps:${NC}"
+echo "1. Publish it over HTTPS: point a reverse proxy or a cloudflared container on the"
+echo "   $NETWORK network at http://$CONTAINER_NAME:80 (sign-in needs HTTPS)."
+echo "2. Sign in at https://<your hostname>/user/login.php"
+echo "3. Settings: mail server (sign-in codes, time-off notices), pay rules, shifts, offices"
+echo "4. Backups: configure and schedule deploy/scripts/backup.sh"
+echo ""
+echo "Update later with: cd $INSTALL_DIR && ./deploy/scripts/update.sh"
+echo "Docs: docs/INSTALLATION.md"

@@ -29,8 +29,11 @@ COPY www.conf /usr/local/etc/php-fpm.d/www.conf
 # Set working directory
 WORKDIR /var/www/html
 
-# Clone repo
-RUN find . -mindepth 1 -delete && git clone https://github.com/D-Best-App/Timesmart.git .
+# Clone repo; the web root is the repo's app/ directory (composer.json lives there)
+RUN find . -mindepth 1 -delete \
+    && git clone --depth 1 https://github.com/D-Best-App/Timesmart.git /tmp/timesmart \
+    && cp -a /tmp/timesmart/app/. . \
+    && rm -rf /tmp/timesmart
 
 # Install Composer deps
 RUN composer install --no-dev --optimize-autoloader

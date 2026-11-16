@@ -1,32 +1,38 @@
 # D-BEST TimeSmart Docker Compose Configuration
-# Timeclock-D-Best instance
+#
+# Per-install values live in .env next to this file (git-ignored, written by
+# deploy/scripts/install.sh; see .env.example). Keep this file unmodified so
+# update.sh can pull new versions without merging local edits.
 
 services:
   app:
+    # Built locally from deploy/docker when the image isn't already on the host.
     image: dbest25/timesmart:latest
-    container_name: Timeclock-D-Best
+    build: ./deploy/docker
+    container_name: ${CONTAINER_NAME:?set CONTAINER_NAME in .env}
     restart: unless-stopped
 
     # Map host.docker.internal to the Docker host for DB access
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
-    # Volume mounts for development
-    # Application code is mounted from host for live updates
+    # Application code is mounted from the host for live updates
     volumes:
       - ./app:/var/www/html:rw
       - ./deploy/docker/nginx.conf:/etc/nginx/sites-available/default:ro
       - ./deploy/docker/www.conf:/usr/local/etc/php-fpm.d/www.conf:ro
 
-    # Environment variables for database connection
     environment:
-      DB_HOST: host.docker.internal
-      DB_NAME: timeclock-D-Best
-      DB_USER: timeclock
-      DB_PASS: SecureNet25!
-      DB_TIMEZONE: America/Chicago
+      DB_HOST: ${DB_HOST:-host.docker.internal}
+      DB_NAME: ${DB_NAME:?set DB_NAME in .env}
+      DB_USER: ${DB_USER:-timeclock}
+      DB_PASS: ${DB_PASS:?set DB_PASS in .env}
+      DB_TIMEZONE: ${DB_TIMEZONE:-America/Chicago}
+      # 0 only for testing over plain HTTP; sign-in cookies are Secure otherwise
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-1}
 
-    # Shared network allows NPM to reach this container by name
+    # Shared network so a reverse proxy (NPM, Caddy) or cloudflared container
+    # can reach this container by name. install.sh creates it.
     networks:
       - timesmart-net
 

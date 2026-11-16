@@ -136,22 +136,26 @@ Timeclock-<CompanyName>/
 
 ## Configuration Management
 
-### Environment Variables (docker-compose.yml)
-- `DB_HOST` - Database server hostname (default: `172.17.0.1`)
+### Environment Variables (`.env`)
+Per-install values live in `.env` next to `docker-compose.yml` (git-ignored, written by
+`install.sh`, template in `.env.example`). `docker-compose.yml` itself is identical on every
+install; `update.sh` moves older installs' inline values into `.env` automatically.
+- `CONTAINER_NAME` - Container name (format: `Timeclock-CompanyName`)
+- `DB_HOST` - Database server hostname (default: `host.docker.internal`, the Docker host)
 - `DB_NAME` - Database name (format: `timeclock-companyname`)
 - `DB_USER` - Database username
 - `DB_PASS` - Database password
 - `DB_TIMEZONE` - Timezone (default: `America/Chicago`)
 
-Example configuration in `docker-compose.yml`:
+Example `.env` (single quotes keep `$` and `#` literal):
 
-```yaml
-environment:
-  DB_HOST: 172.17.0.1
-  DB_NAME: timeclock-acme
-  DB_USER: timeclock
-  DB_PASS: secure_password
-  DB_TIMEZONE: America/Chicago
+```ini
+CONTAINER_NAME='Timeclock-Acme'
+DB_HOST='host.docker.internal'
+DB_NAME='timeclock-Acme'
+DB_USER='timeclock'
+DB_PASS='secure_password'
+DB_TIMEZONE='America/Chicago'
 ```
 
 ### Runtime Settings Table
@@ -166,7 +170,8 @@ environment:
 - See [docs/CONFIGURATION.md](docs/CONFIGURATION.md#shifts-rounding-and-auto-lunch)
 
 ### Configuration Files
-- `docker-compose.yml` - Container config + environment variables
+- `docker-compose.yml` - Container config (same on every install)
+- `.env` - Per-install container name and database settings (git-ignored; see `.env.example`)
 - `deploy/docker/nginx.conf` - Nginx web server config
 - `deploy/docker/www.conf` - PHP-FPM pool config
 - `deploy/docker/supervisord.conf` - Process management

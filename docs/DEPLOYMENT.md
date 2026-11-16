@@ -33,6 +33,24 @@ The script will:
 5. Restart container
 6. Show update summary
 
+### One-time: installs from before `.env`
+
+Installs now keep their container name and database settings in `.env`, and
+`docker-compose.yml` is the same everywhere. An install without a `.env` (settings
+typed into `docker-compose.yml`) must run the **new** update script once, straight from
+GitHub, because its own older copy doesn't know how to move the settings:
+
+```bash
+cd /opt/Timeclock-YourCompany
+bash <(curl -s https://raw.githubusercontent.com/D-Best-App/Timesmart/main/deploy/scripts/update.sh)
+```
+
+It reads the settings from the running container into `.env` (owner-only), restores the
+stock `docker-compose.yml`, then updates as usual. Afterwards `./deploy/scripts/update.sh`
+works as before. Running the old script instead stops on a merge conflict in
+`docker-compose.yml`; if that happens, run `git checkout -- docker-compose.yml && git stash drop`
+and then the command above (the container keeps running throughout).
+
 ### Manual Update
 
 If you prefer manual control:

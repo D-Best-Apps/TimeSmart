@@ -96,14 +96,12 @@ For permanent access, configure a reverse proxy (Nginx/Traefik) or use Cloudflar
 
 ## Admin Access
 
-- **URL**: `http://<container_ip>/admin/`
-- **Default Credentials:**
-  - Username: `admin`
-  - Password: `password`
+- **URL**: `https://<your hostname>/user/login.php` (admins and employees share one form)
+- There are no default credentials: the installer creates the first super admin
+  (or loads the demo data, whose logins are in [docs/DEMO.md](docs/DEMO.md)).
+- Sign in with your full name (`First Last`). More admins: Admin Panel → Manage Admins.
 
-**CRITICAL:** Change the default password immediately after first login!
-
-It's highly recommended to enable Two-Factor Authentication (2FA) for all admin accounts.
+Configure the mail server under Settings so emailed sign-in codes (2FA) work.
 
 ---
 

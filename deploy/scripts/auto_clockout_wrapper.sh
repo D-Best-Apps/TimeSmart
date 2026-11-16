@@ -13,8 +13,10 @@
 # Cron: 15 5 * * * /opt/Timeclock-D-Best/deploy/scripts/auto_clockout_wrapper.sh >> /var/log/timeclock-auto-clockout.log 2>&1
 #
 
-# Configuration
-CONTAINER_NAME="Timeclock-D-Best"
+# Configuration: the container is the one named in this install's .env
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+CONTAINER_NAME=$(grep -m1 '^CONTAINER_NAME=' "$PROJECT_ROOT/.env" 2>/dev/null | cut -d= -f2- | tr -d "'\"")
+CONTAINER_NAME="${CONTAINER_NAME:-Timeclock-D-Best}"
 SCRIPT_PATH="/var/www/html/scripts/auto_clockout.php"
 LOG_PREFIX="[Auto ClockOut Wrapper]"
 

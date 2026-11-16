@@ -6,6 +6,15 @@
 
 set -e  # Exit on error
 
+# git pull below can rewrite this file while bash is still reading it; run from a copy.
+# (Skipped when the script arrives on a pipe, e.g. bash <(curl -s .../update.sh).)
+if [ -z "${TS_UPDATE_FROM_COPY:-}" ] && [ -f "$0" ]; then
+    _copy=$(mktemp)
+    cp "$0" "$_copy"
+    TS_UPDATE_FROM_COPY=1 exec bash "$_copy" "$@"
+fi
+[ -n "${TS_UPDATE_FROM_COPY:-}" ] && trap 'rm -f "$0"' EXIT
+
 # Color codes
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -26,16 +35,45 @@ if [ ! -d ".git" ]; then
     exit 1
 fi
 
-# Get container name from docker-compose.yml
 if [ ! -f "docker-compose.yml" ]; then
     echo -e "${RED}✗ Error: docker-compose.yml not found${NC}"
     exit 1
 fi
 
-CONTAINER_NAME=$(grep "container_name:" docker-compose.yml | awk '{print $2}')
+# Per-install settings live in .env. Older installs kept them in docker-compose.yml
+# itself: rebuild .env from the container this directory started, then restore the
+# stock docker-compose.yml so the pull below doesn't conflict with local edits.
+if [ ! -f ".env" ]; then
+    OLD_CONTAINER=$(docker ps -a --filter "label=com.docker.compose.project.working_dir=$(pwd)" --format '{{.Names}}' | head -1)
+    if [ -z "$OLD_CONTAINER" ]; then
+        OLD_CONTAINER=$(grep -m1 "container_name:" docker-compose.yml | awk '{print $2}')
+    fi
+    if [ -z "$OLD_CONTAINER" ] || [[ "$OLD_CONTAINER" == *'$'* ]] || ! docker container inspect "$OLD_CONTAINER" >/dev/null 2>&1; then
+        echo -e "${RED}✗ Error: no .env and no existing container to read settings from.${NC}"
+        echo "Create one from .env.example (cp .env.example .env) and re-run."
+        exit 1
+    fi
+    echo -e "${YELLOW}Moving install settings from docker-compose.yml to .env...${NC}"
+    ( umask 077
+      {
+        echo "# TimeSmart install settings for docker-compose.yml (see .env.example)"
+        echo "CONTAINER_NAME='$OLD_CONTAINER'"
+        docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$OLD_CONTAINER" \
+          | grep -E '^(DB_HOST|DB_NAME|DB_USER|DB_PASS|DB_TIMEZONE|SESSION_COOKIE_SECURE)=' \
+          | sed -E "s/^([A-Z_]+)=(.*)$/\1='\2'/"
+      } > .env
+    )
+    if grep -q "^DB_PASS='.*'.*'" .env; then
+        echo -e "${YELLOW}⚠ DB_PASS contains a single quote; check its quoting in .env${NC}"
+    fi
+    git checkout -- docker-compose.yml 2>/dev/null || true
+    echo -e "${GREEN}✓ Wrote .env from container $OLD_CONTAINER${NC}"
+fi
+
+CONTAINER_NAME=$(grep -m1 '^CONTAINER_NAME=' .env | cut -d= -f2- | tr -d "'\"")
 
 if [ -z "$CONTAINER_NAME" ]; then
-    echo -e "${RED}✗ Error: Could not determine container name${NC}"
+    echo -e "${RED}✗ Error: CONTAINER_NAME is not set in .env${NC}"
     exit 1
 fi
 

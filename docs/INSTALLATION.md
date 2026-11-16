@@ -7,6 +7,7 @@ This guide walks you through installing D-BEST TimeSmart, a PHP-based employee t
 - [Prerequisites](#prerequisites)
 - [Quick Start](#quick-start)
 - [Detailed Installation](#detailed-installation)
+- [Publish over HTTPS](#publish-over-https)
 - [Post-Installation](#post-installation)
 - [Multi-Company Setup](#multi-company-setup)
 - [Manual Installation](#manual-installation)
@@ -56,23 +57,30 @@ This guide walks you through installing D-BEST TimeSmart, a PHP-based employee t
 
 ## Quick Start
 
-For a standard installation, run the automated installer:
+On a fresh Ubuntu server (a 1 GB droplet is plenty; on 512 MB add 2 GB of swap first):
 
 ```bash
-# Run the installation script
-bash <(curl -s https://raw.githubusercontent.com/D-Best-App/Timesmart/main/deploy/scripts/install.sh)
+# Prerequisites: Docker, Git, and MariaDB if the database lives on this server
+curl -fsSL https://get.docker.com | sh
+sudo apt-get install -y git mariadb-server
+
+# Run the installer from the folder that should hold the install
+cd /opt
+sudo bash <(curl -s https://raw.githubusercontent.com/D-Best-App/Timesmart/main/deploy/scripts/install.sh)
 ```
 
-The script will:
-1. Check prerequisites
-2. Ask for company name and database credentials
-3. Clone the repository
-4. Configure Docker
-5. Create the database (optional)
-6. Start the container
-7. Display access information
+The installer:
+1. Checks prerequisites
+2. Asks for the company name, timezone, and where the database lives
+3. Clones the repository into `Timeclock-<Company>` and writes its `.env`
+4. Creates the database (and, for MariaDB on this server, a user of its own such as
+   `tc_acme_corp` with a generated password, reachable only from Docker networks)
+5. Builds the image if needed and starts the container on the `timesmart-net` network
+6. Creates the first super admin, or loads the demo data
+7. Optionally schedules the auto clock-out job
 
-**That's it!** Skip to [Post-Installation](#post-installation) after the installer completes.
+Then [publish it over HTTPS](#publish-over-https). Sign-in sets secure cookies, so it
+does not work over plain HTTP.
 
 ## Detailed Installation
 
@@ -81,99 +89,124 @@ If you prefer to understand each step or need custom configuration:
 ### Step 1: Clone Repository
 
 ```bash
-# Choose installation location
-cd /opt  # or wherever you want to install
-
-# Clone repository
+cd /opt
 git clone https://github.com/D-Best-App/Timesmart.git Timeclock-YourCompany
 cd Timeclock-YourCompany
 ```
 
 ### Step 2: Configure Database
 
-Create a database for TimeSmart:
+Create the database from the schema, and record the bundled migrations as applied
+(the schema already contains them; otherwise the first `update.sh` replays them):
 
 ```bash
-# Connect to MySQL
-mysql -h <db_host> -u <db_user> -p
+DB=timeclock-YourCompany
+{ sed "s/DB_NAME_PLACEHOLDER/$DB/g" deploy/database/timeclock-schema.sql
+  echo "USE \`$DB\`;"
+  for f in deploy/database/migrations/*.sql; do
+    echo "INSERT IGNORE INTO schema_migrations (filename) VALUES ('$(basename "$f")');"
+  done
+} | sudo mariadb
 
-# Create database
-CREATE DATABASE `timeclock-yourcompany` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-EXIT;
-
-# Import schema
-mysql -h <db_host> -u <db_user> -p timeclock-yourcompany < deploy/database/timeclock-schema.sql
+sudo mariadb -e "CREATE USER 'timeclock'@'172.%' IDENTIFIED BY 'a-long-random-password';
+                 GRANT ALL PRIVILEGES ON \`$DB\`.* TO 'timeclock'@'172.%';"
 ```
 
-The schema includes:
-- 8 tables for users, punches, audit logs, settings
-- Default admin user (admin/password)
-- Sample configuration
+Containers reach a database on the Docker host over the bridge network, so MariaDB must
+listen on more than `127.0.0.1` (`bind-address = 0.0.0.0` in
+`/etc/mysql/mariadb.conf.d/60-timesmart.cnf`). Keep port 3306 closed to the internet:
+`ufw allow from 172.16.0.0/12 to any port 3306 proto tcp` with ufw enabled.
 
-### Step 3: Configure Docker Compose
+### Step 3: Configure `.env`
 
-Edit `docker-compose.yml` to set your configuration:
+`docker-compose.yml` is the same for every install and stays unmodified, so updates
+pull cleanly. Per-install values go in `.env` (git-ignored):
 
-```yaml
-services:
-  app:
-    container_name: Timeclock-YourCompany  # Change this
-    environment:
-      DB_HOST: 172.17.0.1                  # Your database host
-      DB_NAME: timeclock-yourcompany       # Your database name
-      DB_USER: timeclock                   # Database user
-      DB_PASS: your_secure_password        # Database password
-      DB_TIMEZONE: America/Chicago         # Your timezone
+```bash
+cp .env.example .env
+chmod 600 .env
+nano .env
 ```
+
+```ini
+CONTAINER_NAME='Timeclock-YourCompany'
+DB_HOST='host.docker.internal'      # MariaDB on this Docker host
+DB_NAME='timeclock-YourCompany'
+DB_USER='timeclock'
+DB_PASS='a-long-random-password'
+DB_TIMEZONE='America/Chicago'
+```
+
+Keep the single quotes: Compose then reads the value literally, so `$` and `#` are safe.
 
 ### Step 4: Start Container
 
 ```bash
-# Start container in background
+# Shared network for the app and its reverse proxy / tunnel (once per server)
+docker network create --subnet 172.19.0.0/16 timesmart-net
+
+# Builds the image from deploy/docker on first run, then starts it
 docker compose up -d
-
-# Check container status
-docker ps
-
-# View logs
-docker logs Timeclock-YourCompany
+docker exec Timeclock-YourCompany composer install --no-dev --optimize-autoloader -d /var/www/html
+docker exec Timeclock-YourCompany chown -R www-data:www-data /var/www/html/vendor
 ```
 
-### Step 5: Get Access Information
+### Step 5: Create the First Admin (or Demo Data)
 
 ```bash
-# Get container IP address
-docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' Timeclock-YourCompany
+# A real first super admin (prompts are easiest via install.sh; this is the same script)
+read -s -p "Password: " ADMIN_PASS; echo
+docker compose run --rm -T -v "$PWD":/repo -w /repo \
+  -e ADMIN_FIRST=Jane -e ADMIN_LAST=Smith -e ADMIN_EMAIL=jane@example.com -e ADMIN_PASS="$ADMIN_PASS" \
+  app php -d variables_order=EGPCS deploy/scripts/create_admin.php
 
-# Access the application
-# http://<container_ip>/
+# ...or demo data instead (empty database only; logins in docs/DEMO.md)
+docker compose run --rm -T -v "$PWD":/repo -w /repo app php -d variables_order=EGPCS deploy/scripts/seed_demo.php
 ```
+
+## Publish over HTTPS
+
+The container publishes no host ports. Anything on the `timesmart-net` network reaches
+it at `http://Timeclock-YourCompany:80`:
+
+- **Cloudflare Tunnel** (no open ports, and Cloudflare Access can sit in front): create a
+  tunnel with a public hostname pointing at `http://Timeclock-YourCompany:80`, then run
+  the connector on the same network:
+
+  ```yaml
+  # /opt/cloudflared/docker-compose.yml (TUNNEL_TOKEN=... in /opt/cloudflared/.env)
+  services:
+    cloudflared:
+      image: cloudflare/cloudflared:latest
+      restart: unless-stopped
+      command: tunnel --no-autoupdate run
+      env_file: .env
+      networks: [timesmart-net]
+  networks:
+    timesmart-net:
+      external: true
+  ```
+
+- **Nginx Proxy Manager / Caddy**: attach the proxy container to `timesmart-net` and
+  forward the hostname to `Timeclock-YourCompany:80`.
+
+`deploy/docker/nginx.conf` takes the client IP from `CF-Connecting-IP` for requests from
+Cloudflare ranges and the `172.17.0.0/16` / `172.19.0.0/16` Docker networks, which is
+why the installer creates `timesmart-net` on `172.19.0.0/16`.
 
 ## Post-Installation
 
 ### First Login
 
-1. **Access Admin Portal**: `http://<container_ip>/admin/`
-2. **Default Credentials**:
-   - Username: `admin`
-   - Password: `password`
+Sign in at `https://<your hostname>/user/login.php` with the admin's **full name**
+(`First Last`) and password. There are no default credentials.
 
-### Security Setup (CRITICAL)
+### Security Setup
 
-⚠️ **IMMEDIATELY after first login:**
-
-1. **Change Default Password**
-   - Admin Panel → Settings → Change Password
-   - Use a strong password (14+ characters)
-
-2. **Enable Two-Factor Authentication (2FA)**
-   - Admin Panel → Security Settings → Enable 2FA
-   - Scan QR code with Google Authenticator or Authy
-   - Save recovery codes securely
-
-3. **Review Admin Accounts**
-   - Admin Panel → Manage Admins
-   - Remove any unused accounts
+1. **Mail server**: Admin Panel → Settings → mail. Needed for emailed sign-in codes
+   (2FA) and time-off notices.
+2. **Two-factor sign-in**: enable it for admins once mail works. Codes arrive by email.
+3. **More admins**: Admin Panel → Manage Admins promotes existing employees.
 
 ### Basic Configuration
 
@@ -189,22 +222,6 @@ docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' Tim
    - Have test employee clock in/out
    - Verify time calculations
    - Test kiosk mode if using badges
-
-### Optional: Expose on Network
-
-By default, containers use bridge networking (only accessible via container IP). To expose on a port:
-
-```yaml
-# In docker-compose.yml, uncomment:
-ports:
-  - "8080:80"  # Access via http://server_ip:8080
-```
-
-Then restart:
-```bash
-docker compose down
-docker compose up -d
-```
 
 ### Optional: Setup Backups
 
@@ -244,7 +261,7 @@ bash <(curl -s https://raw.githubusercontent.com/D-Best-App/Timesmart/main/deplo
 # - Creates separate directory: Timeclock-CompanyA, Timeclock-CompanyB
 # - Creates separate container: Timeclock-CompanyA, Timeclock-CompanyB
 # - Creates separate database: timeclock-companya, timeclock-companyb
-# - Gets unique container IP
+# - Shares the timesmart-net network; the proxy routes each hostname to its container
 ```
 
 ### Method 2: Manual Multi-Company
@@ -253,13 +270,13 @@ bash <(curl -s https://raw.githubusercontent.com/D-Best-App/Timesmart/main/deplo
 # Company A
 git clone https://github.com/D-Best-App/Timesmart.git Timeclock-CompanyA
 cd Timeclock-CompanyA
-# Configure docker-compose.yml for CompanyA
+cp .env.example .env   # set CONTAINER_NAME, DB_NAME, ... for CompanyA
 docker compose up -d
 
 # Company B
 git clone https://github.com/D-Best-App/Timesmart.git Timeclock-CompanyB
 cd Timeclock-CompanyB
-# Configure docker-compose.yml for CompanyB
+cp .env.example .env   # set CONTAINER_NAME, DB_NAME, ... for CompanyB
 docker compose up -d
 ```
 
@@ -327,7 +344,8 @@ docker logs Timeclock-YourCompany
 
 # Common issues:
 # - Database connection failed: Check DB_HOST, credentials
-# - Port already in use: Change port in docker-compose.yml
+# - "set CONTAINER_NAME in .env": .env is missing or incomplete (see .env.example)
+# - "network timesmart-net not found": docker network create --subnet 172.19.0.0/16 timesmart-net
 # - Permission denied: Run with sudo or add user to docker group
 ```
 
