@@ -226,22 +226,16 @@ cd /opt/Timeclock-YourCompany
 ### backup.sh
 
 Automated database backup:
-- Backs up all `timeclock-*` databases
-- Compresses backups (gzip)
-- Rotates hourly backups (keeps last 8)
-- Creates daily backups at 8 PM
-- Can be scheduled via cron
+- Backs up all `timeclock-*` databases on the server, gzip, owner-only files
+- As root on the database server it signs in over the local socket (no stored password);
+  otherwise `DB_USER`/`DB_PASS`/`DB_HOST` from the environment or the top of the script
+- Keeps the newest 8 runs plus one daily copy per day (`DAILY_HOUR`, default 20; newest 14)
+- `install.sh` schedules it nightly at 1:30 AM when the database is local
 
 ```bash
-# Configure credentials in script
-sudo nano deploy/scripts/backup.sh
-
-# Run manually
 sudo ./deploy/scripts/backup.sh
-
-# Schedule via cron (hourly)
-crontab -e
-# Add: 0 * * * * /opt/Timeclock-YourCompany/deploy/scripts/backup.sh
+# Nightly (sudo crontab -e):
+30 1 * * * DAILY_HOUR=1 /opt/Timeclock-YourCompany/deploy/scripts/backup.sh >> /var/log/timeclock-backup.log 2>&1
 ```
 
 ### remove.sh

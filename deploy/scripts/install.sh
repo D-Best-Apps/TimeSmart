@@ -225,6 +225,18 @@ fi
 # Scheduled jobs
 # ========================
 echo -e "\n${BLUE}Scheduled jobs${NC}"
+if [ "$db_mode" = "1" ]; then
+    # backup.sh dumps every timeclock-* database on this server, so one cron line is enough
+    if crontab -l 2>/dev/null | grep -q "deploy/scripts/backup.sh"; then
+        ok "Nightly database backups are already scheduled on this server (covers this install too)"
+    elif yes_no "Schedule nightly database backups at 1:30 AM (last 14 kept, in /var/sql-data)?" "y"; then
+        line="30 1 * * * DAILY_HOUR=1 $INSTALL_DIR/deploy/scripts/backup.sh >> /var/log/timeclock-backup.log 2>&1"
+        { crontab -l 2>/dev/null || true; echo "$line"; } | crontab -
+        "$INSTALL_DIR/deploy/scripts/backup.sh" >/dev/null && ok "Backups scheduled; first backup taken"
+    fi
+else
+    warn "Backups: schedule deploy/scripts/backup.sh with DB_USER/DB_PASS/DB_HOST set (see docs/DEPLOYMENT.md)."
+fi
 echo "Auto clock-out closes punches left open on a past day (clock-out set to 5:00 PM,"
 echo "each one queued for admin review). Skip it if you run overnight shifts."
 if yes_no "Schedule auto clock-out daily at 5:15 AM?" "n"; then
@@ -250,7 +262,7 @@ echo "1. Publish it over HTTPS: point a reverse proxy or a cloudflared container
 echo "   $NETWORK network at http://$CONTAINER_NAME:80 (sign-in needs HTTPS)."
 echo "2. Sign in at https://<your hostname>/user/login.php"
 echo "3. Settings: mail server (sign-in codes, time-off notices), pay rules, shifts, offices"
-echo "4. Backups: configure and schedule deploy/scripts/backup.sh"
+echo "4. Backups stay on this server (/var/sql-data): copy them offsite too"
 echo ""
 echo "Update later with: cd $INSTALL_DIR && ./deploy/scripts/update.sh"
 echo "Docs: docs/INSTALLATION.md"

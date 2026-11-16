@@ -176,23 +176,23 @@ The script will:
 
 ### Automated Backups
 
-Configure the included backup script:
-
 ```bash
-# Edit with your database credentials
-sudo nano deploy/scripts/backup.sh
-
-# Test backup
+# Database on this server: run as root, no credentials needed (local socket)
 sudo ./deploy/scripts/backup.sh
 
-# Schedule via cron (hourly)
-crontab -e
-# Add: 0 * * * * /opt/Timeclock-YourCompany/deploy/scripts/backup.sh
+# Database elsewhere: pass credentials in the environment (or set them at the top of the script)
+DB_HOST=db.example.com DB_USER=backup DB_PASS='...' ./deploy/scripts/backup.sh
+
+# Schedule (sudo crontab -e). One line covers every timeclock-* database on the server.
+30 1 * * * DAILY_HOUR=1 /opt/Timeclock-YourCompany/deploy/scripts/backup.sh >> /var/log/timeclock-backup.log 2>&1   # nightly
+0 * * * *  /opt/Timeclock-YourCompany/deploy/scripts/backup.sh >> /var/log/timeclock-backup.log 2>&1                # hourly
 ```
 
-Backups are stored in `/var/sql-data/<company>/` with:
-- Hourly backups (last 8 kept)
-- Daily backups at 8 PM
+Backups land in `/var/sql-data/<company>/` (newest 8 runs) and
+`/var/sql-data/<company>/daily-backup/` (one per day from the run during `DAILY_HOUR`,
+default 8 PM; newest 14 kept, `DAILY_RETENTION` to change). Files are gzip, owner-only.
+`install.sh` offers the nightly schedule for a database on the same server. These copies
+live on the server itself, so also copy `/var/sql-data` offsite.
 
 ### Manual Backup
 

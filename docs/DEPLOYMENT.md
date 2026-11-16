@@ -113,37 +113,23 @@ Just edit files in `app/` and reload your browser!
 
 ### Automated Backups
 
-Configure the backup script:
-
 ```bash
-# 1. Edit backup script
-sudo nano deploy/scripts/backup.sh
-
-# Set these variables:
-DB_USER="timeclock"
-DB_PASS="your_password"
-DB_HOST="172.17.0.1"
-BACKUP_BASE="/var/sql-data"
-
-# 2. Test backup
+# Database on this server: run as root, no credentials needed (local socket)
 sudo ./deploy/scripts/backup.sh
 
-# 3. Verify backup created
-ls -lh /var/sql-data/*/
+# Database elsewhere: pass credentials in the environment (or set them at the top of the script)
+DB_HOST=db.example.com DB_USER=backup DB_PASS='...' ./deploy/scripts/backup.sh
 
-# 4. Schedule via cron (hourly)
-crontab -e
-
-# Add line:
-0 * * * * /opt/Timeclock-YourCompany/deploy/scripts/backup.sh
+# Schedule (sudo crontab -e). One line covers every timeclock-* database on the server.
+30 1 * * * DAILY_HOUR=1 /opt/Timeclock-YourCompany/deploy/scripts/backup.sh >> /var/log/timeclock-backup.log 2>&1   # nightly
+0 * * * *  /opt/Timeclock-YourCompany/deploy/scripts/backup.sh >> /var/log/timeclock-backup.log 2>&1                # hourly
 ```
 
-### Backup Retention
-
-The backup script maintains:
-- **Hourly backups**: Last 8 hourly backups
-- **Daily backups**: One backup per day at 8 PM
-- **Compressed**: Gzip compressed to save space
+Backups land in `/var/sql-data/<company>/` (newest 8 runs) and
+`/var/sql-data/<company>/daily-backup/` (one per day from the run during `DAILY_HOUR`,
+default 8 PM; newest 14 kept, `DAILY_RETENTION` to change). Files are gzip, owner-only.
+`install.sh` offers the nightly schedule for a database on the same server. These copies
+live on the server itself, so also copy `/var/sql-data` offsite.
 
 ### Manual Backup
 
