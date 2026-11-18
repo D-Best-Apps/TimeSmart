@@ -88,9 +88,10 @@ $showSettingsMenu = checkPermission('manage_settings') || checkPermission('manag
                  || checkPermission('manage_pay_rules');
 ?>
 <header>
-    <a href="reports.php" title="Admin home"><img src="/images/D-Best.png" alt="D-Best Logo" class="logo"></a>
+    <a href="home.php" title="Admin home"><img src="/images/D-Best.png" alt="D-Best Logo" class="logo"></a>
     <h1><?= htmlspecialchars($pageTitle) ?></h1>
     <nav>
+        <a href="home.php"<?= $currentPage == 'home.php' ? ' class="active"' : '' ?>>🏠 Home</a>
         <a href="reports.php"<?= $currentPage == 'reports.php' ? ' class="active"' : '' ?>>📊 Reports</a>
         <?php if (checkPermission('edit_timesheets')): ?>
         <a href="view_punches.php"<?= $currentPage == 'view_punches.php' ? ' class="active"' : '' ?>>🕒 Timesheets</a>
@@ -141,7 +142,7 @@ $showSettingsMenu = checkPermission('manage_settings') || checkPermission('manag
             <a href="../user/time_off.php">🏖️ Request Time Off</a>
             <?php endif; ?>
             <?php if (!empty($_SESSION['admin_role'])): ?>
-            <a href="reports.php">🛡️ Admin Portal</a>
+            <a href="home.php">🛡️ Admin Portal</a>
             <?php endif; ?>
             <a href="../logout.php">↩️ Logout</a>
         </div>

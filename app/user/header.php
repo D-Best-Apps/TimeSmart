@@ -62,7 +62,7 @@ foreach ($extensions as $ext) {
         <a href="timesheet.php">✏️ Edit Timesheet</a>
         <a href="time_off.php">🏖️ Request Time Off</a>
         <?php if (!empty($_SESSION['admin_role'])): ?>
-        <a href="../admin/reports.php">🛡️ Admin Portal</a>
+        <a href="../admin/home.php">🛡️ Admin Portal</a>
         <?php endif; ?>
         <a href="../logout.php">↩️ Logout</a>
       </div>
@@ -75,7 +75,7 @@ foreach ($extensions as $ext) {
   <a href="timesheet.php">📄 Sheet</a>
   <a href="time_off.php">🏖️ Time Off</a>
   <?php if (!empty($_SESSION['admin_role'])): ?>
-  <a href="../admin/reports.php">🛡️ Admin</a>
+  <a href="../admin/home.php">🛡️ Admin</a>
   <?php endif; ?>
   <a href="../logout.php">↩️ Logout</a>
   <a href="settings.php">⚙️</a>

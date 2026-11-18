@@ -217,6 +217,10 @@ Multiple files have `ini_set('display_errors', 1);` which leaks system informati
 ### Admin Pages
 - All require `$_SESSION['admin']` to be set
 - Redirect to `/admin/login.php` if not authenticated
+- `/admin/home.php` is the admin landing page (after sign-in, logo, "Admin Portal" links):
+  Who's In (live), Hours Summary and Exceptions for one date range. It only reads data.
+  Late/early use the employee's shift and its grace minutes; no-shows need a scheduled day
+  with no punches and no approved time off, counted from the employee's first punch.
 
 ### Employee Pages
 - All require `$_SESSION['EmployeeID']` to be set

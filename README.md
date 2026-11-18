@@ -13,7 +13,9 @@
   Add, update, or remove employee accounts and manage permissions.
   
 - **Admin Dashboard**  
-  Get real-time overviews of employee activity and time logs.
+  The admin home shows, for one date range (default: this pay period), who's in right now
+  (badge, shift, status, last punch, time off), paid hours per employee (regular, OT, PTO,
+  sick), and exceptions: late in, out early, missed punches and no-shows.
   
 - **Reports & Exports**  
   Generate and export attendance data (PDF, Excel, summary reports).

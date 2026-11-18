@@ -1,0 +1,103 @@
+/* Admin home: Who's In / Hours Summary / Exceptions board */
+.page-home .dashboard-container { max-width: 1680px; }
+.page-home .container { max-width: none; margin: 1.5rem auto; padding: 1.25rem; }
+
+.sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+.home-toolbar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+.home-toolbar input[type="date"],
+.home-toolbar select {
+    width: auto; max-width: 100%; margin: 0;
+    padding: 0.35rem 0.5rem; border: 1px solid #c9d2db; border-radius: 6px;
+    font: inherit; font-size: 0.9rem; background: #fff;
+}
+.home-toolbar .btn { margin: 0; }
+.home-toolbar .spacer { flex: 1; }
+.home-updated { color: var(--muted-text); font-size: 0.85rem; }
+
+.home-board {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+}
+.home-panel.whos-in { grid-column: 1 / -1; }
+@media (max-width: 1100px) {
+    .home-board { grid-template-columns: minmax(0, 1fr); }
+}
+
+.home-panel {
+    border: 1px solid #dfe5eb; border-radius: 8px; background: #fff;
+    display: flex; flex-direction: column; min-width: 0;
+}
+.home-panel-head {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+    gap: 0.5rem; padding: 0.6rem 0.9rem;
+    background: var(--primary-color); color: #fff; border-radius: 8px 8px 0 0;
+}
+.home-panel-head h2 { margin: 0; font-size: 1.05rem; color: #fff; }
+.home-panel-head h2 small { font-weight: normal; opacity: 0.8; font-size: 0.85rem; margin-left: 0.3rem; }
+.home-panel-body { overflow: auto; max-height: 70vh; }
+.home-panel.whos-in .home-panel-body { max-height: 60vh; }
+
+.home-panel table { width: 100%; margin: 0; border-collapse: collapse; font-size: 0.9rem; }
+.home-panel th, .home-panel td {
+    padding: 0.4rem 0.65rem; border-bottom: 1px solid #eef1f4;
+    text-align: left; white-space: nowrap;
+}
+.home-panel thead th {
+    position: sticky; top: 0; z-index: 1;
+    background: #eef3f7; color: var(--primary-color); font-weight: 600;
+}
+.home-panel tfoot th {
+    position: sticky; bottom: 0;
+    background: #eef3f7; color: var(--primary-color);
+}
+.home-panel tbody tr:hover { background: #f7fafc; }
+.home-panel td a { color: #0b5cad; text-decoration: none; }
+.home-panel td a:hover { text-decoration: underline; }
+.home-panel .num { text-align: right; font-variant-numeric: tabular-nums; }
+.home-panel .strong { font-weight: 600; }
+.home-panel .ot { color: #b45309; font-weight: 600; }
+.home-panel .muted { color: var(--muted-text); font-size: 0.85em; }
+.home-note { color: var(--muted-text); font-size: 0.8rem; margin: 0.5rem 0.75rem 0.75rem; white-space: normal; }
+
+/* Status and exception pills */
+.st, .ex {
+    display: inline-block; padding: 0.1rem 0.55rem; border-radius: 999px;
+    font-size: 0.8rem; font-weight: 600; color: #fff;
+}
+.st-in { background: #198754; }
+.st-lunch { background: #fd7e14; }
+.st-out { background: #6c757d; }
+.st-absent { background: #dc3545; }
+.st-off { background: #6f42c1; }
+.ex-late { background: #d97706; }
+.ex-early { background: #0d6efd; }
+.ex-missing { background: #dc3545; }
+.ex-lunch { background: #e0a800; color: #222; }
+.ex-absent { background: #7f1d1d; }
+
+.open-tag {
+    display: inline-block; margin-left: 0.35rem; padding: 0 0.4rem; border-radius: 4px;
+    background: #e7f5ec; color: #146c43; font-size: 0.75rem; font-weight: 600;
+}
+
+/* Filter chips in panel headers */
+.chip-filter { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.chip {
+    border: 1px solid rgba(255, 255, 255, 0.45); background: transparent; color: #fff;
+    border-radius: 999px; padding: 0.15rem 0.6rem; font-size: 0.8rem; cursor: pointer;
+}
+.chip:hover { background: rgba(255, 255, 255, 0.12); }
+.chip.active { background: #fff; color: var(--primary-color); border-color: #fff; font-weight: 600; }
+
+@media (max-width: 600px) {
+    .page-home .container { padding: 0.75rem; }
+    .home-panel-body { max-height: none; }
+}

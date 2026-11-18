@@ -75,6 +75,8 @@ are set up as Casey and Quinn.
   - a duplicate deleted;
   - "worked through lunch";
   - overtime approved past the shift.
+- **Admin Home:** sign in as Pat to land on the board: who's in today, this week's hours and
+  the exceptions (Taylor's and Riley's late arrivals, Riley's missing lunch-end punch).
 - **Payroll:** the week before last is closed, so those days are read-only. Last week is open for
   review. Use Payroll Totals to show the QuickBooks numbers and to close it.
 - **Work week Monday–Sunday**, overtime after 40 hours.

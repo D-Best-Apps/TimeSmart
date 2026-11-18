@@ -1,5 +1,5 @@
 <?php
-// The admin dashboard was removed; Reports is now the admin home.
+// The old admin dashboard; Home (who's in, hours, exceptions) replaced it.
 // Keep this stub so old bookmarks/links land somewhere sensible instead of 404.
-header("Location: reports.php", true, 301);
+header("Location: home.php", true, 302);
 exit;

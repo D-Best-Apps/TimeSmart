@@ -226,7 +226,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         // Routing: admins who came in via Admin Login land in the admin portal.
                         // Everyone else lands on the employee dashboard.
                         if ($role !== 'employee' && $fromAdmin) {
-                            header("Location: ../admin/reports.php");
+                            header("Location: ../admin/home.php");
                         } else {
                             header("Location: dashboard.php");
                         }
