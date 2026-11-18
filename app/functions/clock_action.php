@@ -10,6 +10,7 @@ require_once __DIR__ . '/../auth/db.php';
 require_once __DIR__ . '/../vendor/autoload.php'; // For PHPMailer
 require_once __DIR__ . '/settings_helper.php'; // Use the new helper for settings
 require_once __DIR__ . '/location_policy.php'; // is_mobile_ua(), ip_in_allowlist()
+require_once __DIR__ . '/pin_policy.php';      // looksLikePin()
 date_default_timezone_set('America/Chicago');
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -233,7 +234,7 @@ function qc_rl_reset($ip) { $f = qc_rl_path($ip); if (is_file($f)) { @unlink($f)
 
 /**
  * Kiosk: find the employee for a scanned badge or a typed PIN (one box takes both).
- * A value is matched as a BadgeID, and (when kiosk PINs are on) as a 4-6 digit PIN.
+ * A value is matched as a BadgeID, and (when kiosk PINs are on) as a 3-6 digit PIN.
  *
  * PIN guessing: wrong PINs count toward the throttle above, keyed on the real
  * connection address (REMOTE_ADDR — a spoofable X-Forwarded-For can't dodge it), and
@@ -252,7 +253,7 @@ function kiosk_identify(mysqli $conn, string $value): array {
     if ($value === '') {
         send_json_response(false, "Scan your badge or enter your PIN.", 400);
     }
-    $isPin = preg_match('/^\d{4,6}$/', $value) && getSettingValue('KioskPinEnabled', $conn) !== '0';
+    $isPin = looksLikePin($value) && getSettingValue('KioskPinEnabled', $conn) !== '0';
 
     $stmt = $conn->prepare("SELECT ID, FirstName FROM users WHERE BadgeID = ? OR (? = 1 AND PIN = ?) LIMIT 2");
     $pinFlag = $isPin ? 1 : 0;
@@ -542,7 +543,7 @@ if (!empty($_POST['mode']) && $_POST['mode'] === 'quickclock') {
             send_json_response(false, "PIN clock-in is turned off.", 403);
         }
         if ($value === '') { send_json_response(false, "Enter your PIN.", 400); }
-        if (!preg_match('/^\d{4,6}$/', $value)) { send_json_response(false, "PIN must be 4-6 digits.", 400); }
+        if (!looksLikePin($value)) { send_json_response(false, "PIN not recognized.", 400); }
         $col = 'PIN';
     } elseif ($method === 'badge') {
         if (getSettingValue('QuickBadgeEnabled', $conn) !== '1') {

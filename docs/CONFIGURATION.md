@@ -338,6 +338,7 @@ Stored in `settings` table:
 | Setting | Type | Description | Default |
 |---------|------|-------------|---------|
 | `EnforceGPS` | boolean | Require GPS for clock actions | 0 (disabled) |
+| `PinMinLength` | int 3–6 | Fewest digits for a new quick-clock/kiosk PIN (Settings → General). PINs are at most 6 digits; the clocks accept any 3–6 digit PIN on file, so raising this never locks out existing shorter PINs | 4 |
 | `notify_timeoff_extra` | string | Extra addresses (comma-separated) notified on time-off requests, on top of opted-in admins | empty |
 | `notify_timesheet_edits_extra` | string | Extra addresses (comma-separated) notified on timesheet edit requests | empty |
 | `mail_admin_address` | string | Target of the **Save & Send Test Email** button only — not a notification recipient | empty |

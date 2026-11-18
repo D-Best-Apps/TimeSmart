@@ -10,6 +10,7 @@ if (!isset($_SESSION['admin'])) {
 // Permission check
 require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('manage_users');
+require_once __DIR__ . '/../functions/pin_policy.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $firstName = trim($_POST['FirstName'] ?? '');
@@ -27,9 +28,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    // PIN, if given, must be 4-6 digits
-    if ($pin !== '' && !preg_match('/^\d{4,6}$/', $pin)) {
-        header('Location: ../error.php?code=400&message=' . urlencode('PIN must be 4 to 6 digits.'));
+    // PIN, if given, must meet the PIN length setting
+    if ($pin !== '' && !isValidNewPin($pin, $conn)) {
+        header('Location: ../error.php?code=400&message=' . urlencode('PIN must be ' . pinRuleText($conn) . '.'));
         exit;
     }
 

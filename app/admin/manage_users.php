@@ -12,6 +12,7 @@ if (!isset($_SESSION['admin'])) {
 require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('manage_users');
 require_once __DIR__ . '/../functions/pay_rules.php'; // listShifts(), shiftChip()
+require_once __DIR__ . '/../functions/pin_policy.php';
 require_once __DIR__ . '/../functions/csrf.php';
 
 /*
@@ -168,7 +169,7 @@ require_once 'header.php';
             <input type="text" name="FirstName" placeholder="First Name" required>
             <input type="text" name="LastName" placeholder="Last Name" required>
             <input type="text" name="BadgeID" placeholder="Badge ID (optional)" autocomplete="off" data-1p-ignore="true" data-lpignore="true">
-            <input type="text" name="PIN" placeholder="PIN — 4-6 digits (optional)" inputmode="numeric" pattern="\d{4,6}" maxlength="6" autocomplete="off" data-1p-ignore="true" data-lpignore="true">
+            <input type="text" name="PIN" placeholder="PIN — <?= htmlspecialchars(pinRuleText($conn)) ?> (optional)" inputmode="numeric" pattern="<?= htmlspecialchars(pinInputPattern($conn)) ?>" maxlength="<?= PIN_MAX_LENGTH ?>" autocomplete="off" data-1p-ignore="true" data-lpignore="true">
             <select name="Office" required onchange="var d = this.options[this.selectedIndex].dataset.defaultShift; if (d !== undefined) document.getElementById('addUserShift').value = d;">
                 <option value="">Select Office</option>
                 <?php foreach ($offices_data as $office): ?>

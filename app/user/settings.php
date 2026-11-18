@@ -2,6 +2,7 @@
 require_once 'header.php';
 require_once __DIR__ . '/../functions/password_policy.php';
 require_once __DIR__ . '/../functions/profile_photo.php';
+require_once __DIR__ . '/../functions/pin_policy.php';
 
 $msg = "";
 $errors = [];
@@ -20,8 +21,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = "First and Last Name are required.";
     }
 
-    if ($pin !== '' && !preg_match('/^\d{4,6}$/', $pin)) {
-        $errors[] = "PIN must be 4 to 6 digits.";
+    $pinRuleError = "PIN must be " . pinRuleText($conn) . ".";
+    $pinStmt = $conn->prepare("SELECT PIN FROM users WHERE ID = ?");
+    $pinStmt->bind_param("i", $empID);
+    $pinStmt->execute();
+    $currentPin = (string) ($pinStmt->get_result()->fetch_column() ?? '');
+    $pinStmt->close();
+    // An unchanged PIN on file stays valid even if the minimum length was raised since
+    if ($pin !== '' && !isValidNewPin($pin, $conn) && $pin !== $currentPin) {
+        $errors[] = $pinRuleError;
     }
     if ($badgeID !== '' && strlen($badgeID) < 6) {
         $errors[] = "Badge ID must be at least 6 characters.";
@@ -36,7 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($chk->num_rows > 0) { $errors[] = "That Badge ID is already in use."; }
         $chk->close();
     }
-    if ($pin !== '' && !in_array("PIN must be 4 to 6 digits.", $errors, true)) {
+    if ($pin !== '' && !in_array($pinRuleError, $errors, true)) {
         $chk = $conn->prepare("SELECT ID FROM users WHERE PIN = ? AND ID <> ?");
         $chk->bind_param("si", $pin, $empID);
         $chk->execute();
@@ -111,7 +119,7 @@ $logs = $logStmt->get_result();
                 <div><label>Last Name</label><input type="text" name="LastName" value="<?= htmlspecialchars($user['LastName'] ?? '') ?>" required></div>
                 <div><label>Email</label><input type="email" name="Email" value="<?= htmlspecialchars($user['Email'] ?? '') ?>"></div>
                 <div><label>Badge ID</label><input type="text" name="BadgeID" value="<?= htmlspecialchars($user['BadgeID'] ?? '') ?>" autocomplete="off" data-1p-ignore="true" data-lpignore="true"></div>
-                <div><label>Quick-Clock PIN</label><input type="text" name="PIN" value="<?= htmlspecialchars($user['PIN'] ?? '') ?>" inputmode="numeric" pattern="\d{4,6}" maxlength="6" placeholder="4-6 digits" autocomplete="off" data-1p-ignore="true" data-lpignore="true"></div>
+                <div><label>Quick-Clock PIN</label><input type="text" name="PIN" value="<?= htmlspecialchars($user['PIN'] ?? '') ?>" inputmode="numeric" pattern="<?= htmlspecialchars(pinInputPattern($conn, (string) ($user['PIN'] ?? ''))) ?>" maxlength="<?= PIN_MAX_LENGTH ?>" placeholder="<?= htmlspecialchars(pinRuleText($conn)) ?>" autocomplete="off" data-1p-ignore="true" data-lpignore="true"></div>
                 <div><label>Job Title</label><input type="text" name="JobTitle" value="<?= htmlspecialchars($user['JobTitle'] ?? '') ?>"></div>
                 <div><label>Phone Number</label><input type="text" name="PhoneNumber" value="<?= htmlspecialchars($user['PhoneNumber'] ?? '') ?>"></div>
                 <div>

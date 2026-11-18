@@ -17,6 +17,7 @@ if (!isset($_SESSION['admin'])) {
 // Permission check
 require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('manage_settings');
+require_once __DIR__ . '/../functions/pin_policy.php';
 
 // --- Encryption/Decryption Functions ---
 // For demonstration, a simple key. In production, this should be a strong, securely stored key.
@@ -156,6 +157,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $stmt->bind_param("sss", $key, $kioskPinVal, $kioskPinVal);
     $stmt->execute();
     $settings['KioskPinEnabled'] = $kioskPinVal;
+
+    // Minimum digits for new PINs (3-6; existing shorter PINs keep working)
+    if (isset($_POST['PinMinLength'])) {
+        $pinMinVal = (string) max(PIN_ABS_MIN, min(PIN_MAX_LENGTH, (int) $_POST['PinMinLength']));
+        $stmt = $conn->prepare("INSERT INTO settings (SettingKey, SettingValue) VALUES (?, ?) ON DUPLICATE KEY UPDATE SettingValue = ?");
+        $key = 'PinMinLength';
+        $stmt->bind_param("sss", $key, $pinMinVal, $pinMinVal);
+        $stmt->execute();
+        $settings['PinMinLength'] = $pinMinVal;
+    }
 
     // Home-page widget toggles
     $weatherEnabledVal = !empty($_POST['WeatherEnabled']) ? '1' : '0';
@@ -308,7 +319,28 @@ require_once 'header.php';
                 <p style="color:#666; font-size:0.85em; margin:0.25rem 0 0;">
                     The <a href="../kiosk/" target="_blank">kiosk</a> takes a badge scan or a PIN typed on its keypad.
                     Turn off to allow badges only. Wrong PINs lock the kiosk device out for a minute after 10 tries in 5 minutes.
-                    For large sites, use 6-digit PINs: 4-digit PINs are easier to guess when many employees have one.
+                </p>
+            </div>
+            <?php
+            $pinMinSetting = (int) ($settings['PinMinLength'] ?? PIN_DEFAULT_MIN);
+            if ($pinMinSetting < PIN_ABS_MIN || $pinMinSetting > PIN_MAX_LENGTH) { $pinMinSetting = PIN_DEFAULT_MIN; }
+            $shortPins = (int) $conn->query("SELECT COUNT(*) FROM users WHERE PIN IS NOT NULL AND PIN <> '' AND CHAR_LENGTH(PIN) < {$pinMinSetting}")->fetch_column();
+            ?>
+            <div class="field">
+                <label for="PinMinLength">Minimum PIN length</label>
+                <select id="PinMinLength" name="PinMinLength" style="width:auto;">
+                    <?php for ($n = PIN_ABS_MIN; $n <= PIN_MAX_LENGTH; $n++): ?>
+                    <option value="<?= $n ?>" <?= $n === $pinMinSetting ? 'selected' : '' ?>><?= $n ?> digits<?= $n === PIN_DEFAULT_MIN ? ' (default)' : '' ?></option>
+                    <?php endfor; ?>
+                </select>
+                <p style="color:#666; font-size:0.85em; margin:0.25rem 0 0;">
+                    Applies when a PIN is set (Users page or the employee's own settings); PINs can be up to <?= PIN_MAX_LENGTH ?> digits.
+                    3 digits lets employees use an existing 3-digit employee number, but short PINs are easier to guess,
+                    so a PIN only clocks in and out (it never signs in to the portal).
+                    <?php if ($shortPins > 0): ?>
+                    <br><strong><?= $shortPins ?> employee<?= $shortPins === 1 ? ' has a PIN' : 's have PINs' ?> shorter than this.</strong>
+                    They keep working until changed.
+                    <?php endif; ?>
                 </p>
             </div>
             <div class="buttons">

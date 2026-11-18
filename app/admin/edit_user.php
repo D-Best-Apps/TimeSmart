@@ -17,6 +17,7 @@ require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('manage_users');
 require_once __DIR__ . '/../functions/profile_photo.php';
 require_once __DIR__ . '/../functions/pay_rules.php'; // listShifts()
+require_once __DIR__ . '/../functions/pin_policy.php';
 
 $id = $_GET['id'] ?? null;
 if (!$id || !is_numeric($id)) {
@@ -56,9 +57,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password = $_POST['Password'];
     $enable2FA = isset($_POST['Enable2FA']) ? 1 : 0;
 
-    // PIN, if given, must be 4-6 digits
-    if ($pin !== '' && !preg_match('/^\d{4,6}$/', $pin)) {
-        header('Location: ../error.php?code=400&message=' . urlencode('PIN must be 4 to 6 digits.'));
+    // PIN, if given, must meet the PIN length setting (an unchanged PIN on file is kept)
+    if ($pin !== '' && !isValidNewPin($pin, $conn) && $pin !== (string) ($user['PIN'] ?? '')) {
+        header('Location: ../error.php?code=400&message=' . urlencode('PIN must be ' . pinRuleText($conn) . '.'));
         exit;
     }
 
@@ -176,8 +177,8 @@ require_once 'header.php';
             <input type="text" name="BadgeID" value="<?= htmlspecialchars($user['BadgeID'] ?? '') ?>" autocomplete="off" data-1p-ignore="true" data-lpignore="true">
         </label>
 
-        <label>PIN <small>(4-6 digits for quick clock; leave blank for none)</small>
-            <input type="text" name="PIN" value="<?= htmlspecialchars($user['PIN'] ?? '') ?>" inputmode="numeric" pattern="\d{4,6}" maxlength="6" autocomplete="off" data-1p-ignore="true" data-lpignore="true">
+        <label>PIN <small>(<?= htmlspecialchars(pinRuleText($conn)) ?> for quick clock and kiosk; leave blank for none)</small>
+            <input type="text" name="PIN" value="<?= htmlspecialchars($user['PIN'] ?? '') ?>" inputmode="numeric" pattern="<?= htmlspecialchars(pinInputPattern($conn, (string) ($user['PIN'] ?? ''))) ?>" maxlength="<?= PIN_MAX_LENGTH ?>" autocomplete="off" data-1p-ignore="true" data-lpignore="true">
         </label>
 
         <label>Clock Status
