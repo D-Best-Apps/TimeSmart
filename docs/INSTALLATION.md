@@ -66,7 +66,7 @@ sudo apt-get install -y git mariadb-server
 
 # Run the installer from the folder that should hold the install
 cd /opt
-sudo bash <(curl -s https://raw.githubusercontent.com/D-Best-App/Timesmart/main/deploy/scripts/install.sh)
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/D-Best-App/Timesmart/main/deploy/scripts/install.sh)"
 ```
 
 The installer:

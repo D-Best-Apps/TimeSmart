@@ -6,7 +6,8 @@
 # database (on this host's MariaDB/MySQL, or one you point it at), builds and
 # starts the container, and creates the first admin or loads demo data.
 #
-#   cd /opt && sudo bash <(curl -s https://raw.githubusercontent.com/D-Best-App/Timesmart/main/deploy/scripts/install.sh)
+#   cd /opt && sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/D-Best-App/Timesmart/main/deploy/scripts/install.sh)"
+#   (not "sudo bash <(curl ...)": sudo closes the /dev/fd pipe that form relies on)
 #
 # The app container publishes no ports. Put a reverse proxy (Nginx Proxy
 # Manager, Caddy) or a cloudflared container on the timesmart-net network in
@@ -132,7 +133,7 @@ if [ "$db_mode" = "1" ]; then
     # Containers reach the host over the Docker bridge, so the server must not be
     # bound to 127.0.0.1 only. Listen on all interfaces and let the firewall keep
     # 3306 closed to everything except Docker networks.
-    listening=$(ss -ltnH 2>/dev/null | awk '{print $4}')
+    listening=$(ss -ltnH 2>/dev/null | awk '{print $4}' || true)   # no ss: offer the fix below
     if ! grep -qE '^(0\.0\.0\.0|\*|\[::\]):3306$' <<<"$listening"; then
         warn "The database server only listens on localhost, so containers can't reach it."
         if yes_no "Make it listen for Docker containers (adds a MariaDB config file and restarts it)?" "y"; then
