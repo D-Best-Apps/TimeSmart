@@ -325,9 +325,14 @@ foreach ($employees as $eid => $u) {
             }
             if ($in !== null && $out === null) {
                 $allClosed = false;
-                // An open punch is only a problem once the day (or the shift) is over
-                $overdue = $date < $today
-                    || ($sched && $sched['end'] !== null && $onDay && $nowSec > $sched['end'] + 3600);
+                // An open punch is only a problem once the day (or the shift, plus an
+                // hour) is over. An overnight shift ends the next morning, so its punch
+                // from yesterday is still in progress until then.
+                $deadline = strtotime($date) + 86400;
+                if ($sched && $sched['end'] !== null && ($onDay || $sched['end'] > 86400)) {
+                    $deadline = strtotime($date) + $sched['end'] + 3600;
+                }
+                $overdue = time() > $deadline;
                 if ($overdue) {
                     $addEx($eid, $date, 'missing', $fmtTime($r['TimeIN']), 'Clocked in, no clock-out');
                 }
