@@ -21,6 +21,9 @@ require_once __DIR__ . '/../functions/holiday_pay.php';
 requirePermission('view_dashboard');
 
 $canEdit = checkPermission('edit_timesheets');
+// A badge ID clocks its owner in at the kiosk/quick clock: show it only to admins who
+// can already see it on the Users and Badges pages (not reports-only)
+$showBadges = checkPermission('manage_users');
 $policy  = payPolicy($conn);
 $today   = date('Y-m-d');
 $nowSec  = time() - strtotime('today');
@@ -404,13 +407,13 @@ require_once 'header.php';
     <div class="home-panel-body">
         <table id="whosInTable">
             <thead>
-                <tr><th>Name</th><th>Badge</th><th>Shift</th><th>Status</th><th>Last punch</th><th>Absence</th></tr>
+                <tr><th>Name</th><?php if ($showBadges): ?><th>Badge</th><?php endif; ?><th>Shift</th><th>Status</th><th>Last punch</th><th>Absence</th></tr>
             </thead>
             <tbody>
             <?php foreach ($board as $b): ?>
                 <tr data-row="<?= $b['status'] ?>">
                     <td><a href="<?= htmlspecialchars($punchLink($b['id'], $periodStart, $periodEnd)) ?>"><?= htmlspecialchars($b['name']) ?></a></td>
-                    <td><?= htmlspecialchars($b['badge']) ?></td>
+                    <?php if ($showBadges): ?><td><?= htmlspecialchars($b['badge']) ?></td><?php endif; ?>
                     <td>
                         <?php if ($b['sched'] && $b['sched']['shift']): ?>
                             <?= shiftChip($b['sched']['shift']) ?> <span class="muted"><?= htmlspecialchars(shiftTimeRange($b['sched']['shift'])) ?></span>
@@ -426,7 +429,7 @@ require_once 'header.php';
                 </tr>
             <?php endforeach; ?>
             <?php if (!$board): ?>
-                <tr><td colspan="6" class="muted">No employees.</td></tr>
+                <tr><td colspan="<?= $showBadges ? 6 : 5 ?>" class="muted">No employees.</td></tr>
             <?php endif; ?>
             </tbody>
         </table>
