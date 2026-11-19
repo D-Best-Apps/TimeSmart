@@ -48,7 +48,7 @@ bash <(curl -s https://raw.githubusercontent.com/D-Best-App/Timesmart/main/deplo
 It reads the settings from the running container into `.env` (owner-only), restores the
 stock `docker-compose.yml`, then updates as usual. Afterwards `./deploy/scripts/update.sh`
 works as before. Running the old script instead stops on a merge conflict in
-`docker-compose.yml`; if that happens, run `git checkout -- docker-compose.yml && git stash drop`
+`docker-compose.yml`; if that happens, run `git checkout HEAD -- docker-compose.yml && git stash drop`
 and then the command above (the container keeps running throughout).
 
 ### Manual Update

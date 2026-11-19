@@ -66,7 +66,8 @@ if [ ! -f ".env" ]; then
     if grep -q "^DB_PASS='.*'.*'" .env; then
         echo -e "${YELLOW}⚠ DB_PASS contains a single quote; check its quoting in .env${NC}"
     fi
-    git checkout -- docker-compose.yml 2>/dev/null || true
+    # HEAD form: also clears a merge conflict left by an older update.sh's stash pop
+    git checkout HEAD -- docker-compose.yml 2>/dev/null || true
     echo -e "${GREEN}✓ Wrote .env from container $OLD_CONTAINER${NC}"
 fi
 
