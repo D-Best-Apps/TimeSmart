@@ -1,6 +1,6 @@
 <?php
 // admin/payroll_totals.php — one line per employee for a pay period: regular,
-// overtime, PTO, sick and total hours in decimal hours, for keying into payroll
+// overtime, PTO, sick, holiday (when holiday pay is on) and total hours in decimal hours, for keying into payroll
 // (QuickBooks has no integration; this is the hand-off). Paid hours come from
 // timepunches.TotalHours, so shift rounding and auto-lunch are already applied.
 require_once '../auth/db.php';
@@ -17,6 +17,7 @@ requirePermission('view_reports');
 require_once __DIR__ . '/../functions/hours.php';
 require_once __DIR__ . '/../functions/pay_rules.php';
 require_once __DIR__ . '/../functions/time_off_hours.php';
+require_once __DIR__ . '/../functions/holiday_pay.php';
 
 require_once __DIR__ . '/../functions/csrf.php';
 
@@ -86,29 +87,34 @@ foreach ($stmt->get_result()->fetch_all(MYSQLI_ASSOC) as $r) {
 $stmt->close();
 
 $timeOff = timeOffTotalsByEmployee($conn, $start, $end);
+$showHoliday = holidayPayPolicy($conn)['enabled'];
+$holidayPay  = $showHoliday ? holidayPayByEmployee($conn, $start, $end) : [];
 
 $rows = [];
-$grand = ['regular' => 0.0, 'ot' => 0.0, 'pto' => 0.0, 'sick' => 0.0, 'total' => 0.0];
+$grand = ['regular' => 0.0, 'ot' => 0.0, 'pto' => 0.0, 'sick' => 0.0, 'holiday' => 0.0, 'total' => 0.0];
 $users = $conn->query("SELECT ID, FirstName, LastName, ShiftID FROM users ORDER BY LastName, FirstName");
 while ($u = $users->fetch_assoc()) {
     $id = (int) $u['ID'];
-    if (!isset($daily[$id]) && !isset($timeOff[$id]) && !isset($unresolved[$id])) {
+    if (!isset($daily[$id]) && !isset($timeOff[$id]) && !isset($unresolved[$id]) && !isset($holidayPay[$id])) {
         continue; // nothing to pay this period
     }
     $ot   = weeklyOvertime($daily[$id] ?? []);
     $pto  = round($timeOff[$id]['PTO'] ?? 0.0, 2);
     $sick = round($timeOff[$id]['Sick'] ?? 0.0, 2);
+    $hol  = round($holidayPay[$id]['hours'] ?? 0.0, 2);
     $row = [
         'name'    => $u['LastName'] . ', ' . $u['FirstName'],
         'regular' => $ot['totalRegular'],
         'ot'      => $ot['totalOT'],
         'pto'     => $pto,
         'sick'    => $sick,
-        'total'   => round($ot['totalHours'] + $pto + $sick, 2),
+        'holiday' => $hol,
+        'holidayDays' => $holidayPay[$id]['days'] ?? [],
+        'total'   => round($ot['totalHours'] + $pto + $sick + $hol, 2),
         'review'  => $unresolved[$id] ?? 0,
         'id'      => $id,
     ];
-    foreach (['regular', 'ot', 'pto', 'sick', 'total'] as $k) {
+    foreach (['regular', 'ot', 'pto', 'sick', 'holiday', 'total'] as $k) {
         $grand[$k] += $row[$k];
     }
     $rows[] = $row;
@@ -119,7 +125,14 @@ while ($u = $users->fetch_assoc()) {
 $alignedStart = payPeriodStart($start) === $start;
 $alignedEnd   = payPeriodEnd($end) === $end;
 $periodLabel  = date('m/d/Y', strtotime($start)) . ' – ' . date('m/d/Y', strtotime($end));
-$headers = ['Employee', 'Regular', 'Overtime', 'PTO', 'Sick', 'Total'];
+// Hour columns in report order; Holiday only when holiday pay is on
+$cols = ['regular' => 'Regular', 'ot' => 'Overtime', 'pto' => 'PTO', 'sick' => 'Sick'];
+if ($showHoliday) {
+    $cols['holiday'] = 'Holiday';
+}
+$cols['total'] = 'Total';
+$headers = array_merge(['Employee'], array_values($cols));
+$lastCol = chr(ord('A') + count($cols)); // spreadsheet column of Total
 
 $format = $_GET['format'] ?? '';
 if ($format === 'csv') {
@@ -127,12 +140,11 @@ if ($format === 'csv') {
     header('Content-Disposition: attachment; filename="payroll_totals_' . $start . '_to_' . $end . '.csv"');
     $out = fopen('php://output', 'w');
     fputcsv($out, $headers);
+    $csvRow = fn(string $label, array $r) => array_merge([$label], array_map(fn($k) => number_format($r[$k], 2, '.', ''), array_keys($cols)));
     foreach ($rows as $r) {
-        fputcsv($out, [$r['name'], number_format($r['regular'], 2, '.', ''), number_format($r['ot'], 2, '.', ''),
-            number_format($r['pto'], 2, '.', ''), number_format($r['sick'], 2, '.', ''), number_format($r['total'], 2, '.', '')]);
+        fputcsv($out, $csvRow($r['name'], $r));
     }
-    fputcsv($out, ['TOTAL', number_format($grand['regular'], 2, '.', ''), number_format($grand['ot'], 2, '.', ''),
-        number_format($grand['pto'], 2, '.', ''), number_format($grand['sick'], 2, '.', ''), number_format($grand['total'], 2, '.', '')]);
+    fputcsv($out, $csvRow('TOTAL', $grand));
     fclose($out);
     exit;
 }
@@ -144,16 +156,17 @@ if ($format === 'xlsx') {
     $sheet->setCellValue('A1', 'Payroll Totals ' . $periodLabel);
     $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(13);
     $sheet->fromArray($headers, null, 'A3');
-    $sheet->getStyle('A3:F3')->getFont()->setBold(true);
+    $sheet->getStyle("A3:{$lastCol}3")->getFont()->setBold(true);
+    $xlsRow = fn(string $label, array $r) => array_merge([$label], array_map(fn($k) => round($r[$k], 2), array_keys($cols)));
     $n = 4;
     foreach ($rows as $r) {
-        $sheet->fromArray([$r['name'], $r['regular'], $r['ot'], $r['pto'], $r['sick'], $r['total']], null, "A{$n}");
+        $sheet->fromArray($xlsRow($r['name'], $r), null, "A{$n}");
         $n++;
     }
-    $sheet->fromArray(['TOTAL', round($grand['regular'], 2), round($grand['ot'], 2), round($grand['pto'], 2), round($grand['sick'], 2), round($grand['total'], 2)], null, "A{$n}");
-    $sheet->getStyle("A{$n}:F{$n}")->getFont()->setBold(true);
-    $sheet->getStyle("B4:F{$n}")->getNumberFormat()->setFormatCode('0.00');
-    foreach (range('A', 'F') as $col) {
+    $sheet->fromArray($xlsRow('TOTAL', $grand), null, "A{$n}");
+    $sheet->getStyle("A{$n}:{$lastCol}{$n}")->getFont()->setBold(true);
+    $sheet->getStyle("B4:{$lastCol}{$n}")->getNumberFormat()->setFormatCode('0.00');
+    foreach (range('A', $lastCol) as $col) {
         $sheet->getColumnDimension($col)->setAutoSize(true);
     }
     header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -227,7 +240,7 @@ require_once 'header.php';
     <?php else: ?>
     <table class="pt-table">
         <thead>
-            <tr><th>Employee</th><th class="num">Regular</th><th class="num">Overtime</th><th class="num">PTO</th><th class="num">Sick</th><th class="num">Total</th></tr>
+            <tr><th>Employee</th><th class="num">Regular</th><th class="num">Overtime</th><th class="num">PTO</th><th class="num">Sick</th><?php if ($showHoliday): ?><th class="num">Holiday</th><?php endif; ?><th class="num">Total</th></tr>
         </thead>
         <tbody>
         <?php foreach ($rows as $r): ?>
@@ -240,6 +253,9 @@ require_once 'header.php';
                 <td class="num"><?= $r['ot'] > 0 ? '<strong>' . number_format($r['ot'], 2) . '</strong>' : '0.00' ?></td>
                 <td class="num"><?= number_format($r['pto'], 2) ?></td>
                 <td class="num"><?= number_format($r['sick'], 2) ?></td>
+                <?php if ($showHoliday): ?>
+                <td class="num" title="<?= htmlspecialchars(implode(PHP_EOL, array_map(fn($d, $h) => date('D n/j', strtotime($d)) . ' ' . $h['name'] . ': ' . number_format($h['hours'], 2), array_keys($r['holidayDays']), $r['holidayDays']))) ?>"><?= number_format($r['holiday'], 2) ?></td>
+                <?php endif; ?>
                 <td class="num"><strong><?= number_format($r['total'], 2) ?></strong></td>
             </tr>
         <?php endforeach; ?>
@@ -251,6 +267,7 @@ require_once 'header.php';
                 <td class="num"><?= number_format($grand['ot'], 2) ?></td>
                 <td class="num"><?= number_format($grand['pto'], 2) ?></td>
                 <td class="num"><?= number_format($grand['sick'], 2) ?></td>
+                <?php if ($showHoliday): ?><td class="num"><?= number_format($grand['holiday'], 2) ?></td><?php endif; ?>
                 <td class="num"><?= number_format($grand['total'], 2) ?></td>
             </tr>
         </tfoot>
@@ -258,6 +275,7 @@ require_once 'header.php';
     <p class="muted" style="color:var(--muted-text); font-size:.85rem; margin-top:.75rem;">
         Decimal hours. Overtime is hours over <?= overtimeWeeklyHours() ?> per <?= htmlspecialchars(workWeekLabel()) ?> week.
         Worked hours are paid hours after shift rounding and lunch rules. PTO and sick are approved time off and don't count toward overtime.
+        <?php if ($showHoliday): ?>Holiday is holiday pay (<a href="holidays.php">Settings → Holidays</a>); it doesn't count toward overtime either. Hover a holiday figure for the days.<?php endif; ?>
     </p>
     <?php if ($canClose): ?>
     <form method="POST" style="margin-top:1rem;"

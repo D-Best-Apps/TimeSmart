@@ -17,6 +17,7 @@ require_once __DIR__ . '/../functions/hours.php';
 require_once __DIR__ . '/../functions/pay_rules.php';
 require_once __DIR__ . '/../functions/holidays.php';
 require_once __DIR__ . '/../functions/time_off_hours.php';
+require_once __DIR__ . '/../functions/holiday_pay.php';
 requirePermission('view_dashboard');
 
 $canEdit = checkPermission('edit_timesheets');
@@ -241,8 +242,10 @@ foreach ($employees as $eid => $u) {
 $statusLabels = ['In' => 'In', 'Lunch' => 'On lunch', 'Out' => 'Out', 'Absent' => 'Absent', 'Off' => 'Time off'];
 
 // ---------- Panel 2: Hours Summary (range) ----------
+$showHoliday = holidayPayPolicy($conn)['enabled'];
+$holidayPay  = $showHoliday ? holidayPayByEmployee($conn, $start, $end) : [];
 $hours = [];
-$totals = ['regular' => 0.0, 'ot' => 0.0, 'pto' => 0.0, 'sick' => 0.0, 'total' => 0.0];
+$totals = ['regular' => 0.0, 'ot' => 0.0, 'pto' => 0.0, 'sick' => 0.0, 'holiday' => 0.0, 'total' => 0.0];
 foreach ($employees as $eid => $u) {
     $daily = [];
     $open  = 0;
@@ -261,15 +264,16 @@ foreach ($employees as $eid => $u) {
     $ot   = weeklyOvertime($daily, $policy['otWeekly'], $policy['otDaily']);
     $pto  = (float) ($timeOffTotals[$eid]['PTO'] ?? 0);
     $sick = (float) ($timeOffTotals[$eid]['Sick'] ?? 0);
-    if (!$daily && !$open && $pto == 0 && $sick == 0) {
+    $hol  = (float) ($holidayPay[$eid]['hours'] ?? 0);
+    if (!$daily && !$open && $pto == 0 && $sick == 0 && $hol == 0) {
         continue;
     }
     $row = [
         'id' => $eid, 'name' => $u['LastName'] . ', ' . $u['FirstName'], 'open' => $open,
         'regular' => $ot['totalRegular'], 'ot' => $ot['totalOT'], 'pto' => $pto, 'sick' => $sick,
-        'total' => $ot['totalHours'] + $pto + $sick,
+        'holiday' => $hol, 'total' => $ot['totalHours'] + $pto + $sick + $hol,
     ];
-    foreach (['regular', 'ot', 'pto', 'sick', 'total'] as $k) {
+    foreach (['regular', 'ot', 'pto', 'sick', 'holiday', 'total'] as $k) {
         $totals[$k] += $row[$k];
     }
     $hours[] = $row;
@@ -436,7 +440,7 @@ require_once 'header.php';
     <div class="home-panel-body">
         <table>
             <thead>
-                <tr><th>Employee</th><th class="num">Regular</th><th class="num">OT</th><th class="num">PTO</th><th class="num">Sick</th><th class="num">Total</th></tr>
+                <tr><th>Employee</th><th class="num">Regular</th><th class="num">OT</th><th class="num">PTO</th><th class="num">Sick</th><?php if ($showHoliday): ?><th class="num">Holiday</th><?php endif; ?><th class="num">Total</th></tr>
             </thead>
             <tbody>
             <?php foreach ($hours as $h): ?>
@@ -449,11 +453,12 @@ require_once 'header.php';
                     <td class="num<?= $h['ot'] > 0 ? ' ot' : '' ?>"><?= $h['ot'] > 0 ? $fmtHrs($h['ot']) : '' ?></td>
                     <td class="num"><?= $h['pto'] > 0 ? $fmtHrs($h['pto']) : '' ?></td>
                     <td class="num"><?= $h['sick'] > 0 ? $fmtHrs($h['sick']) : '' ?></td>
+                    <?php if ($showHoliday): ?><td class="num"><?= $h['holiday'] > 0 ? $fmtHrs($h['holiday']) : '' ?></td><?php endif; ?>
                     <td class="num strong"><?= $fmtHrs($h['total']) ?></td>
                 </tr>
             <?php endforeach; ?>
             <?php if (!$hours): ?>
-                <tr><td colspan="6" class="muted">No hours in this range.</td></tr>
+                <tr><td colspan="<?= $showHoliday ? 7 : 6 ?>" class="muted">No hours in this range.</td></tr>
             <?php endif; ?>
             </tbody>
             <?php if ($hours): ?>
@@ -464,6 +469,7 @@ require_once 'header.php';
                     <th class="num"><?= $fmtHrs($totals['ot']) ?></th>
                     <th class="num"><?= $fmtHrs($totals['pto']) ?></th>
                     <th class="num"><?= $fmtHrs($totals['sick']) ?></th>
+                    <?php if ($showHoliday): ?><th class="num"><?= $fmtHrs($totals['holiday']) ?></th><?php endif; ?>
                     <th class="num"><?= $fmtHrs($totals['total']) ?></th>
                 </tr>
             </tfoot>

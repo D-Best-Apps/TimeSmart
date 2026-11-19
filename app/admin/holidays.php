@@ -15,6 +15,7 @@ require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('manage_pay_rules');
 require_once __DIR__ . '/../functions/csrf.php';
 require_once __DIR__ . '/../functions/holidays.php';
+require_once __DIR__ . '/../functions/holiday_pay.php';
 
 const HOL_MONTHS   = [1 => 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const HOL_WEEKDAYS = [1 => 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -111,6 +112,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    if ($action === 'save_pay') {
+        $fixed = (float) ($_POST['HolidayPayFixedHours'] ?? 8);
+        $values = [
+            'HolidayPayEnabled'         => !empty($_POST['HolidayPayEnabled']) ? '1' : '0',
+            'HolidayPayMode'            => ($_POST['HolidayPayMode'] ?? '') === 'fixed' ? 'fixed' : 'shift',
+            'HolidayPayFixedHours'      => (string) (($fixed > 0 && $fixed <= 24) ? round($fixed, 2) : 8),
+            'HolidayPayDayOff'          => ($_POST['HolidayPayDayOff'] ?? '') === 'pay' ? 'pay' : 'none',
+            'HolidayPayRequireAdjacent' => !empty($_POST['HolidayPayRequireAdjacent']) ? '1' : '0',
+        ];
+        $st = $conn->prepare("INSERT INTO settings (SettingKey, SettingValue) VALUES (?, ?) ON DUPLICATE KEY UPDATE SettingValue = VALUES(SettingValue)");
+        foreach ($values as $k => $v) {
+            $st->bind_param("ss", $k, $v);
+            $st->execute();
+        }
+        header('Location: holidays.php?notice=' . urlencode('Holiday pay settings saved.'));
+        exit;
+    }
+
+    if ($action === 'toggle_paid') {
+        $id = (int) ($_POST['id'] ?? 0);
+        $st = $conn->prepare("UPDATE holidays SET Paid = 1 - Paid WHERE ID = ?");
+        $st->bind_param("i", $id);
+        $st->execute();
+        header('Location: holidays.php');
+        exit;
+    }
+
     if ($action === 'delete') {
         $id = (int) ($_POST['id'] ?? 0);
         $st = $conn->prepare("SELECT Name FROM holidays WHERE ID = ?");
@@ -169,13 +197,24 @@ foreach ([$thisYear, $thisYear + 1] as $y) {
 }
 ksort($upcoming);
 
+$payPolicy = holidayPayPolicy($conn);
+$shiftHours = [];
+try {
+    foreach (listShifts($conn) as $sh) {
+        $shiftHours[] = $sh['Name'] . ' ' . rtrim(rtrim(number_format(shiftScheduledHours($sh), 2), '0'), '.') . ' h';
+    }
+} catch (mysqli_sql_exception $e) {
+    $shiftHours = [];
+}
+
 $pageTitle = "Holidays";
 require_once 'header.php';
 ?>
 <style>
     .page-holidays .container { max-width: 1200px; }
     .hol-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 1.5rem; align-items: start; }
-    @media (max-width: 900px) { .hol-grid { grid-template-columns: minmax(0, 1fr); } }
+    @media (max-width: 1150px) { .hol-grid { grid-template-columns: minmax(0, 1fr); } }
+    .hol-table-wrap { overflow-x: auto; }
     .hol-table { width: 100%; border-collapse: collapse; font-size: .92rem; margin: 0; }
     .hol-table th, .hol-table td { padding: .45rem .6rem; border-bottom: 1px solid #eef1f4; text-align: left; }
     .hol-table th { color: var(--primary-color); background: #eef3f7; }
@@ -192,11 +231,15 @@ require_once 'header.php';
     .notice { background: #e7f5ec; color: #146c43; padding: .6rem .9rem; border-radius: 6px; margin-bottom: 1rem; }
     .errors { background: #fdecea; color: #b02a37; padding: .6rem .9rem; border-radius: 6px; margin-bottom: 1rem; }
     .upcoming li { padding: .2rem 0; }
+    .pay-form .check { display: flex; gap: .5rem; align-items: center; font-weight: normal; margin: .3rem 0; }
+    .pay-form .check input { width: auto; margin: 0; }
+    .pay-form .opt-title { font-weight: 600; margin: 1rem 0 .2rem; color: var(--primary-color); }
+    .pay-form .hol-muted { margin: .2rem 0 .4rem; }
 </style>
 
 <p class="hol-muted" style="margin-top:0;">
     Days the company is closed. On a holiday, full-day time off doesn't use any PTO or Sick hours (like a weekend),
-    and the Home board doesn't flag no-shows or late arrivals. Holidays don't add pay by themselves.
+    and the Home board doesn't flag no-shows or late arrivals. Holiday pay is set up on the right.
     A holiday that lands on a Saturday is observed the Friday before, and on a Sunday the Monday after,
     unless you turn that off for a custom holiday.
 </p>
@@ -210,8 +253,9 @@ require_once 'header.php';
 <div class="hol-grid">
 <div>
     <h2 style="margin-top:0;">Company holidays</h2>
+    <div class="hol-table-wrap">
     <table class="hol-table">
-        <thead><tr><th>Holiday</th><th>Rule</th><th><?= $thisYear ?></th><th><?= $thisYear + 1 ?></th><th></th></tr></thead>
+        <thead><tr><th>Holiday</th><th>Rule</th><th><?= $thisYear ?></th><th><?= $thisYear + 1 ?></th><?php if ($payPolicy['enabled']): ?><th>Pay</th><?php endif; ?><th></th></tr></thead>
         <tbody>
         <?php foreach ($rules as $r): ?>
             <tr>
@@ -219,6 +263,16 @@ require_once 'header.php';
                 <td class="muted"><?= htmlspecialchars(holidayRuleText($r)) ?></td>
                 <td><?= holidayDateText($r['_this']) ?></td>
                 <td><?= holidayDateText($r['_next']) ?></td>
+                <?php if ($payPolicy['enabled']): ?>
+                <td>
+                    <form method="POST" style="display:inline;">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="action" value="toggle_paid">
+                        <input type="hidden" name="id" value="<?= (int) $r['ID'] ?>">
+                        <button type="submit" class="btn small <?= (int) ($r['Paid'] ?? 1) === 1 ? 'primary' : 'secondary' ?>" title="Click to switch"><?= (int) ($r['Paid'] ?? 1) === 1 ? 'Paid' : 'Unpaid' ?></button>
+                    </form>
+                </td>
+                <?php endif; ?>
                 <td>
                     <form method="POST" style="display:inline;" onsubmit="return confirm('Remove <?= htmlspecialchars(addslashes($r['Name']), ENT_QUOTES) ?> from the holiday list?')">
                         <?= csrf_field() ?>
@@ -230,10 +284,11 @@ require_once 'header.php';
             </tr>
         <?php endforeach; ?>
         <?php if (!$rules && $tableReady): ?>
-            <tr><td colspan="5" class="muted">No holidays. Add some below.</td></tr>
+            <tr><td colspan="<?= $payPolicy['enabled'] ? 6 : 5 ?>" class="muted">No holidays. Add some below.</td></tr>
         <?php endif; ?>
         </tbody>
     </table>
+    </div>
 
     <?php if ($tableReady && $available): ?>
     <h2 style="margin-top:2rem;">Add common holidays</h2>
@@ -285,6 +340,38 @@ require_once 'header.php';
     <?php endif; ?>
 </div>
 
+<div>
+<div class="panel">
+    <h3>Holiday pay</h3>
+    <?php if ($tableReady): ?>
+    <form method="POST" class="pay-form">
+        <?= csrf_field() ?>
+        <input type="hidden" name="action" value="save_pay">
+        <label class="check"><input type="checkbox" name="HolidayPayEnabled" value="1" <?= $payPolicy['enabled'] ? 'checked' : '' ?>> Pay holidays</label>
+        <p class="hol-muted">Adds a Holiday column to Payroll Totals and the Home board. Holiday hours are added to the total but don't count toward overtime. Someone who works on a holiday is paid for those hours as well.</p>
+
+        <div class="opt-title">Hours for each holiday</div>
+        <label class="check"><input type="radio" name="HolidayPayMode" value="shift" <?= $payPolicy['mode'] === 'shift' ? 'checked' : '' ?>> The employee's scheduled shift hours (less lunch)</label>
+        <label class="check"><input type="radio" name="HolidayPayMode" value="fixed" <?= $payPolicy['mode'] === 'fixed' ? 'checked' : '' ?>> The same for everyone:</label>
+        <label class="check" style="margin-left:1.6rem;"><input type="number" name="HolidayPayFixedHours" min="0.25" max="24" step="0.25" value="<?= htmlspecialchars((string) $payPolicy['fixedHours']) ?>" style="width:5.5rem;"> hours <span class="hol-muted">(also used for employees without a shift)</span></label>
+        <?php if ($shiftHours): ?>
+        <p class="hol-muted">Shift hours now: <?= htmlspecialchars(implode(', ', $shiftHours)) ?>.</p>
+        <?php endif; ?>
+
+        <div class="opt-title">Holiday on an employee's day off</div>
+        <label class="check"><input type="radio" name="HolidayPayDayOff" value="none" <?= $payPolicy['dayOff'] === 'none' ? 'checked' : '' ?>> No holiday pay</label>
+        <label class="check"><input type="radio" name="HolidayPayDayOff" value="pay" <?= $payPolicy['dayOff'] === 'pay' ? 'checked' : '' ?>> Pay it anyway</label>
+        <p class="hol-muted">A day off is a day the employee's shift doesn't run (e.g. Friday for a Mon–Thu shift), or a weekend for someone without a shift.</p>
+
+        <div class="opt-title">Eligibility</div>
+        <label class="check"><input type="checkbox" name="HolidayPayRequireAdjacent" value="1" <?= $payPolicy['requireAdjacent'] ? 'checked' : '' ?>> Must work their scheduled day before and after the holiday</label>
+        <p class="hol-muted">Approved time off counts as worked. The holiday shows up once the day after has been worked. Holidays before an employee's first punch are never paid.</p>
+
+        <button type="submit" class="btn primary">Save holiday pay</button>
+    </form>
+    <?php endif; ?>
+</div>
+
 <div class="panel">
     <h3>Next 12 months</h3>
     <?php if ($upcoming): ?>
@@ -296,6 +383,7 @@ require_once 'header.php';
     <?php else: ?>
     <p class="hol-muted">No holidays in the next 12 months.</p>
     <?php endif; ?>
+</div>
 </div>
 </div>
 

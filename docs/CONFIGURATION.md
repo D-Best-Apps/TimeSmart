@@ -391,7 +391,16 @@ Labor Day, Thanksgiving and Christmas Day.
   turned off per custom holiday). When two holidays land on the same weekday, the earlier one
   moves back a day (Christmas Eve moves to Thursday when Christmas is observed Friday).
 - On a holiday, full-day time off uses no PTO/Sick hours and the admin Home board doesn't flag
-  no-shows or late arrivals. Holidays add no pay hours by themselves.
+  no-shows or late arrivals.
+- **Holiday pay** (same page, off by default) adds a Holiday column to Payroll Totals (screen,
+  Excel, CSV) and the Home board's Hours Summary. Holiday hours count in the total, never toward
+  overtime; working on a holiday is paid on top. Each holiday can be switched Paid/Unpaid.
+  Settings: `HolidayPayEnabled`, `HolidayPayMode` (`shift` = the employee's scheduled shift hours
+  less lunch, `fixed` = `HolidayPayFixedHours`, also used for employees without a shift),
+  `HolidayPayDayOff` (`none`/`pay` when the holiday is on the employee's day off) and
+  `HolidayPayRequireAdjacent` (must work the scheduled day before and after; approved time off
+  counts). Holidays before an employee's first punch are never paid. Logic:
+  `app/functions/holiday_pay.php`.
 - The calendar logic is `app/functions/holidays.php` (`isCompanyHoliday()`, `isWorkday()`).
 
 ### Notification Recipients

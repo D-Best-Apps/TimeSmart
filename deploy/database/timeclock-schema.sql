@@ -242,6 +242,7 @@ CREATE TABLE `holidays` (
   `OffsetDays` smallint(6) NOT NULL DEFAULT 0,
   `OnceDate` date DEFAULT NULL,
   `ObserveWeekday` tinyint(1) NOT NULL DEFAULT 1,
+  `Paid` tinyint(1) NOT NULL DEFAULT 1,
   `PresetKey` varchar(40) DEFAULT NULL,
   PRIMARY KEY (`ID`),
   UNIQUE KEY `PresetKey` (`PresetKey`)
@@ -254,6 +255,15 @@ INSERT INTO `holidays` (`Name`, `RuleType`, `Month`, `Day`, `Weekday`, `OffsetDa
   ('Labor Day',         'nth',   9,  1,    1,    0, 1, 'labor'),
   ('Thanksgiving',      'nth',   11, 4,    4,    0, 1, 'thanksgiving'),
   ('Christmas Day',     'fixed', 12, 25,   NULL, 0, 1, 'christmas');
+
+-- Holiday pay (Settings -> Holidays); off until an admin turns it on
+INSERT INTO `settings` (`SettingKey`, `SettingValue`) VALUES
+  ('HolidayPayEnabled', '0'),
+  ('HolidayPayMode', 'shift'),
+  ('HolidayPayFixedHours', '8'),
+  ('HolidayPayDayOff', 'none'),
+  ('HolidayPayRequireAdjacent', '0')
+ON DUPLICATE KEY UPDATE `SettingKey` = `SettingKey`;
 
 -- ===== Migration tracking (populated by deploy/scripts/run_migrations.php) =====
 CREATE TABLE IF NOT EXISTS `schema_migrations` (
