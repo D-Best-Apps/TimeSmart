@@ -378,6 +378,22 @@ punched). See [SHIFT_ROUNDING_PLAN.md](SHIFT_ROUNDING_PLAN.md) for the design.
 
 Test the engine without a database: `php deploy/scripts/test_pay_rules.php`.
 
+### Holidays
+
+Company holidays are edited on **Settings → Holidays** (`admin/holidays.php`, super admins) and
+stored in the `holidays` table as rules, so the list carries over every year: a fixed date
+(Dec 25), the Nth or last weekday of a month (4th Thursday of November), Easter-based
+(Good Friday), or a single date. Common US holidays can be ticked from a list; others are added
+as custom holidays. Every install starts with New Year's Day, Memorial Day, Independence Day,
+Labor Day, Thanksgiving and Christmas Day.
+
+- A holiday on a Saturday is observed the Friday before, on a Sunday the Monday after (can be
+  turned off per custom holiday). When two holidays land on the same weekday, the earlier one
+  moves back a day (Christmas Eve moves to Thursday when Christmas is observed Friday).
+- On a holiday, full-day time off uses no PTO/Sick hours and the admin Home board doesn't flag
+  no-shows or late arrivals. Holidays add no pay hours by themselves.
+- The calendar logic is `app/functions/holidays.php` (`isCompanyHoliday()`, `isWorkday()`).
+
 ### Notification Recipients
 
 Who gets notified when an employee submits a request is configured in the admin portal

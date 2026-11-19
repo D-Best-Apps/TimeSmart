@@ -14,6 +14,7 @@ DROP TABLE IF EXISTS `admins`;
 DROP TABLE IF EXISTS `users`;
 DROP TABLE IF EXISTS `Offices`;
 DROP TABLE IF EXISTS `shifts`;
+DROP TABLE IF EXISTS `holidays`;
 DROP TABLE IF EXISTS `user-archive`;
 SET FOREIGN_KEY_CHECKS = 1;
 
@@ -229,6 +230,30 @@ CREATE TABLE `user-archive` (
   `ArchivedAt` datetime NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`ID`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- Company holidays (Settings -> Holidays); starts with the six standard US holidays
+CREATE TABLE `holidays` (
+  `ID` int(11) NOT NULL AUTO_INCREMENT,
+  `Name` varchar(100) NOT NULL,
+  `RuleType` enum('fixed','nth','last','easter','once') NOT NULL,
+  `Month` tinyint(4) DEFAULT NULL,
+  `Day` tinyint(4) DEFAULT NULL,
+  `Weekday` tinyint(4) DEFAULT NULL,
+  `OffsetDays` smallint(6) NOT NULL DEFAULT 0,
+  `OnceDate` date DEFAULT NULL,
+  `ObserveWeekday` tinyint(1) NOT NULL DEFAULT 1,
+  `PresetKey` varchar(40) DEFAULT NULL,
+  PRIMARY KEY (`ID`),
+  UNIQUE KEY `PresetKey` (`PresetKey`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+INSERT INTO `holidays` (`Name`, `RuleType`, `Month`, `Day`, `Weekday`, `OffsetDays`, `ObserveWeekday`, `PresetKey`) VALUES
+  ('New Year''s Day',   'fixed', 1,  1,    NULL, 0, 1, 'new_year'),
+  ('Memorial Day',      'last',  5,  NULL, 1,    0, 1, 'memorial'),
+  ('Independence Day',  'fixed', 7,  4,    NULL, 0, 1, 'independence'),
+  ('Labor Day',         'nth',   9,  1,    1,    0, 1, 'labor'),
+  ('Thanksgiving',      'nth',   11, 4,    4,    0, 1, 'thanksgiving'),
+  ('Christmas Day',     'fixed', 12, 25,   NULL, 0, 1, 'christmas');
 
 -- ===== Migration tracking (populated by deploy/scripts/run_migrations.php) =====
 CREATE TABLE IF NOT EXISTS `schema_migrations` (

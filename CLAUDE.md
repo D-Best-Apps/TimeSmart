@@ -165,6 +165,7 @@ DB_TIMEZONE='America/Chicago'
 
 ### Shifts and Paid Hours
 - Shifts (rounding windows, auto-lunch) are edited on **Settings → Shifts** and assigned on the Users page
+- Company holidays are edited on **Settings → Holidays** (`holidays` table; see CONFIGURATION.md)
 - Raw punch times are never changed; `timepunches.TotalHours` holds **paid** hours after shift rules
 - Engine tests (no DB needed): `php deploy/scripts/test_pay_rules.php`
 - See [docs/CONFIGURATION.md](docs/CONFIGURATION.md#shifts-rounding-and-auto-lunch)
