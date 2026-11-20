@@ -36,6 +36,11 @@ if (!$user) {
     echo "User not found.";
     exit;
 }
+if ($user['ArchivedAt'] !== null) {
+    // Editing would hand an archived employee a badge/PIN again; unarchive first
+    header("Location: archived_users.php?msg=" . urlencode($user['FirstName'] . ' ' . $user['LastName'] . ' is archived. Unarchive them to edit their details.'));
+    exit;
+}
 
 $offices_result = $conn->query("SELECT OfficeName FROM Offices ORDER BY OfficeName");
 $offices_data = [];

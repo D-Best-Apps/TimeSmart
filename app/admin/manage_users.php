@@ -21,6 +21,7 @@ require_once __DIR__ . '/../functions/csrf.php';
 $users_result = $conn->query("
     SELECT ID, FirstName, LastName, BadgeID, PIN, EmployeeNumber, ClockStatus, Office, TwoFAEnabled, LockOut, ShiftID
     FROM users
+    WHERE ArchivedAt IS NULL
     ORDER BY LastName
 ");
 
@@ -69,6 +70,9 @@ require_once 'header.php';
         </form>
     </div>
 
+    <?php if (isset($_GET['msg']) && $_GET['msg'] !== ''): ?>
+        <div class="alert alert-info"><?= htmlspecialchars((string) $_GET['msg']) ?></div>
+    <?php endif; ?>
     <?php if (isset($_GET['assigned'])): ?>
         <div class="alert alert-success"><?= (int) $_GET['assigned'] ?> employee(s) updated.</div>
     <?php endif; ?>
@@ -260,10 +264,11 @@ require_once 'header.php';
 <div id="archiveModal" class="modal">
     <div class="modal-content">
         <h3>Archive User</h3>
-        <p>Are you sure you want to archive this user? This will remove them from the active user list, but their data will be kept in the archive.</p>
+        <p>Archive this user? They won't be able to sign in or punch, and they'll be left out of active lists. Their punches, time off and history are kept, so reports and payroll for dates they worked don't change. You can unarchive them later from <strong>View Archived Users</strong>.</p>
         <div class="modal-actions">
             <button class="btn" onclick="closeArchiveModal()">Cancel</button>
             <form id="archiveForm" action="archive_user.php" method="POST" style="display:inline;">
+                <?= csrf_field() ?>
                 <input type="hidden" name="ID" id="archiveUserId">
                 <button type="submit" class="btn primary">Yes, Archive</button>
             </form>
