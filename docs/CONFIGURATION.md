@@ -415,7 +415,8 @@ Labor Day, Thanksgiving and Christmas Day.
   holiday, a full one the rules skipped, or 0 — with a note (`holiday_pay_adjustments`); that
   wins over every rule and shows as "set by hand" on Payroll Totals. Holidays before an employee's first punch are never paid, nor holidays with no punch
   or approved PTO/Sick in the 14 days before them (company holidays not counted), which leaves
-  out people who have left but aren't archived yet and long unpaid leave. Logic:
+  out people who have left but aren't archived yet and long unpaid leave. Holidays after the day
+  an employee was archived aren't paid either. Logic:
   `app/functions/holiday_pay.php`.
 - The calendar logic is `app/functions/holidays.php` (`isCompanyHoliday()`, `isWorkday()`;
   `isTimeOffDay()` for what full-day time off is charged on).
