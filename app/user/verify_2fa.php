@@ -105,7 +105,7 @@ if (!isset($_SESSION['2fa_attempts'])) {
 
 $empID = (int)$_SESSION['temp_user_id'];
 
-$stmt = $conn->prepare("SELECT FirstName, Email, TwoFARecoveryCode FROM users WHERE ID = ?");
+$stmt = $conn->prepare("SELECT FirstName, Email, TwoFARecoveryCode FROM users WHERE ID = ? AND ArchivedAt IS NULL");
 $stmt->bind_param("i", $empID);
 $stmt->execute();
 $res  = $stmt->get_result();

@@ -7,6 +7,8 @@ if (!isset($_SESSION['admin'])) {
     http_response_code(403);
     exit('Forbidden');
 }
+require_once __DIR__ . '/../functions/archived_users.php';
+endSessionIfArchived($conn); // archived since signing in: sign out
 
 $id     = isset($_POST['id']) ? (int)$_POST['id'] : 0;
 $action = $_POST['action'] ?? '';

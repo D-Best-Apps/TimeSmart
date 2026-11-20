@@ -18,6 +18,8 @@ if (!isset($_SESSION['EmployeeID'])) {
     header("Location: login.php");
     exit;
 }
+require_once __DIR__ . '/../functions/archived_users.php';
+endSessionIfArchived($conn); // archived since signing in: sign out
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header("Location: time_off.php");

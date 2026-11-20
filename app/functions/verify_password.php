@@ -13,7 +13,7 @@ if (!$empID || !$password) {
 }
 
 // Prepare user lookup
-$stmt = $conn->prepare("SELECT ID, Pass, ClockStatus FROM users WHERE ID = ?");
+$stmt = $conn->prepare("SELECT ID, Pass, ClockStatus FROM users WHERE ID = ? AND ArchivedAt IS NULL");
 $stmt->bind_param("s", $empID);
 $stmt->execute();
 $result = $stmt->get_result();

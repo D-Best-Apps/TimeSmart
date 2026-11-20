@@ -255,7 +255,8 @@ function kiosk_identify(mysqli $conn, string $value): array {
     }
     $isPin = looksLikePin($value) && getSettingValue('KioskPinEnabled', $conn) !== '0';
 
-    $stmt = $conn->prepare("SELECT ID, FirstName FROM users WHERE BadgeID = ? OR (? = 1 AND PIN = ?) LIMIT 2");
+    // Archived employees hold no badge/PIN (archive moves them aside); the ArchivedAt test is belt and braces.
+    $stmt = $conn->prepare("SELECT ID, FirstName FROM users WHERE (BadgeID = ? OR (? = 1 AND PIN = ?)) AND ArchivedAt IS NULL LIMIT 2");
     $pinFlag = $isPin ? 1 : 0;
     $stmt->bind_param("sis", $value, $pinFlag, $value);
     $stmt->execute();
@@ -556,7 +557,7 @@ if (!empty($_POST['mode']) && $_POST['mode'] === 'quickclock') {
     }
 
     // Lookup employee by PIN or BadgeID
-    $stmt = $conn->prepare("SELECT ID, FirstName FROM users WHERE $col = ?");
+    $stmt = $conn->prepare("SELECT ID, FirstName FROM users WHERE $col = ? AND ArchivedAt IS NULL");
     if (!$stmt) { send_json_response(false, "DB prepare error (quickclock)", 500, $conn->error); }
     $stmt->bind_param("s", $value);
     $stmt->execute();
@@ -646,7 +647,7 @@ if (!$empID || !$action) {
 // Anything else (a blind POST with an EmployeeID and neither) is rejected.
 $providedPassword = (string) ($input['password'] ?? '');
 if ($providedPassword !== '') {
-    $authStmt = $conn->prepare("SELECT Pass FROM users WHERE ID = ?");
+    $authStmt = $conn->prepare("SELECT Pass FROM users WHERE ID = ? AND ArchivedAt IS NULL");
     if (!$authStmt) { send_json_response(false, "DB prepare error (auth)", 500, $conn->error); }
     $authStmt->bind_param("i", $empID);
     $authStmt->execute();
@@ -736,7 +737,7 @@ $pendingTime = ($adjustedTimeFormatted && $adjustedTimeFormatted !== $now) ? $ad
 // --- Get User Status & Latest Punch ---
 
 // Get current user status
-$userStmt = $conn->prepare("SELECT ClockStatus FROM users WHERE ID = ?");
+$userStmt = $conn->prepare("SELECT ClockStatus FROM users WHERE ID = ? AND ArchivedAt IS NULL"); // archived: can't punch
 if ($userStmt === false) { send_json_response(false, "DB prepare error (user)", 500, $conn->error); }
 $userStmt->bind_param("i", $empID);
 if (!$userStmt->execute()) { send_json_response(false, "DB execute error (user)", 500, $userStmt->error); }

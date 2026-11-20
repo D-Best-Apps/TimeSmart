@@ -13,6 +13,8 @@ if (!isset($_SESSION['EmployeeID'])) {
     header("Location: login.php");
     exit;
 }
+require_once __DIR__ . '/../functions/archived_users.php';
+endSessionIfArchived($conn); // archived since signing in: sign out
 
 $sessionEmpID = $_SESSION['EmployeeID'];
 $postEmpID = $_POST['EmployeeID'] ?? null;

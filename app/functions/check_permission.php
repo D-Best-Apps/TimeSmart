@@ -48,6 +48,12 @@ function checkPermission($required_permission) {
  * @param string $redirect_url Optional custom redirect URL (default: reports.php)
  */
 function requirePermission($required_permission, $redirect_url = 'reports.php') {
+    // An admin archived since signing in loses the session (functions/archived_users.php)
+    global $conn;
+    if (isset($_SESSION['admin']) && $conn instanceof mysqli) {
+        require_once __DIR__ . '/archived_users.php';
+        endSessionIfArchived($conn, 'login.php');
+    }
     if (!checkPermission($required_permission)) {
         $error_message = urlencode('You do not have permission to access this page.');
         header("Location: {$redirect_url}?error=" . $error_message);
