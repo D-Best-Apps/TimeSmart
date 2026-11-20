@@ -366,7 +366,8 @@ require_once 'header.php';
 
         <div class="opt-title">Eligibility</div>
         <label class="check"><input type="checkbox" name="HolidayPayRequireAdjacent" value="1" <?= $payPolicy['requireAdjacent'] ? 'checked' : '' ?>> Must work their scheduled day before and after the holiday</label>
-        <p class="hol-muted">Approved time off counts as worked. The holiday shows up once the day after has been worked. Holidays before an employee's first punch are never paid.</p>
+        <p class="hol-muted">Approved time off counts as worked. The holiday shows up once the day after has been worked.</p>
+        <p class="hol-muted">Always: holidays before an employee's first punch aren't paid, and neither are holidays with no punch or paid time off in the two weeks before them (someone who has left but isn't archived yet, or is on unpaid leave).</p>
 
         <button type="submit" class="btn primary">Save holiday pay</button>
     </form>

@@ -12,7 +12,10 @@
  *   - Optional rule: the employee must work their last scheduled day before the holiday
  *     and their first scheduled day after it. Approved PTO/Sick counts as worked. While
  *     the day after is still to come, the holiday isn't counted yet.
- *   - Holidays before an employee's first day on the clock earn nothing.
+ *   - Holidays before an employee's first day on the clock earn nothing, and so do
+ *     holidays with no punch or paid time off in the 14 days before them (company
+ *     holidays not counted): someone who has left but isn't archived yet, or is on
+ *     long unpaid leave.
  * Holiday hours are reported in their own column and never count toward overtime
  * (they aren't hours worked). Working on a holiday is paid as usual, on top.
  */
@@ -21,6 +24,9 @@ require_once __DIR__ . '/settings_helper.php';
 require_once __DIR__ . '/holidays.php';
 require_once __DIR__ . '/pay_rules.php';      // shiftWindow(), shiftRunsOn(), listShifts()
 require_once __DIR__ . '/time_off_hours.php'; // fetchApprovedTimeOff()
+
+/** Holiday pay needs a punch or paid time off within this many (non-holiday) days before the holiday. */
+const HOLIDAY_PAY_ACTIVE_DAYS = 14;
 
 /** @return array{enabled:bool,mode:string,fixedHours:float,dayOff:string,requireAdjacent:bool} */
 function holidayPayPolicy(mysqli $conn): array
@@ -96,26 +102,42 @@ function holidayPayByEmployee(mysqli $conn, string $start, string $end): array
         $firstDay[(int) $r['EmployeeID']] = $r['d'];
     }
 
-    // Days worked (or on approved time off) around the holidays, for the before/after rule
+    // Days worked (or on paid time off) around the holidays, for the recent-activity
+    // rule and the before/after rule
     $worked = [];
-    if ($policy['requireAdjacent']) {
-        $from = (new DateTime(array_key_first($holidays)))->modify('-21 days')->format('Y-m-d');
-        $to   = (new DateTime(array_key_last($holidays)))->modify('+21 days')->format('Y-m-d');
-        $st = $conn->prepare("SELECT DISTINCT EmployeeID, Date FROM timepunches WHERE TimeIN IS NOT NULL AND Date BETWEEN ? AND ?");
-        $st->bind_param("ss", $from, $to);
-        $st->execute();
-        foreach ($st->get_result()->fetch_all(MYSQLI_ASSOC) as $r) {
-            $worked[(int) $r['EmployeeID']][$r['Date']] = true;
+    $from = (new DateTime(array_key_first($holidays)))->modify('-' . (HOLIDAY_PAY_ACTIVE_DAYS + 31) . ' days')->format('Y-m-d');
+    $to   = (new DateTime(array_key_last($holidays)))->modify('+21 days')->format('Y-m-d');
+    $st = $conn->prepare("SELECT DISTINCT EmployeeID, Date FROM timepunches WHERE TimeIN IS NOT NULL AND Date BETWEEN ? AND ?");
+    $st->bind_param("ss", $from, $to);
+    $st->execute();
+    foreach ($st->get_result()->fetch_all(MYSQLI_ASSOC) as $r) {
+        $worked[(int) $r['EmployeeID']][$r['Date']] = true;
+    }
+    foreach (fetchApprovedTimeOff($conn, $from, $to) as $req) {
+        if (!timeOffIsPaid($req)) {
+            continue; // an unpaid absence isn't paid leave
         }
-        foreach (fetchApprovedTimeOff($conn, $from, $to) as $req) {
-            if (!timeOffIsPaid($req)) {
-                continue; // an unpaid absence isn't paid leave
-            }
-            for ($d = new DateTime(max($req['StartDate'], $from)); $d->format('Y-m-d') <= min($req['EndDate'], $to); $d->modify('+1 day')) {
-                $worked[(int) $req['EmployeeID']][$d->format('Y-m-d')] = true;
-            }
+        for ($d = new DateTime(max($req['StartDate'], $from)); $d->format('Y-m-d') <= min($req['EndDate'], $to); $d->modify('+1 day')) {
+            $worked[(int) $req['EmployeeID']][$d->format('Y-m-d')] = true;
         }
     }
+
+    // Worked or on paid time off in the HOLIDAY_PAY_ACTIVE_DAYS days before $date. Company
+    // holidays don't count toward those days, so a run of holidays (Christmas Eve,
+    // Christmas, New Year's) doesn't push the employee's last work day out of the window.
+    $recentlyActive = function (int $eid, string $date) use (&$worked): bool {
+        $d = new DateTime($date);
+        for ($seen = 0, $i = 0; $seen < HOLIDAY_PAY_ACTIVE_DAYS && $i < HOLIDAY_PAY_ACTIVE_DAYS + 31; $i++) {
+            $x = $d->modify('-1 day')->format('Y-m-d');
+            if (!empty($worked[$eid][$x])) {
+                return true;
+            }
+            if (isCompanyHoliday($x) === null) {
+                $seen++;
+            }
+        }
+        return false;
+    };
 
     $today = date('Y-m-d');
     $out = [];
@@ -142,6 +164,9 @@ function holidayPayByEmployee(mysqli $conn, string $start, string $end): array
             }
             if (!$runs($date) && $policy['dayOff'] === 'none') {
                 continue; // the holiday falls on this employee's day off
+            }
+            if (!$recentlyActive($eid, $date)) {
+                continue; // nothing in the last two weeks: has left, or on unpaid leave
             }
             if ($policy['requireAdjacent']) {
                 $before = $adjacent($date, -1);
