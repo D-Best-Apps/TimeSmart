@@ -12,18 +12,18 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-# Try to detect container name
-CONTAINER_NAME=""
-for name in "Timeclock-D-Best" "timeclock" "timesmart"; do
-    if docker ps --format '{{.Names}}' | grep -q "^${name}$"; then
-        CONTAINER_NAME="$name"
-        break
-    fi
-done
-
-# If not found, try partial match
+# The container is the one named in this install's .env (as in auto_clockout_wrapper.sh).
+# Older installs without CONTAINER_NAME in .env fall back to the old names; there is
+# no "first container with timeclock in its name" guess, which on a host running more
+# than one install would punch employees of the wrong company.
+CONTAINER_NAME=$(grep -m1 '^CONTAINER_NAME=' "$PROJECT_ROOT/.env" 2>/dev/null | cut -d= -f2- | tr -d "'\"")
 if [[ -z "$CONTAINER_NAME" ]]; then
-    CONTAINER_NAME=$(docker ps --format '{{.Names}}' | grep -i timeclock | head -1)
+    for name in "Timeclock-D-Best" "timeclock" "timesmart"; do
+        if docker ps --format '{{.Names}}' | grep -q "^${name}$"; then
+            CONTAINER_NAME="$name"
+            break
+        fi
+    done
 fi
 
 if [[ -z "$CONTAINER_NAME" ]]; then
