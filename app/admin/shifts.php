@@ -64,6 +64,8 @@ function shiftFromPost(array $p): array {
     $s['LunchMode']      = isset(LUNCH_MODES[$p['LunchMode'] ?? '']) ? $p['LunchMode'] : 'punched';
     $s['LunchMinutes']   = (int) ($p['LunchMinutes'] ?? 30);
     if ($s['LunchMode'] !== 'punched' && ($s['LunchMinutes'] < 5 || $s['LunchMinutes'] > 120)) $errors[] = 'Lunch length must be between 5 and 120 minutes.';
+    // Punched lunches: the length is only the expected lunch, used for holiday-pay hours
+    if ($s['LunchMode'] === 'punched' && ($s['LunchMinutes'] < 0 || $s['LunchMinutes'] > 120)) $errors[] = 'Expected lunch must be between 0 and 120 minutes.';
     $minWorked = (float) ($p['LunchMinWorkedHours'] ?? 6);
     if ($minWorked < 0 || $minWorked > 16) $errors[] = 'The minimum hours before lunch is taken out must be between 0 and 16.';
     $s['LunchMinWorkedHours'] = number_format(max(0, min(16, $minWorked)), 2, '.', '');
@@ -268,8 +270,10 @@ $sel = fn($a, $b) => (string) $a === (string) $b ? 'selected' : '';
                     </select>
                 </div>
                 <div class="row" id="lunchAutoRow">
-                    Take out <input type="number" name="LunchMinutes" min="5" max="120" value="<?= (int) $editing['LunchMinutes'] ?>"> minutes
-                    when they're on the clock at least <input type="number" name="LunchMinWorkedHours" min="0" max="16" step="0.25" value="<?= htmlspecialchars(rtrim(rtrim($editing['LunchMinWorkedHours'], '0'), '.')) ?>"> hours.
+                    <span class="lunch-auto">Take out</span><span class="lunch-punched">Expected lunch:</span>
+                    <input type="number" name="LunchMinutes" id="LunchMinutes" min="0" max="120" value="<?= (int) $editing['LunchMinutes'] ?>"> minutes<span class="lunch-auto">
+                    when they're on the clock at least <input type="number" name="LunchMinWorkedHours" min="0" max="16" step="0.25" value="<?= htmlspecialchars(rtrim(rtrim($editing['LunchMinWorkedHours'], '0'), '.')) ?>"> hours</span>.
+                    <span class="lunch-punched muted">Only used to work out holiday-pay hours (Settings → Holidays); 0 for no lunch.</span>
                 </div>
                 <p class="muted" id="lunchHelp"></p>
             </div>
@@ -301,7 +305,10 @@ $sel = fn($a, $b) => (string) $a === (string) $b ? 'selected' : '';
         };
         function syncLunch() {
             const mode = document.getElementById('LunchMode').value;
-            document.getElementById('lunchAutoRow').style.display = mode === 'punched' ? 'none' : '';
+            const punched = mode === 'punched';
+            document.querySelectorAll('#lunchAutoRow .lunch-auto').forEach(el => { el.style.display = punched ? 'none' : ''; });
+            document.querySelectorAll('#lunchAutoRow .lunch-punched').forEach(el => { el.style.display = punched ? '' : 'none'; });
+            document.getElementById('LunchMinutes').min = punched ? 0 : 5;
             document.getElementById('lunchHelp').textContent = help[mode] || '';
         }
         let timer = null;
@@ -358,7 +365,7 @@ $sel = fn($a, $b) => (string) $a === (string) $b ? 'selected' : '';
                     −<?= (int) $s['EarlyOutGraceMinutes'] ?>/+<?= (int) $s['LateOutMinutes'] ?> out;
                     else <?= (int) $s['RoundIncrement'] ? (int) $s['RoundIncrement'] . ' min ' . htmlspecialchars($s['RoundMode']) : 'exact' ?>
                 </td>
-                <td class="muted"><?= $s['LunchMode'] === 'punched' ? 'punched' : (int) $s['LunchMinutes'] . ' min auto' . ($s['LunchMode'] === 'auto_unless_punched' ? ' unless punched' : '') ?></td>
+                <td class="muted"><?= $s['LunchMode'] === 'punched' ? 'punched' . ((int) $s['LunchMinutes'] > 0 ? ' (' . (int) $s['LunchMinutes'] . ' min expected)' : '') :(int) $s['LunchMinutes'] . ' min auto' . ($s['LunchMode'] === 'auto_unless_punched' ? ' unless punched' : '') ?></td>
                 <td><?= $n ?></td>
                 <td style="white-space:nowrap;">
                     <a class="btn secondary small" href="shifts.php?edit=<?= (int) $s['ID'] ?>">Edit</a>

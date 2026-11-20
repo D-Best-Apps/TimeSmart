@@ -37,8 +37,9 @@ function holidayPayPolicy(mysqli $conn): array
 }
 
 /**
- * A shift's scheduled paid hours: start to end, less the shift's lunch (whether it's
- * deducted automatically or punched, a full shift includes one).
+ * A shift's scheduled paid hours: start to end, less the shift's lunch. For punched
+ * lunches that's the "Expected lunch" on the shift editor (0 = none), since a full
+ * shift includes one even though the clock doesn't deduct it.
  */
 function shiftScheduledHours(array $shift): float
 {
