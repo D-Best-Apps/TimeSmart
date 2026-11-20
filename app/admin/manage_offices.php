@@ -124,6 +124,7 @@ require_once 'header.php';
 <div id="officeIPsModal" class="modal">
     <div class="modal-content">
         <form action="update_office_ips.php" method="POST">
+            <?= csrf_field() ?>
             <h3>Allowed IPs — <span id="officeIPsName"></span></h3>
             <p style="color:var(--muted-text); font-size:0.9rem; margin:0 0 1rem;">
                 One or more IP addresses or CIDR ranges, separated by commas or new lines
@@ -143,6 +144,7 @@ require_once 'header.php';
 <div id="renameOfficeModal" class="modal">
     <div class="modal-content">
         <form action="rename_office.php" method="POST">
+            <?= csrf_field() ?>
             <h3>Rename Office</h3>
             <p style="color:var(--muted-text); font-size:0.9rem; margin:0 0 1rem;">
                 Renaming also updates every employee currently assigned to this office.
@@ -161,6 +163,7 @@ require_once 'header.php';
 <div id="removeOfficeModal" class="modal">
     <div class="modal-content">
         <form action="remove_office.php" method="POST" id="removeOfficeForm">
+            <?= csrf_field() ?>
             <h3>Remove Office</h3>
             <p id="removeOfficeMsg" style="margin:0 0 1rem;"></p>
             <input type="hidden" name="ID" id="removeOfficeId">
@@ -240,6 +243,7 @@ function openRemoveOffice(id, name, count) {
 <div id="addOfficeModal" class="modal">
     <div class="modal-content">
         <form action="add_office.php" method="POST">
+            <?= csrf_field() ?>
             <h3>Add New Office</h3>
             <input type="text" name="OfficeName" placeholder="Office Name" required>
             <textarea name="AllowedIPs" rows="2" placeholder="Allowed IPs (optional) — leave blank for any" style="margin-top:0.75rem;"></textarea>

@@ -8,6 +8,8 @@ require_once '../auth/db.php';
 require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('manage_users');
 require_once __DIR__ . '/../functions/settings_helper.php';
+require_once __DIR__ . '/../functions/csrf.php';
+require_csrf('badges.php?error=csrf');
 date_default_timezone_set('America/Chicago');
 
 const BADGE_MIN_LEN = 6;
@@ -242,8 +244,12 @@ require_once 'header.php';
 <?php if ($saved): ?>
   <p style="background:#d4edda; color:#1d7a36; padding:0.7rem 1rem; border-radius:8px;">Badge options saved.</p>
 <?php endif; ?>
+<?php if (($_GET['error'] ?? '') === 'csrf'): ?>
+  <p style="background:#f8d7da; color:#842029; padding:0.7rem 1rem; border-radius:8px;">The page had been open too long, so nothing was changed. Try again.</p>
+<?php endif; ?>
 
 <form method="post" style="margin:0 0 1.25rem; padding:1rem 1.2rem; background:#f8f9fb; border-radius:8px;">
+  <?= csrf_field() ?>
   <input type="hidden" name="action" value="save_opts">
   <div style="display:flex; gap:1.25rem; flex-wrap:wrap; align-items:flex-end;">
     <label>Company name <small>(top of each badge)</small>
@@ -262,6 +268,7 @@ require_once 'header.php';
 
 <div class="badge-tools">
   <form method="post" onsubmit="return confirm('Assign a random 8-digit Badge ID to everyone who is missing one (or has a too-short one)?');" style="margin:0;">
+    <?= csrf_field() ?>
     <input type="hidden" name="action" value="gen_missing">
     <button type="submit" class="badge-btn secondary">🎲 Generate missing Badge IDs</button>
   </form>

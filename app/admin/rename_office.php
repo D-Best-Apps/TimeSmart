@@ -13,6 +13,8 @@ if (!isset($_SESSION['admin'])) {
 // Permission check
 require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('manage_offices');
+require_once __DIR__ . '/../functions/csrf.php';
+require_csrf('manage_offices.php?error=' . urlencode('The page had been open too long, so nothing was changed. Try again.'));
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header("Location: manage_offices.php");

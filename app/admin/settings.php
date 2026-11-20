@@ -17,6 +17,8 @@ if (!isset($_SESSION['admin'])) {
 // Permission check
 require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('manage_settings');
+require_once __DIR__ . '/../functions/csrf.php';
+require_csrf('settings.php?error=csrf');
 require_once __DIR__ . '/../functions/pin_policy.php';
 
 // --- Encryption/Decryption Functions ---
@@ -75,7 +77,9 @@ if (!empty($settings['m365_client_secret'])) {
 }
 
 
-$message = '';
+$message = (($_GET['error'] ?? '') === 'csrf')
+    ? '<div class="alert alert-danger">The page had been open too long, so nothing was saved. Re-enter your changes and save again.</div>'
+    : '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Update settings
@@ -279,6 +283,7 @@ require_once 'header.php';
     <div class="container">
         <?= $message ?>
         <form method="POST" class="settings-form">
+            <?= csrf_field() ?>
             <h2>Security &amp; Punch Policy</h2>
             <div class="field">
                 <label>
