@@ -38,7 +38,8 @@ This guide walks you through installing D-BEST TimeSmart, a PHP-based employee t
    sudo apt-get install git
    ```
 
-3. **MySQL/MariaDB** (external database server)
+3. **MariaDB 10.2+ or MySQL 8.0+** (external database server)
+   - The public board and the admin Home page use window functions and `WITH` queries, which MySQL 5.7 doesn't support
    - Can be a separate server or another Docker container
    - Must be accessible from Docker containers
    - Default Docker bridge network IP: `172.17.0.1`

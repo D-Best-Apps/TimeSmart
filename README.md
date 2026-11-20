@@ -45,8 +45,8 @@ Ensure the following are installed:
 - **Docker** (version 20.10+)  
   Required for containerized deployment.
   
-- **MySQL/MariaDB Server**  
-  External database server (can be Docker or dedicated server).
+- **MariaDB 10.2+ or MySQL 8.0+**  
+  External database server (can be Docker or dedicated server). MySQL 5.7 is too old.
   
 - **MySQL Client** (optional)  
   For automatic database creation during installation.
