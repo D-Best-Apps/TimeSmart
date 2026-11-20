@@ -391,17 +391,22 @@ Labor Day, Thanksgiving and Christmas Day.
   turned off per custom holiday). When two holidays land on the same weekday, the earlier one
   moves back a day (Christmas Eve moves to Thursday when Christmas is observed Friday).
 - On a holiday, full-day time off uses no PTO/Sick hours and the admin Home board doesn't flag
-  no-shows or late arrivals.
+  no-shows or late arrivals. Exception: while holiday pay is on, a holiday switched to Unpaid is
+  charged to full-day PTO like a workday, so employees can cover the closure day with PTO.
 - **Holiday pay** (same page, off by default) adds a Holiday column to Payroll Totals (screen,
   Excel, CSV) and the Home board's Hours Summary. Holiday hours count in the total, never toward
   overtime; working on a holiday is paid on top. Each holiday can be switched Paid/Unpaid.
   Settings: `HolidayPayEnabled`, `HolidayPayMode` (`shift` = the employee's scheduled shift hours
-  less lunch, `fixed` = `HolidayPayFixedHours`, also used for employees without a shift),
+  less lunch, `fixed` = `HolidayPayFixedHours`, also used for employees without a shift; for a
+  punched-lunch shift the lunch is the shift's **Expected lunch**, 0 = none),
   `HolidayPayDayOff` (`none`/`pay` when the holiday is on the employee's day off) and
   `HolidayPayRequireAdjacent` (must work the scheduled day before and after; approved time off
-  counts). Holidays before an employee's first punch are never paid. Logic:
+  counts). Holidays before an employee's first punch are never paid, nor holidays with no punch
+  or approved PTO/Sick in the 14 days before them (company holidays not counted), which leaves
+  out people who have left but aren't archived yet and long unpaid leave. Logic:
   `app/functions/holiday_pay.php`.
-- The calendar logic is `app/functions/holidays.php` (`isCompanyHoliday()`, `isWorkday()`).
+- The calendar logic is `app/functions/holidays.php` (`isCompanyHoliday()`, `isWorkday()`;
+  `isTimeOffDay()` for what full-day time off is charged on).
 
 ### Time Off Recorded by Admins
 
