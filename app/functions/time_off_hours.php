@@ -121,7 +121,9 @@ function timeOffDayPlan(array $request, ?float $defaultDayHours = null): array
     $hasTime = !empty($request['StartTime']) && !empty($request['EndTime']);
     $shift = null;
     if ($hasTime) {
-        $hoursPerDay = (strtotime("1970-01-01 " . $request['EndTime']) - strtotime("1970-01-01 " . $request['StartTime'])) / 3600.0;
+        // The window repeats each day; an end before the start (older entries, before
+        // multi-day requests were checked) pays nothing rather than negative hours.
+        $hoursPerDay = max(0.0, (strtotime("1970-01-01 " . $request['EndTime']) - strtotime("1970-01-01 " . $request['StartTime'])) / 3600.0);
     } else {
         $policy = timeOffDayPolicy();
         if ($defaultDayHours === null && $policy['mode'] === 'shift') {

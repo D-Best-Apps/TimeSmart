@@ -6,6 +6,7 @@ require_once __DIR__ . '/../functions/app_url.php';
 require_once __DIR__ . '/../functions/time_off_hours.php'; // timeOffCategories(), timeOffLabel()
 require_once __DIR__ . '/../functions/m365_calendar.php';  // m365HoursPhrase()
 require_once __DIR__ . '/../functions/csrf.php';
+require_once __DIR__ . '/../functions/pay_rules.php'; // isPayrollLocked()
 date_default_timezone_set('America/Chicago');
 
 if (!isset($_SESSION['EmployeeID'])) {
@@ -98,9 +99,12 @@ if ($hasStartTime && $hasEndTime) {
     if (!preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $startTime) || !preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $endTime)) {
         rejectEdit($requestID, 'Times are not valid.');
     }
-    if ($startDate === $endDate && $endTime <= $startTime) {
+    if ($endTime <= $startTime) { // the window repeats each day, so on every day
         rejectEdit($requestID, 'End time must be later than start time.');
     }
+}
+if (($isApproved && isPayrollLocked($conn, $req['StartDate'])) || isPayrollLocked($conn, $startDate)) {
+    rejectEdit($requestID, 'Payroll has already been run for those days. Ask an admin to make the change.');
 }
 if ($isApproved && $reason === '') {
     rejectEdit($requestID, 'A reason for the change is required when amending an approved request.');

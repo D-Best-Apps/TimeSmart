@@ -6,6 +6,7 @@ require_once __DIR__ . '/../functions/time_off_email.php';
 require_once __DIR__ . '/../functions/m365_calendar.php';
 require_once __DIR__ . '/../functions/time_off_hours.php'; // timeOffLabel()
 require_once __DIR__ . '/../functions/csrf.php';
+require_once __DIR__ . '/../functions/pay_rules.php'; // isPayrollLocked()
 date_default_timezone_set('America/Chicago');
 
 if (!isset($_SESSION['admin'])) {
@@ -27,6 +28,7 @@ $reviewNotes = $_POST['review_note'] ?? [];
 $privateNotes = $_POST['tor_private_note'] ?? [];
 $canViewPrivate = canViewPrivateNotes($conn);
 $m365Failures = [];
+$lockedSkips = []; // approvals left pending because payroll is closed for those days
 
 function formatDateRange(string $start, string $end): string {
     if ($start === $end) return date('m/d/Y', strtotime($start));
@@ -60,6 +62,22 @@ foreach ($_POST['action'] as $requestID => $action) {
     $isAmendment   = !empty($req['AmendsRequestID']);
     $originalID    = $isAmendment ? (int) $req['AmendsRequestID'] : null;
     $employeeName  = trim(($req['FirstName'] ?? '') . ' ' . ($req['LastName'] ?? ''));
+
+    // Approving can't change a closed payroll: not a request in it, and not an
+    // amendment of an approved entry in it. Leave it pending; rejecting is fine.
+    if ($decision === 'Approved') {
+        $origStart = null;
+        if ($isAmendment) {
+            $os = $conn->prepare("SELECT StartDate FROM time_off_requests WHERE ID = ?");
+            $os->bind_param("i", $originalID);
+            $os->execute();
+            $origStart = $os->get_result()->fetch_column() ?: null;
+        }
+        if (isPayrollLocked($conn, $req['StartDate']) || isPayrollLocked($conn, $origStart)) {
+            $lockedSkips[] = $employeeName . ' (' . formatDateRange($req['StartDate'], $req['EndDate']) . ')';
+            continue;
+        }
+    }
 
     $note = trim($reviewNotes[$requestID] ?? '');
     if ($note !== '' && mb_strlen($note) > 500) {
@@ -232,6 +250,9 @@ foreach ($_POST['action'] as $requestID => $action) {
 $query = '';
 if (!empty($m365Failures)) {
     $query = '?m365_sync=failed&details=' . urlencode(implode('; ', $m365Failures));
+}
+if ($lockedSkips) {
+    $query .= ($query === '' ? '?' : '&') . 'tor_locked=' . urlencode(implode('; ', $lockedSkips));
 }
 header("Location: edits_timesheet.php{$query}");
 exit;

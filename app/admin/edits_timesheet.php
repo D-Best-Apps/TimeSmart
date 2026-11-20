@@ -187,6 +187,12 @@ require_once 'header.php';
             ⛔ <strong>Not approved:</strong> <?= htmlspecialchars($_GET['details'] ?? 'payroll for that date is closed.') ?>
         </div>
     <?php endif; ?>
+    <?php if (!empty($_GET['tor_locked'])): ?>
+        <div class="alert alert-danger" style="margin-bottom:1rem;">
+            ⛔ <strong>Time off not approved, payroll is closed for those days:</strong>
+            <?= htmlspecialchars((string) $_GET['tor_locked']) ?>. They're still pending; reject them, or reopen payroll on Settings → Pay Rules first.
+        </div>
+    <?php endif; ?>
     <?php if (($_GET['error'] ?? '') === 'csrf'): ?>
         <div class="alert alert-danger" style="margin-bottom:1rem;">
             ⛔ <strong>Not saved:</strong> this page had been open too long and the request was

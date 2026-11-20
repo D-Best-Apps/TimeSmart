@@ -11,6 +11,7 @@ require_once __DIR__ . '/../functions/time_off_email.php';
 require_once __DIR__ . '/../functions/m365_calendar.php';
 require_once __DIR__ . '/../functions/time_off_hours.php'; // timeOffLabel()
 require_once __DIR__ . '/../functions/csrf.php';
+require_once __DIR__ . '/../functions/pay_rules.php'; // isPayrollLocked()
 date_default_timezone_set('America/Chicago');
 
 if (!isset($_SESSION['admin'])) {
@@ -50,6 +51,11 @@ $req = $stmt->get_result()->fetch_assoc();
 if (!$req) {
     // Not found, or not in a cancellable state (already cancelled, still pending, …)
     header('Location: edit_time_off.php?id=' . $requestID . '&status=invalid&reason=' . urlencode('Only an approved request can be cancelled.'));
+    exit;
+}
+
+if (isPayrollLocked($conn, $req['StartDate'])) {
+    header('Location: edit_time_off.php?id=' . $requestID . '&status=invalid&reason=' . urlencode('Payroll is closed through ' . date('m/d/Y', strtotime((string) payrollLockedThrough($conn))) . '. Reopen it on Settings → Pay Rules to change those days.'));
     exit;
 }
 

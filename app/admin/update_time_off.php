@@ -6,6 +6,7 @@ require_once __DIR__ . '/../functions/time_off_email.php';
 require_once __DIR__ . '/../functions/m365_calendar.php';
 require_once __DIR__ . '/../functions/time_off_hours.php'; // timeOffCategories(), timeOffLabel()
 require_once __DIR__ . '/../functions/csrf.php';
+require_once __DIR__ . '/../functions/pay_rules.php'; // isPayrollLocked()
 date_default_timezone_set('America/Chicago');
 
 if (!isset($_SESSION['admin'])) {
@@ -87,7 +88,12 @@ if ($hasStartTime && $hasEndTime) {
     if (!preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $startTime) || !preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $endTime)) {
         rejectAdmin($requestID, 'Times not valid.');
     }
-    if ($startDate === $endDate && $endTime <= $startTime) rejectAdmin($requestID, 'End time must be after start time.');
+    if ($endTime <= $startTime) rejectAdmin($requestID, 'End time must be after start time.'); // on every day
+}
+
+// Closed payroll: an approved entry there is already paid, and nothing new goes in.
+if (($req['Status'] === 'Approved' && isPayrollLocked($conn, $req['StartDate'])) || isPayrollLocked($conn, $startDate)) {
+    rejectAdmin($requestID, 'Payroll is closed through ' . date('m/d/Y', strtotime((string) payrollLockedThrough($conn))) . '. Reopen it on Settings → Pay Rules to change those days.');
 }
 
 if ($notes     !== '' && mb_strlen($notes)     > 500) $notes     = mb_substr($notes,     0, 500);

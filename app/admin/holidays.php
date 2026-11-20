@@ -141,10 +141,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $st->execute();
         $name = $st->get_result()->fetch_column();
         holidayRules($conn, true);
-        $current = null;
+        $current = $usual = null;
         foreach (holidayScheduleForYear($year) as $h) {
             if ((int) $h['rule']['ID'] === $id) {
                 $current = $h['date'];
+                $usual   = $h['usual'] ?? null;
             }
         }
         $d = DateTime::createFromFormat('Y-m-d', $to);
@@ -152,7 +153,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'That holiday was not found.';
         } elseif ($to !== '' && (!$d || $d->format('Y-m-d') !== $to || abs((int) substr($to, 0, 4) - $year) > 1)) {
             $errors[] = 'Pick a date within a year of the holiday.';
-        } elseif (isPayrollLocked($conn, $current) || ($to !== '' && isPayrollLocked($conn, $to))) {
+        } elseif (isPayrollLocked($conn, $current) || isPayrollLocked($conn, $to !== '' ? $to : $usual)) {
+            // Both ends of the move: where it is now, and where it goes (its usual day when moved back)
             $errors[] = 'Payroll is closed for that date. Reopen it on Settings › Pay Rules first.';
         } else {
             if ($to === '') {

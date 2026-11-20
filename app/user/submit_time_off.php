@@ -94,7 +94,7 @@ if ($hasStartTime && $hasEndTime) {
     if (!preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $startTime) || !preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $endTime)) {
         rejectInvalid('Times are not in a valid format.');
     }
-    if ($startDate === $endDate && $endTime <= $startTime) {
+    if ($endTime <= $startTime) { // the window repeats each day, so on every day
         rejectInvalid('End time must be later than start time.');
     }
 }
