@@ -56,6 +56,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $phone = trim($_POST['PhoneNumber']);
     $password = $_POST['Password'];
     $enable2FA = isset($_POST['Enable2FA']) ? 1 : 0;
+    $empNumber = trim($_POST['EmployeeNumber'] ?? '');
+    $holidayHoursIn = trim($_POST['HolidayHours'] ?? '');
+
+    // Employee # (optional): the company's own number, unique, shown on Home
+    if (strlen($empNumber) > 20) {
+        header('Location: ../error.php?code=400&message=' . urlencode('Employee # can be at most 20 characters.'));
+        exit;
+    }
+    if ($empNumber !== '') {
+        $chk = $conn->prepare("SELECT ID FROM users WHERE EmployeeNumber = ? AND ID <> ?");
+        $chk->bind_param("si", $empNumber, $id);
+        $chk->execute();
+        $chk->store_result();
+        if ($chk->num_rows > 0) {
+            header('Location: ../error.php?code=400&message=' . urlencode('Employee # ' . $empNumber . ' is already used by someone else.'));
+            exit;
+        }
+        $chk->close();
+    }
+    // Holiday hours (optional): blank = the holiday-pay setting
+    if ($holidayHoursIn !== '' && (!is_numeric($holidayHoursIn) || (float) $holidayHoursIn < 0 || (float) $holidayHoursIn > 24)) {
+        header('Location: ../error.php?code=400&message=' . urlencode('Holiday hours must be a number from 0 to 24, or blank.'));
+        exit;
+    }
 
     // PIN, if given, must meet the PIN length setting (an unchanged PIN on file is kept)
     if ($pin !== '' && !isValidNewPin($pin, $conn) && $pin !== (string) ($user['PIN'] ?? '')) {
@@ -131,6 +155,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $up->bind_param("ii", $shiftID, $id);
         $up->execute();
 
+        $empNumberVal    = $empNumber !== '' ? $empNumber : null;
+        $holidayHoursVal = $holidayHoursIn !== '' ? round((float) $holidayHoursIn, 2) : null;
+        $up = $conn->prepare("UPDATE users SET EmployeeNumber = ?, HolidayHours = ? WHERE ID = ?");
+        $up->bind_param("sdi", $empNumberVal, $holidayHoursVal, $id);
+        $up->execute();
+
         // Optional profile photo (also used on printed badges)
         [$photoOk, $photoRes] = save_profile_photo($_FILES['ProfilePhoto'] ?? null, (int) $id);
         if ($photoOk === false) {
@@ -173,6 +203,10 @@ require_once 'header.php';
             <input type="text" name="Email" value="<?= htmlspecialchars($user['Email'] ?? '') ?>" required>
         </label>
 
+        <label>Employee # <small>(your own employee number; shown on Home — not used to clock in)</small>
+            <input type="text" name="EmployeeNumber" maxlength="20" value="<?= htmlspecialchars($user['EmployeeNumber'] ?? '') ?>" autocomplete="off">
+        </label>
+
         <label>Badge ID <small>(scannable barcode value)</small>
             <input type="text" name="BadgeID" value="<?= htmlspecialchars($user['BadgeID'] ?? '') ?>" autocomplete="off" data-1p-ignore="true" data-lpignore="true">
         </label>
@@ -208,6 +242,10 @@ require_once 'header.php';
                     </option>
                 <?php endforeach; ?>
             </select>
+        </label>
+
+        <label>Holiday hours <small>(hours of holiday pay for a full holiday, e.g. 8 for a part-timer; blank = the setting on Settings &rsaquo; Holidays)</small>
+            <input type="number" name="HolidayHours" min="0" max="24" step="0.25" value="<?= ($user['HolidayHours'] ?? null) !== null ? htmlspecialchars(rtrim(rtrim((string) $user['HolidayHours'], '0'), '.')) : '' ?>" placeholder="Setting">
         </label>
 
         <label>Job Title

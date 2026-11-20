@@ -120,6 +120,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'HolidayPayFixedHours'      => (string) (($fixed > 0 && $fixed <= 24) ? round($fixed, 2) : 8),
             'HolidayPayDayOff'          => ($_POST['HolidayPayDayOff'] ?? '') === 'pay' ? 'pay' : 'none',
             'HolidayPayRequireAdjacent' => !empty($_POST['HolidayPayRequireAdjacent']) ? '1' : '0',
+            'HolidayPayCountsOT'        => !empty($_POST['HolidayPayCountsOT']) ? '1' : '0',
         ];
         $st = $conn->prepare("INSERT INTO settings (SettingKey, SettingValue) VALUES (?, ?) ON DUPLICATE KEY UPDATE SettingValue = VALUES(SettingValue)");
         foreach ($values as $k => $v) {
@@ -128,6 +129,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         header('Location: holidays.php?notice=' . urlencode('Holiday pay settings saved.'));
         exit;
+    }
+
+    if ($action === 'move') {
+        // Observe one year's holiday on another date (blank date = back to the usual day)
+        $id   = (int) ($_POST['id'] ?? 0);
+        $year = (int) ($_POST['year'] ?? 0);
+        $to   = trim((string) ($_POST['moved_to'] ?? ''));
+        $st = $conn->prepare("SELECT Name FROM holidays WHERE ID = ?");
+        $st->bind_param("i", $id);
+        $st->execute();
+        $name = $st->get_result()->fetch_column();
+        holidayRules($conn, true);
+        $current = null;
+        foreach (holidayScheduleForYear($year) as $h) {
+            if ((int) $h['rule']['ID'] === $id) {
+                $current = $h['date'];
+            }
+        }
+        $d = DateTime::createFromFormat('Y-m-d', $to);
+        if ($name === false || $year < 2000 || $year > 2100 || $current === null) {
+            $errors[] = 'That holiday was not found.';
+        } elseif ($to !== '' && (!$d || $d->format('Y-m-d') !== $to || abs((int) substr($to, 0, 4) - $year) > 1)) {
+            $errors[] = 'Pick a date within a year of the holiday.';
+        } elseif (isPayrollLocked($conn, $current) || ($to !== '' && isPayrollLocked($conn, $to))) {
+            $errors[] = 'Payroll is closed for that date. Reopen it on Settings › Pay Rules first.';
+        } else {
+            if ($to === '') {
+                $st = $conn->prepare("DELETE FROM holiday_moves WHERE HolidayID = ? AND Year = ?");
+                $st->bind_param("ii", $id, $year);
+                $msg = "{$name} {$year} is back on its usual day.";
+            } else {
+                $st = $conn->prepare("INSERT INTO holiday_moves (HolidayID, Year, MovedTo) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE MovedTo = VALUES(MovedTo)");
+                $st->bind_param("iis", $id, $year, $to);
+                $msg = "{$name} {$year} is now observed on " . date('D M j, Y', strtotime($to)) . '.';
+            }
+            $st->execute();
+            header('Location: holidays.php?notice=' . urlencode($msg));
+            exit;
+        }
     }
 
     if ($action === 'toggle_paid') {
@@ -169,12 +209,14 @@ holidayRules($conn, true);
 $scheduled = [];
 foreach ([$thisYear, $thisYear + 1] as $y) {
     foreach (holidayScheduleForYear($y) as $h) {
-        $scheduled[$y][(int) $h['rule']['ID']] = $h['date'];
+        $scheduled[$y][(int) $h['rule']['ID']] = $h;
     }
 }
 foreach ($rules as &$r) {
-    $r['_this'] = $scheduled[$thisYear][(int) $r['ID']] ?? null;
-    $r['_next'] = $scheduled[$thisYear + 1][(int) $r['ID']] ?? null;
+    $r['_thisH'] = $scheduled[$thisYear][(int) $r['ID']] ?? null;
+    $r['_nextH'] = $scheduled[$thisYear + 1][(int) $r['ID']] ?? null;
+    $r['_this'] = $r['_thisH']['date'] ?? null;
+    $r['_next'] = $r['_nextH']['date'] ?? null;
     $r['_sort'] = $r['_this'] ?? $r['_next'] ?? ($r['OnceDate'] ?? '9999');
     // Sort by month/day of the year so the list reads like a calendar
     $r['_sort'] = substr($r['_sort'], 5) . $r['_sort'];
@@ -196,6 +238,18 @@ foreach ([$thisYear, $thisYear + 1] as $y) {
     }
 }
 ksort($upcoming);
+
+// Holidays of the last 90 days, for setting holiday hours by hand after the fact
+$recent = [];
+$since = date('Y-m-d', strtotime('-90 days'));
+foreach ([$thisYear - 1, $thisYear] as $y) {
+    foreach (companyHolidaysForYear($y) as $date => $label) {
+        if ($date >= $since && $date < $today) {
+            $recent[$date] = $label;
+        }
+    }
+}
+krsort($recent);
 
 $payPolicy = holidayPayPolicy($conn);
 $shiftHours = [];
@@ -235,6 +289,13 @@ require_once 'header.php';
     .pay-form .check input { width: auto; margin: 0; }
     .pay-form .opt-title { font-weight: 600; margin: 1rem 0 .2rem; color: var(--primary-color); }
     .pay-form .hol-muted { margin: .2rem 0 .4rem; }
+    .moved { font-size: .75em; background: #fff3cd; color: #856404; border-radius: 4px; padding: 0 .3rem; margin-left: .2rem; }
+    details.mv { display: inline-block; margin-left: .3rem; }
+    details.mv summary { cursor: pointer; color: var(--primary-color); font-size: .8em; list-style: none; display: inline; }
+    details.mv summary::-webkit-details-marker { display: none; }
+    details.mv[open] form { display: flex; gap: .3rem; flex-wrap: wrap; align-items: center; margin-top: .3rem; }
+    details.mv input[type=date] { width: auto; margin: 0; padding: .2rem; }
+    .hol-table td { vertical-align: top; }
 </style>
 
 <p class="hol-muted" style="margin-top:0;">
@@ -242,7 +303,7 @@ require_once 'header.php';
     and the Home board doesn't flag no-shows or late arrivals. Holiday pay is set up on the right; while it's on,
     a holiday marked Unpaid does use PTO, so employees can cover the closure day with it.
     A holiday that lands on a Saturday is observed the Friday before, and on a Sunday the Monday after,
-    unless you turn that off for a custom holiday.
+    unless you turn that off for a custom holiday. To observe one year's holiday on a different day, use Move next to that year's date.
 </p>
 
 <?php if ($notice !== ''): ?><div class="notice"><?= htmlspecialchars($notice) ?></div><?php endif; ?>
@@ -262,8 +323,28 @@ require_once 'header.php';
             <tr>
                 <td><?= htmlspecialchars($r['Name']) ?></td>
                 <td class="muted"><?= htmlspecialchars(holidayRuleText($r)) ?></td>
-                <td><?= holidayDateText($r['_this']) ?></td>
-                <td><?= holidayDateText($r['_next']) ?></td>
+                <?php foreach ([[$thisYear, $r['_thisH']], [$thisYear + 1, $r['_nextH']]] as [$yy, $hh]): ?>
+                <td>
+                    <?= holidayDateText($hh['date'] ?? null) ?>
+                    <?php if ($hh && !empty($hh['moved'])): ?><span class="moved" title="Usually <?= htmlspecialchars(holidayDateText($hh['usual'])) ?>">moved</span><?php endif; ?>
+                    <?php if ($hh && $r['RuleType'] !== 'once'): ?>
+                    <details class="mv">
+                        <summary title="Observe <?= htmlspecialchars($r['Name']) ?> <?= $yy ?> on another day">Move</summary>
+                        <form method="POST">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="action" value="move">
+                            <input type="hidden" name="id" value="<?= (int) $r['ID'] ?>">
+                            <input type="hidden" name="year" value="<?= $yy ?>">
+                            <input type="date" name="moved_to" value="<?= htmlspecialchars($hh['date']) ?>" required>
+                            <button type="submit" class="btn small primary">Save</button>
+                            <?php if (!empty($hh['moved'])): ?>
+                            <button type="submit" class="btn small secondary" formnovalidate onclick="this.form.moved_to.value='';">Usual day (<?= htmlspecialchars(holidayDateText($hh['usual'])) ?>)</button>
+                            <?php endif; ?>
+                        </form>
+                    </details>
+                    <?php endif; ?>
+                </td>
+                <?php endforeach; ?>
                 <?php if ($payPolicy['enabled']): ?>
                 <td>
                     <form method="POST" style="display:inline;">
@@ -349,7 +430,9 @@ require_once 'header.php';
         <?= csrf_field() ?>
         <input type="hidden" name="action" value="save_pay">
         <label class="check"><input type="checkbox" name="HolidayPayEnabled" value="1" <?= $payPolicy['enabled'] ? 'checked' : '' ?>> Pay holidays</label>
-        <p class="hol-muted">Adds a Holiday column to Payroll Totals and the Home board. Holiday hours are added to the total but don't count toward overtime. Someone who works on a holiday is paid for those hours as well.</p>
+        <p class="hol-muted">Adds a Holiday column to Payroll Totals and the Home board, and holiday rows to timesheets. Holiday hours are added to the total. Someone who works on a holiday is paid for those hours as well.</p>
+        <label class="check"><input type="checkbox" name="HolidayPayCountsOT" value="1" <?= $payPolicy['countsOT'] ? 'checked' : '' ?>> Holiday hours count toward overtime</label>
+        <p class="hol-muted">When ticked, a holiday's hours count toward the <?= htmlspecialchars((string) overtimeWeeklyHours()) ?>-hour week: someone paid a 10-hour holiday reaches overtime after <?= htmlspecialchars((string) max(0, overtimeWeeklyHours() - 10)) ?> worked hours that week. The holiday hours themselves stay in the Holiday column.</p>
 
         <div class="opt-title">Hours for each holiday</div>
         <label class="check"><input type="radio" name="HolidayPayMode" value="shift" <?= $payPolicy['mode'] === 'shift' ? 'checked' : '' ?>> The employee's scheduled shift hours (less lunch)</label>
@@ -358,6 +441,7 @@ require_once 'header.php';
         <?php if ($shiftHours): ?>
         <p class="hol-muted">Shift hours now: <?= htmlspecialchars(implode(', ', $shiftHours)) ?>.</p>
         <?php endif; ?>
+        <p class="hol-muted">For one employee (a part-timer, say), set Holiday hours on their Edit User page. For one employee on one holiday (half a holiday, or none), use Hours by employee under the holiday lists below.</p>
 
         <div class="opt-title">Holiday on an employee's day off</div>
         <label class="check"><input type="radio" name="HolidayPayDayOff" value="none" <?= $payPolicy['dayOff'] === 'none' ? 'checked' : '' ?>> No holiday pay</label>
@@ -379,13 +463,24 @@ require_once 'header.php';
     <?php if ($upcoming): ?>
     <ul class="upcoming" style="margin:0; padding-left:1.1rem;">
         <?php foreach ($upcoming as $date => $label): ?>
-        <li><strong><?= date('D M j, Y', strtotime($date)) ?></strong> — <?= htmlspecialchars($label) ?></li>
+        <li><strong><?= date('D M j, Y', strtotime($date)) ?></strong> — <?= htmlspecialchars($label) ?><?php if ($payPolicy['enabled']): ?> · <a href="holiday_pay_adjust.php?date=<?= $date ?>">Hours by employee</a><?php endif; ?></li>
         <?php endforeach; ?>
     </ul>
     <?php else: ?>
     <p class="hol-muted">No holidays in the next 12 months.</p>
     <?php endif; ?>
 </div>
+
+<?php if ($payPolicy['enabled'] && $recent): ?>
+<div class="panel">
+    <h3>Recent holidays</h3>
+    <ul class="upcoming" style="margin:0; padding-left:1.1rem;">
+        <?php foreach ($recent as $date => $label): ?>
+        <li><strong><?= date('D M j, Y', strtotime($date)) ?></strong> — <?= htmlspecialchars($label) ?> · <a href="holiday_pay_adjust.php?date=<?= $date ?>">Hours by employee</a></li>
+        <?php endforeach; ?>
+    </ul>
+</div>
+<?php endif; ?>
 </div>
 </div>
 

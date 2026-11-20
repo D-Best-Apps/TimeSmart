@@ -4,6 +4,8 @@ require '../auth/db.php';
 require_once __DIR__ . '/../functions/check_permission.php';
 require_once __DIR__ . '/../functions/time_off_email.php';
 require_once __DIR__ . '/../functions/m365_calendar.php';
+require_once __DIR__ . '/../functions/time_off_hours.php'; // timeOffLabel()
+require_once __DIR__ . '/../functions/csrf.php';
 date_default_timezone_set('America/Chicago');
 
 if (!isset($_SESSION['admin'])) {
@@ -17,6 +19,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST' || empty($_POST['action'])) {
     exit;
 }
 
+require_csrf('edits_timesheet.php?error=csrf');
+
 $admin = $_SESSION['admin'];
 $now   = date('Y-m-d H:i:s');
 $reviewNotes = $_POST['review_note'] ?? [];
@@ -28,7 +32,8 @@ function formatDateRange(string $start, string $end): string {
     if ($start === $end) return date('m/d/Y', strtotime($start));
     return date('m/d/Y', strtotime($start)) . ' – ' . date('m/d/Y', strtotime($end));
 }
-function formatTimeRange(?string $start, ?string $end): string {
+function formatTimeRange(?string $start, ?string $end, $hours = null, bool $multiDay = false): string {
+    if ((!$start || !$end) && (float) $hours > 0) return m365HoursPhrase((float) $hours, $multiDay) . ' missed';
     if (!$start || !$end) return 'all day';
     return date('g:i a', strtotime($start)) . ' – ' . date('g:i a', strtotime($end));
 }
@@ -102,25 +107,25 @@ foreach ($_POST['action'] as $requestID => $action) {
             // in the "Recent Approved Time-Off" list and the edit page.
             $copy = $conn->prepare("
                 UPDATE time_off_requests
-                   SET Category=?, StartDate=?, EndDate=?, StartTime=?, EndTime=?, Notes=?, AdminPrivateNote=?
+                   SET Category=?, StartDate=?, EndDate=?, StartTime=?, EndTime=?, Hours=?, Notes=?, AdminPrivateNote=?
                  WHERE ID = ? AND Status = 'Approved'
             ");
             $copy->bind_param(
-                "sssssssi",
+                "ssssssssi",
                 $req['Category'], $req['StartDate'], $req['EndDate'],
-                $req['StartTime'], $req['EndTime'], $req['Notes'], $privVal,
+                $req['StartTime'], $req['EndTime'], $req['Hours'], $req['Notes'], $privVal,
                 $originalID
             );
         } else {
             $copy = $conn->prepare("
                 UPDATE time_off_requests
-                   SET Category=?, StartDate=?, EndDate=?, StartTime=?, EndTime=?, Notes=?
+                   SET Category=?, StartDate=?, EndDate=?, StartTime=?, EndTime=?, Hours=?, Notes=?
                  WHERE ID = ? AND Status = 'Approved'
             ");
             $copy->bind_param(
-                "ssssssi",
+                "sssssssi",
                 $req['Category'], $req['StartDate'], $req['EndDate'],
-                $req['StartTime'], $req['EndTime'], $req['Notes'],
+                $req['StartTime'], $req['EndTime'], $req['Hours'], $req['Notes'],
                 $originalID
             );
         }
@@ -198,14 +203,14 @@ foreach ($_POST['action'] as $requestID => $action) {
     $employeeEmail = trim($req['Email'] ?? '');
     if ($employeeEmail !== '') {
         $datesLabel = formatDateRange($req['StartDate'], $req['EndDate']);
-        $timesLabel = formatTimeRange($req['StartTime'], $req['EndTime']);
+        $timesLabel = formatTimeRange($req['StartTime'], $req['EndTime'], $req['Hours'] ?? null, $req['StartDate'] !== $req['EndDate']);
         $subjectKind = $isAmendment ? "Time-Off Amendment" : "Time-Off Request";
 
         $subject = "Your {$subjectKind} was {$decision}";
         $body  = "<p>Hi " . htmlspecialchars($req['FirstName']) . ",</p>";
         $body .= "<p>Your " . strtolower($subjectKind) . " has been <strong>{$decision}</strong>.</p>";
         $body .= "<ul>";
-        $body .= "<li><strong>Category:</strong> " . htmlspecialchars($req['Category']) . "</li>";
+        $body .= "<li><strong>Category:</strong> " . htmlspecialchars(timeOffLabel($req['Category'])) . "</li>";
         $body .= "<li><strong>Dates:</strong> " . htmlspecialchars($datesLabel) . "</li>";
         $body .= "<li><strong>Times:</strong> " . htmlspecialchars($timesLabel) . "</li>";
         if (!empty($req['Notes'])) {

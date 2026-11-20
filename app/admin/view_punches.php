@@ -13,7 +13,72 @@ require_once __DIR__ . '/../functions/settings_helper.php';
 require_once __DIR__ . '/../functions/hours.php';
 require_once __DIR__ . '/../functions/pay_rules.php';
 require_once __DIR__ . '/../functions/csrf.php';
+require_once __DIR__ . '/../functions/time_off_hours.php'; // approved PTO / Sick / absences per day
+require_once __DIR__ . '/../functions/holiday_pay.php';    // holiday hours per employee
 requirePermission('edit_timesheets');
+
+/**
+ * Approved time off and company holidays for one employee, per day, for the read-only
+ * lines on the timesheet (never part of the punch form).
+ * Each line: kind (PTO|Sick|Unpaid|Unexcused|Holiday), label, hours (null = not shown),
+ * suffix (after the hours), note. Totals: PTO, Sick, Holiday hours.
+ * @return array{days:array<string,list<array>>,totals:array{PTO:float,Sick:float,Holiday:float},holidayPay:bool,hasTimeOff:bool}
+ */
+function vpTimeOffAndHolidays(mysqli $conn, int $empID, string $start, string $end): array
+{
+    $days = [];
+    $totals = ['PTO' => 0.0, 'Sick' => 0.0, 'Holiday' => 0.0];
+
+    // Company holidays (paid or not); hours only while holiday pay is on
+    $policy = holidayPayPolicy($conn);
+    $holidayPay   = $policy['enabled'] ? (holidayPayByEmployee($conn, $start, $end)[$empID]['days'] ?? []) : [];
+    $paidHolidays = $policy['enabled'] ? paidHolidaysInRange($start, $end) : [];
+    for ($d = new DateTime($start), $fin = new DateTime($end); $d <= $fin; $d->modify('+1 day')) {
+        $date = $d->format('Y-m-d');
+        $name = $holidayPay[$date]['name'] ?? isCompanyHoliday($date);
+        if ($name === null) {
+            continue;
+        }
+        $line = ['kind' => 'Holiday', 'label' => 'Holiday: ' . $name, 'hours' => null, 'suffix' => '', 'note' => ''];
+        if (isset($holidayPay[$date])) {
+            $hp = $holidayPay[$date];
+            $line['hours']  = (float) $hp['hours'];
+            $line['suffix'] = 'holiday pay';
+            if (!empty($hp['adjusted'])) {
+                $line['note'] = 'Hours set by an admin' . (!empty($hp['note']) ? ': ' . $hp['note'] : '');
+            }
+            $totals['Holiday'] += (float) $hp['hours'];
+        } elseif ($policy['enabled']) {
+            $line['note'] = isset($paidHolidays[$date]) ? 'No holiday pay for this day' : 'Unpaid holiday';
+        }
+        $days[$date][] = $line;
+    }
+
+    // Approved time off, on the days it is charged
+    $hasTimeOff = false;
+    foreach (fetchApprovedTimeOff($conn, $start, $end, $empID) as $req) {
+        foreach (expandTimeOffToDays($req, $start, $end) as $dr) {
+            $hasTimeOff = true;
+            $cat  = $dr['Category'];
+            $paid = !in_array($cat, TIME_OFF_UNPAID, true);
+            $desc = ['Category' => $cat, 'StartTime' => $dr['StartTime'], 'EndTime' => $dr['EndTime'], 'Hours' => $dr['PartHours']];
+            $label = ($paid && $dr['PartHours'] !== null)
+                ? timeOffLabel($cat) . ' (part day)'
+                : timeOffDescribe($desc, false); // "Sick 9am–1pm", "Unexcused absence 2h"
+            $days[$dr['Date']][] = [
+                'kind'   => $cat,
+                'label'  => $label,
+                'hours'  => $paid ? (float) $dr['Hours'] : null,
+                'suffix' => '',
+                'note'   => trim((string) ($dr['Notes'] ?? '')),
+            ];
+            if ($paid) {
+                $totals[$cat === 'Sick' ? 'Sick' : 'PTO'] += (float) $dr['Hours'];
+            }
+        }
+    }
+    return ['days' => $days, 'totals' => $totals, 'holidayPay' => $policy['enabled'], 'hasTimeOff' => $hasTimeOff];
+}
 
 date_default_timezone_set('America/Chicago');
 
@@ -128,7 +193,20 @@ unset($_SESSION['punch_save_notice']);
     // Column layout depends on mode + whether locations are shown
     $dataCols = 4 + ($showLocations ? 4 : 0); // clock-in/lunch-out/lunch-in/clock-out (+ their locations)
     $emptyColspan = $dataCols + 1; // + total column (read-only); edit adds reason+action below
+
+    // Approved time off + company holidays, shown as read-only lines in the day list
+    $extras = vpTimeOffAndHolidays($conn, (int) $employeeID, date('Y-m-d', strtotime($from)), date('Y-m-d', strtotime($to)));
 ?>
+<style>
+    /* Time off / holiday lines: read-only, no inputs, never posted with the punch form */
+    .timesheet-table tr.vp-extra td { background: #e8f1fc; color: #222; }
+    .timesheet-table tr.vp-extra td.vp-extra-text { text-align: left; white-space: normal; }
+    .timesheet-table tr.vp-extra-sick td { background: #fdecea; }
+    .timesheet-table tr.vp-extra-unpaid td { background: #eceff1; }
+    .timesheet-table tr.vp-extra-unexcused td { background: #ffe0b2; }
+    .timesheet-table tr.vp-extra-holiday td { background: #e6f4ea; }
+    .timesheet-table tr.vp-extra .vp-extra-note { color: #555; font-size: 0.8rem; margin-left: 0.4rem; }
+</style>
 
 <?php $lockedThrough = payrollLockedThrough($conn); ?>
 <?php if ($editMode && $lockedThrough !== null && date('Y-m-d', strtotime($from)) <= $lockedThrough): ?>
@@ -303,12 +381,28 @@ unset($_SESSION['punch_save_notice']);
                     <?php endif; ?>
                 </tr>
                         <?php endforeach; ?>
-                    <?php else: ?>
+                    <?php elseif (empty($extras['days'][$date])): ?>
                 <tr class="empty-day">
                     <td><?= $day->format('m/d/Y') ?></td>
                     <td colspan="<?= $editMode ? $emptyColspan + 2 : $emptyColspan ?>">No punches for this day.</td>
                 </tr>
                     <?php endif; ?>
+                    <?php foreach ($extras['days'][$date] ?? [] as $x):
+                        $xText = $x['label'];
+                        if ($x['hours'] !== null) {
+                            $xText .= ' — ' . number_format($x['hours'], 2) . ' h' . ($x['suffix'] !== '' ? ' ' . $x['suffix'] : '');
+                        } elseif ($x['note'] !== '' && $x['kind'] !== 'Holiday') {
+                            $xText .= ' — ' . $x['note']; // an absence: the reason
+                            $x['note'] = '';
+                        }
+                    ?>
+                <tr class="vp-extra vp-extra-<?= htmlspecialchars(strtolower($x['kind'])) ?>">
+                    <td><?= $day->format('m/d/Y') ?></td>
+                    <td class="vp-extra-text" colspan="<?= $editMode ? $emptyColspan + 2 : $emptyColspan ?>">
+                        <?= htmlspecialchars($xText) ?><?php if ($x['note'] !== ''): ?><span class="vp-extra-note"><?= htmlspecialchars($x['note']) ?></span><?php endif; ?>
+                    </td>
+                </tr>
+                    <?php endforeach; ?>
                 <?php endforeach; ?>
             </tbody>
         </table>
@@ -320,6 +414,16 @@ unset($_SESSION['punch_save_notice']);
         <div class="totals">
             <strong>Total Week:</strong> <span id="weekly-total"><?= number_format($weekTotal, 2) ?>h</span> &nbsp;|&nbsp;
             <strong>Overtime:</strong> <span id="weekly-overtime"><?= number_format(max(0, $weekTotal - overtimeWeeklyHours()), 2) ?>h</span>
+            <?php
+            // Time off / holiday hours: separate from the worked total (which the edit
+            // script recalculates from the punch inputs only)
+            $xTotals = $extras['totals'];
+            $hasTimeOff = $extras['hasTimeOff'];
+            ?>
+            <?php if ($hasTimeOff || $xTotals['PTO'] > 0): ?>&nbsp;|&nbsp; <strong>PTO:</strong> <?= number_format($xTotals['PTO'], 2) ?>h<?php endif; ?>
+            <?php if ($hasTimeOff || $xTotals['Sick'] > 0): ?>&nbsp;|&nbsp; <strong>Sick:</strong> <?= number_format($xTotals['Sick'], 2) ?>h<?php endif; ?>
+            <?php if ($extras['holidayPay'] && $xTotals['Holiday'] > 0): ?>&nbsp;|&nbsp; <strong>Holiday:</strong> <?= number_format($xTotals['Holiday'], 2) ?>h<?php endif; ?>
+            <?php if (!$editMode && array_sum($xTotals) > 0): ?>&nbsp;|&nbsp; <strong>Total Paid:</strong> <?= number_format($weekTotal + array_sum($xTotals), 2) ?>h<?php endif; ?>
         </div>
     </form>
 </div>

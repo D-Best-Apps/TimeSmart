@@ -12,6 +12,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header("Location: time_off.php");
     exit;
 }
+require_once __DIR__ . '/../functions/csrf.php';
+require_csrf('time_off.php');
 
 $sessionEmpID = (int) $_SESSION['EmployeeID'];
 $requestID    = (int) ($_POST['id'] ?? 0);

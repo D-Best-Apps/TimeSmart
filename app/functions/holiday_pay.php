@@ -16,8 +16,12 @@
  *     holidays with no punch or paid time off in the 14 days before them (company
  *     holidays not counted): someone who has left but isn't archived yet, or is on
  *     long unpaid leave.
- * Holiday hours are reported in their own column and never count toward overtime
- * (they aren't hours worked). Working on a holiday is paid as usual, on top.
+ *   - An employee's own Holiday hours (Edit User) replace the setting, e.g. 8 for a
+ *     part-timer; an admin can also set one employee's hours for one holiday by hand
+ *     (holiday_pay_adjustments, e.g. half a holiday), which wins over every rule.
+ * Holiday hours are reported in their own column. By default they don't count toward
+ * overtime (they aren't hours worked); HolidayPayCountsOT counts them toward the
+ * weekly threshold (holidayOvertimeCredit()). Working on a holiday is paid as usual, on top.
  */
 
 require_once __DIR__ . '/settings_helper.php';
@@ -28,7 +32,7 @@ require_once __DIR__ . '/time_off_hours.php'; // fetchApprovedTimeOff()
 /** Holiday pay needs a punch or paid time off within this many (non-holiday) days before the holiday. */
 const HOLIDAY_PAY_ACTIVE_DAYS = 14;
 
-/** @return array{enabled:bool,mode:string,fixedHours:float,dayOff:string,requireAdjacent:bool} */
+/** @return array{enabled:bool,mode:string,fixedHours:float,dayOff:string,requireAdjacent:bool,countsOT:bool} */
 function holidayPayPolicy(mysqli $conn): array
 {
     $get = fn(string $k, string $d) => (string) (getSettingValue($k, $conn) ?? $d);
@@ -39,22 +43,8 @@ function holidayPayPolicy(mysqli $conn): array
         'fixedHours'      => ($fixed > 0 && $fixed <= 24) ? $fixed : 8.0,
         'dayOff'          => $get('HolidayPayDayOff', 'none') === 'pay' ? 'pay' : 'none',
         'requireAdjacent' => $get('HolidayPayRequireAdjacent', '0') === '1',
+        'countsOT'        => $get('HolidayPayCountsOT', '0') === '1',
     ];
-}
-
-/**
- * A shift's scheduled paid hours: start to end, less the shift's lunch. For punched
- * lunches that's the "Expected lunch" on the shift editor (0 = none), since a full
- * shift includes one even though the clock doesn't deduct it.
- */
-function shiftScheduledHours(array $shift): float
-{
-    [$s, $e] = shiftWindow($shift);
-    $hours = ($e - $s) / 3600;
-    if ($hours >= (float) ($shift['LunchMinWorkedHours'] ?? 0)) {
-        $hours -= (int) ($shift['LunchMinutes'] ?? 0) / 60;
-    }
-    return round(max(0.0, $hours), 2);
 }
 
 /** Paid holidays observed in [$start, $end]: 'Y-m-d' => name. */
@@ -77,9 +67,11 @@ function paidHolidaysInRange(string $start, string $end): array
 
 /**
  * Holiday hours per employee for [$start, $end].
- * @return array<int,array{hours:float,days:array<string,array{name:string,hours:float}>}>
+ * Each day: name, hours, and 'adjusted' (+ 'note', 'rule') when set by hand.
+ * $withAdjustments false gives the hours the rules alone would pay.
+ * @return array<int,array{hours:float,days:array<string,array{name:string,hours:float,adjusted?:bool,note?:string,rule?:float}>}>
  */
-function holidayPayByEmployee(mysqli $conn, string $start, string $end): array
+function holidayPayByEmployee(mysqli $conn, string $start, string $end, bool $withAdjustments = true): array
 {
     $policy = holidayPayPolicy($conn);
     if (!$policy['enabled']) {
@@ -94,7 +86,11 @@ function holidayPayByEmployee(mysqli $conn, string $start, string $end): array
     } catch (mysqli_sql_exception $e) {
         $shifts = [];
     }
-    $users = $conn->query("SELECT ID, ShiftID FROM users")->fetch_all(MYSQLI_ASSOC);
+    try {
+        $users = $conn->query("SELECT ID, ShiftID, HolidayHours FROM users")->fetch_all(MYSQLI_ASSOC);
+    } catch (mysqli_sql_exception $e) {
+        $users = $conn->query("SELECT ID, ShiftID, NULL AS HolidayHours FROM users")->fetch_all(MYSQLI_ASSOC);
+    }
 
     $firstDay = [];
     $res = $conn->query("SELECT EmployeeID, MIN(Date) AS d FROM timepunches WHERE TimeIN IS NOT NULL GROUP BY EmployeeID");
@@ -178,13 +174,80 @@ function holidayPayByEmployee(mysqli $conn, string $start, string $end): array
                     continue;
                 }
             }
-            $hours = ($policy['mode'] === 'shift' && $shift) ? shiftScheduledHours($shift) : $policy['fixedHours'];
+            $hours = holidayHoursFor($u, $shift, $policy);
             if ($hours <= 0) {
                 continue;
             }
             $out[$eid]['days'][$date] = ['name' => $name, 'hours' => $hours];
-            $out[$eid]['hours'] = round(($out[$eid]['hours'] ?? 0) + $hours, 2);
         }
     }
+
+    if ($withAdjustments) {
+        foreach (holidayPayAdjustments($conn, $start, $end) as $eid => $byDate) {
+            foreach ($byDate as $date => $adj) {
+                if (!isset($holidays[$date])) {
+                    continue; // no longer a paid holiday: the hand-set hours don't apply
+                }
+                $rule = $out[$eid]['days'][$date]['hours'] ?? 0.0;
+                $out[$eid]['days'][$date] = ['name' => $holidays[$date], 'hours' => $adj['hours'],
+                                             'adjusted' => true, 'note' => $adj['note'], 'rule' => $rule];
+            }
+        }
+    }
+    foreach ($out as $eid => &$o) {
+        $o['days'] = array_filter($o['days'] ?? [], fn($d) => $d['hours'] > 0 || !empty($d['adjusted']));
+        ksort($o['days']);
+        $o['hours'] = round(array_sum(array_column($o['days'], 'hours')), 2);
+        if (!$o['days']) {
+            unset($out[$eid]);
+        }
+    }
+    unset($o);
     return $out;
+}
+
+/** A full holiday's hours for one employee: their own Holiday hours, else the shift or fixed setting. */
+function holidayHoursFor(array $user, ?array $shift, array $policy): float
+{
+    if (isset($user['HolidayHours']) && $user['HolidayHours'] !== null && $user['HolidayHours'] !== '') {
+        return round(max(0.0, (float) $user['HolidayHours']), 2);
+    }
+    return ($policy['mode'] === 'shift' && $shift) ? shiftScheduledHours($shift) : $policy['fixedHours'];
+}
+
+/** Hand-set holiday hours in [$start, $end]: [employeeID][date] => [hours, note, by, at]. */
+function holidayPayAdjustments(mysqli $conn, string $start, string $end): array
+{
+    $out = [];
+    try {
+        $st = $conn->prepare("SELECT EmployeeID, HolidayDate, Hours, Note, AdjustedBy, AdjustedAt FROM holiday_pay_adjustments WHERE HolidayDate BETWEEN ? AND ?");
+        $st->bind_param("ss", $start, $end);
+        $st->execute();
+        foreach ($st->get_result()->fetch_all(MYSQLI_ASSOC) as $r) {
+            $out[(int) $r['EmployeeID']][$r['HolidayDate']] = [
+                'hours' => round((float) $r['Hours'], 2), 'note' => (string) ($r['Note'] ?? ''),
+                'by' => (string) ($r['AdjustedBy'] ?? ''), 'at' => (string) $r['AdjustedAt'],
+            ];
+        }
+    } catch (mysqli_sql_exception $e) {
+        // migration not applied yet
+    }
+    return $out;
+}
+
+/**
+ * Holiday hours per work week (payPeriodStart() => hours) that count toward the weekly
+ * overtime threshold, or [] while HolidayPayCountsOT is off. Pass to weeklyOvertime().
+ */
+function holidayOvertimeCredit(array $policy, array $employeeHolidayPay): array
+{
+    if (empty($policy['countsOT'])) {
+        return [];
+    }
+    $credit = [];
+    foreach ($employeeHolidayPay['days'] ?? [] as $date => $d) {
+        $wk = payPeriodStart($date);
+        $credit[$wk] = ($credit[$wk] ?? 0.0) + (float) $d['hours'];
+    }
+    return $credit;
 }

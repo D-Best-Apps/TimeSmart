@@ -30,6 +30,7 @@ CREATE TABLE `users` (
   `Pass` varchar(255) DEFAULT NULL,
   `BadgeID` varchar(50) DEFAULT NULL,
   `PIN` varchar(6) DEFAULT NULL,
+  `EmployeeNumber` varchar(20) DEFAULT NULL,
   `ProfilePhoto` varchar(255) DEFAULT NULL,
   `ClockStatus` varchar(255) DEFAULT NULL,
   `Office` varchar(100) DEFAULT NULL,
@@ -49,9 +50,11 @@ CREATE TABLE `users` (
   `NotifyTimesheetEdits` tinyint(1) NOT NULL DEFAULT 0,
   `ScheduledStartTime` time DEFAULT NULL,
   `ShiftID` int(11) DEFAULT NULL,
+  `HolidayHours` decimal(5,2) DEFAULT NULL,
   PRIMARY KEY (`ID`),
   UNIQUE KEY `BadgeID` (`BadgeID`),
-  UNIQUE KEY `PIN` (`PIN`)
+  UNIQUE KEY `PIN` (`PIN`),
+  UNIQUE KEY `EmployeeNumber` (`EmployeeNumber`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE `admins` (
@@ -94,11 +97,12 @@ CREATE TABLE `pending_edits` (
 CREATE TABLE `time_off_requests` (
   `ID` int(11) NOT NULL AUTO_INCREMENT,
   `EmployeeID` int(11) NOT NULL,
-  `Category` enum('Sick','PTO','Unpaid') NOT NULL,
+  `Category` enum('Sick','PTO','Unpaid','Unexcused') NOT NULL,
   `StartDate` date NOT NULL,
   `EndDate` date NOT NULL,
   `StartTime` time DEFAULT NULL,
   `EndTime` time DEFAULT NULL,
+  `Hours` decimal(5,2) DEFAULT NULL,
   `Notes` varchar(500) DEFAULT NULL,
   `Reason` varchar(500) DEFAULT NULL,
   `Status` enum('Pending','Approved','Rejected','Withdrawn','Cancelled') NOT NULL DEFAULT 'Pending',
@@ -264,8 +268,33 @@ INSERT INTO `settings` (`SettingKey`, `SettingValue`) VALUES
   ('HolidayPayMode', 'shift'),
   ('HolidayPayFixedHours', '8'),
   ('HolidayPayDayOff', 'none'),
-  ('HolidayPayRequireAdjacent', '0')
+  ('HolidayPayRequireAdjacent', '0'),
+  ('HolidayPayCountsOT', '0'),
+  ('TimeOffDayHoursMode', 'fixed'),
+  ('TimeOffDayHours', '8'),
+  ('TimeOffSickEnabled', '1')
 ON DUPLICATE KEY UPDATE `SettingKey` = `SettingKey`;
+
+-- Holiday moved for one year, and holiday hours set by hand (Settings -> Holidays)
+CREATE TABLE `holiday_moves` (
+  `HolidayID` int(11) NOT NULL,
+  `Year` smallint(6) NOT NULL,
+  `MovedTo` date NOT NULL,
+  PRIMARY KEY (`HolidayID`, `Year`),
+  CONSTRAINT `holiday_moves_holiday` FOREIGN KEY (`HolidayID`) REFERENCES `holidays` (`ID`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `holiday_pay_adjustments` (
+  `EmployeeID` int(11) NOT NULL,
+  `HolidayDate` date NOT NULL,
+  `Hours` decimal(5,2) NOT NULL,
+  `Note` varchar(255) DEFAULT NULL,
+  `AdjustedBy` varchar(100) DEFAULT NULL,
+  `AdjustedAt` datetime NOT NULL,
+  PRIMARY KEY (`EmployeeID`, `HolidayDate`),
+  CONSTRAINT `holiday_pay_adjustments_employee` FOREIGN KEY (`EmployeeID`) REFERENCES `users` (`ID`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 
 -- Payroll totals saved when payroll is closed (Payroll Totals -> Close payroll)
 CREATE TABLE `payroll_closes` (

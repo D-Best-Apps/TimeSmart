@@ -71,15 +71,16 @@ while ($row = $result->fetch_assoc()) {
     ];
 }
 
-// Overlay approved Sick/PTO. If there are no punches for that day, the time-off
-// becomes the day's status; if there are punches, the time-off augments the day's
-// total hours and is shown as a secondary label.
+// Overlay approved Sick/PTO and recorded absences (Excused = unpaid excused absence,
+// Unexcused). If there are no punches for that day, the time-off becomes the day's
+// status; if there are punches, the time-off augments the day's total hours and is
+// shown as a secondary label.
 $timeOffRows = fetchApprovedTimeOff($conn, $startDate, $endDate, $selectedEmp !== 'all' ? (int) $selectedEmp : null);
 foreach ($timeOffRows as $req) {
     foreach (expandTimeOffToDays($req, $startDate, $endDate) as $dr) {
         $eid = (int) $req['EmployeeID'];
         $d   = $dr['Date'];
-        $cat = $dr['Category'] === 'Unpaid' ? 'Unpaid' : (($dr['Category'] === 'Sick') ? 'Sick' : 'PTO');
+        $cat = ['Unpaid' => 'Excused', 'Unexcused' => 'Unexcused', 'Sick' => 'Sick'][$dr['Category']] ?? 'PTO';
         $hrs = $dr['Hours'];
         if (!isset($attendance[$eid][$d]) || $attendance[$eid][$d]['status'] === 'Absent') {
             $attendance[$eid][$d] = [
@@ -108,7 +109,7 @@ while ($cur <= strtotime($endDate)) {
     $cur = strtotime('+1 day', $cur);
 }
 
-$totalPresent = $totalIncomplete = $totalAbsent = $totalSick = $totalPTO = 0;
+$totalPresent = $totalIncomplete = $totalAbsent = $totalSick = $totalPTO = $totalExcused = $totalUnexcused = 0;
 foreach (($selectedEmp === 'all' ? array_keys($employees) : [$selectedEmp]) as $eid) {
     foreach ($dates as $date) {
         $status = $attendance[$eid][$date]['status'] ?? 'Absent';
@@ -116,6 +117,8 @@ foreach (($selectedEmp === 'all' ? array_keys($employees) : [$selectedEmp]) as $
         elseif  ($status === 'Incomplete') $totalIncomplete++;
         elseif  ($status === 'Sick')       $totalSick++;
         elseif  ($status === 'PTO')        $totalPTO++;
+        elseif  ($status === 'Excused')    $totalExcused++;
+        elseif  ($status === 'Unexcused')  $totalUnexcused++;
         else                                $totalAbsent++;
     }
 }
@@ -140,6 +143,8 @@ if ($exportPDF) {
             <td style='background-color:#fff3cd; padding: 10px;'><strong>Incomplete</strong><br>$totalIncomplete</td>
             <td style='background-color:#fdecea; padding: 10px;'><strong>Sick</strong><br>$totalSick</td>
             <td style='background-color:#e8f1fc; padding: 10px;'><strong>PTO</strong><br>$totalPTO</td>
+            <td style='background-color:#eceff1; padding: 10px;'><strong>Excused</strong><br>$totalExcused</td>
+            <td style='background-color:#ffe0b2; padding: 10px;'><strong>Unexcused</strong><br>$totalUnexcused</td>
             <td style='background-color:#f8d7da; padding: 10px;'><strong>Absent</strong><br>$totalAbsent</td>
         </tr>
     </table>";
@@ -151,6 +156,8 @@ if ($exportPDF) {
         .incomplete { background-color: #fff3cd; }
         .sick { background-color: #fdecea; }
         .pto { background-color: #e8f1fc; }
+        .excused { background-color: #eceff1; }
+        .unexcused { background-color: #ffe0b2; }
         .absent { background-color: #f8d7da; }
     </style>";
 
@@ -168,8 +175,10 @@ if ($exportPDF) {
             $label = $e['status'];
             if ($e['hours']) $label .= "<br>{$e['hours']} hrs";
             // If they worked AND had time-off, surface the time-off split below the hours
-            if (!empty($e['timeOffHrs']) && $e['status'] === 'Present' && !empty($e['timeOffCat'])) {
-                $label .= "<br><small>incl. {$e['timeOffHrs']}h {$e['timeOffCat']}</small>";
+            if ($e['status'] === 'Present' && !empty($e['timeOffCat'])) {
+                $label .= !empty($e['timeOffHrs'])
+                    ? "<br><small>incl. {$e['timeOffHrs']}h {$e['timeOffCat']}</small>"
+                    : "<br><small>+ {$e['timeOffCat']}</small>";
             }
             $class = strtolower($e['status']);
             $html .= "<td class=\"$class\">$label</td>";
@@ -239,6 +248,14 @@ require_once 'header.php';
             <h3>PTO</h3>
             <p><?= $totalPTO ?></p>
         </div>
+        <div class="card" style="background-color:#eceff1;">
+            <h3>Excused</h3>
+            <p><?= $totalExcused ?></p>
+        </div>
+        <div class="card" style="background-color:#ffe0b2;">
+            <h3>Unexcused</h3>
+            <p><?= $totalUnexcused ?></p>
+        </div>
         <div class="card absent-card">
             <h3>Absent</h3>
             <p><?= $totalAbsent ?></p>
@@ -251,7 +268,8 @@ require_once 'header.php';
         <span class="yellow"></span> Incomplete
         <span style="background-color:#fdecea; display:inline-block; width:14px; height:14px; border:1px solid #ccc; vertical-align:middle;"></span> Sick
         <span style="background-color:#e8f1fc; display:inline-block; width:14px; height:14px; border:1px solid #ccc; vertical-align:middle;"></span> PTO
-        <span style="background-color:#eceff1; display:inline-block; width:14px; height:14px; border:1px solid #ccc; vertical-align:middle;"></span> Unpaid (excused absence, counted as Absent)
+        <span style="background-color:#eceff1; display:inline-block; width:14px; height:14px; border:1px solid #ccc; vertical-align:middle;"></span> Excused (excused absence, unpaid)
+        <span style="background-color:#ffe0b2; display:inline-block; width:14px; height:14px; border:1px solid #ccc; vertical-align:middle;"></span> Unexcused (unexcused absence, unpaid)
         <span class="red"></span> Absent
     </div>
 
@@ -273,14 +291,17 @@ require_once 'header.php';
                         $e = $attendance[$eid][$d] ?? ['status' => 'Absent', 'hours' => null, 'TimeIN' => null, 'TimeOUT' => null, 'timeOffHrs' => 0, 'timeOffCat' => null];
                         $label = $e['status'];
                         if ($e['hours']) $label .= "<br>{$e['hours']} hrs";
-                        if (!empty($e['timeOffHrs']) && $e['status'] === 'Present' && !empty($e['timeOffCat'])) {
-                            $label .= "<br><small style='color:#555;'>incl. {$e['timeOffHrs']}h {$e['timeOffCat']}</small>";
+                        if ($e['status'] === 'Present' && !empty($e['timeOffCat'])) {
+                            $label .= !empty($e['timeOffHrs'])
+                                ? "<br><small style='color:#555;'>incl. {$e['timeOffHrs']}h {$e['timeOffCat']}</small>"
+                                : "<br><small style='color:#555;'>+ {$e['timeOffCat']}</small>";
                         }
                         $class = strtolower($e['status']);
                         $style = '';
                         if ($e['status'] === 'Sick') $style = ' style="background-color:#fdecea;"';
                         elseif ($e['status'] === 'PTO') $style = ' style="background-color:#e8f1fc;"';
-                        elseif ($e['status'] === 'Unpaid') $style = ' style="background-color:#eceff1;"';
+                        elseif ($e['status'] === 'Excused') $style = ' style="background-color:#eceff1;"';
+                        elseif ($e['status'] === 'Unexcused') $style = ' style="background-color:#ffe0b2;"';
                         $tip = '';
                         if ($e['TimeIN'] || $e['TimeOUT']) {
                             $tip = "<div class='tooltiptext'>IN: {$e['TimeIN']}<br>OUT: {$e['TimeOUT']}</div>";

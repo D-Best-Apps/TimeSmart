@@ -285,6 +285,8 @@ try {
     }
 
     $conn->commit();
+    // Keep the In/Lunch/Out flag (Home, public board, kiosk) in step with the edited punches
+    reconcileClockStatus($conn, (int) $employeeID);
 
     // Surface validation results to the admin on the next page.
     if (!empty($skipped) || !empty($flagged)) {

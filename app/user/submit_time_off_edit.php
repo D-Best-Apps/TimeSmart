@@ -3,6 +3,9 @@ session_start();
 require '../auth/db.php';
 require_once __DIR__ . '/../functions/time_off_email.php';
 require_once __DIR__ . '/../functions/app_url.php';
+require_once __DIR__ . '/../functions/time_off_hours.php'; // timeOffCategories(), timeOffLabel()
+require_once __DIR__ . '/../functions/m365_calendar.php';  // m365HoursPhrase()
+require_once __DIR__ . '/../functions/csrf.php';
 date_default_timezone_set('America/Chicago');
 
 if (!isset($_SESSION['EmployeeID'])) {
@@ -23,9 +26,10 @@ if ($sessionEmpID !== $postEmpID || $requestID === 0) {
     header('Location: ../error.php?code=400&message=' . urlencode('Invalid submission.'));
     exit;
 }
+require_csrf('edit_time_off.php?id=' . $requestID . '&status=invalid&reason=' . urlencode('The page had been open too long. Nothing was saved; please try again.'));
 
 // Load and lock the row — must belong to this employee, must be Pending or Approved
-$stmt = $conn->prepare("SELECT * FROM time_off_requests WHERE ID = ? AND EmployeeID = ? AND Status IN ('Pending','Approved') AND Category <> 'Unpaid'");
+$stmt = $conn->prepare("SELECT * FROM time_off_requests WHERE ID = ? AND EmployeeID = ? AND Status IN ('Pending','Approved') AND Category NOT IN ('Unpaid','Unexcused')");
 $stmt->bind_param("ii", $requestID, $sessionEmpID);
 $stmt->execute();
 $req = $stmt->get_result()->fetch_assoc();
@@ -42,6 +46,10 @@ $startDate = $_POST['StartDate'] ?? '';
 $endDate   = $_POST['EndDate']   ?? '';
 $startTime = trim($_POST['StartTime'] ?? '');
 $endTime   = trim($_POST['EndTime']   ?? '');
+$hoursRaw  = trim($_POST['Hours']     ?? '');
+$partMode  = ($_POST['PartMode'] ?? '') === 'hours' ? 'hours' : 'times';
+// Partial day: the PartDay box, or (older forms without it) times filled in
+$partDay   = !empty($_POST['PartDay']) || (!isset($_POST['PartMode']) && ($startTime !== '' || $endTime !== ''));
 $notes     = trim($_POST['Notes']     ?? '');
 $reason    = trim($_POST['Reason']    ?? '');
 
@@ -53,8 +61,10 @@ function rejectEdit(int $rid, string $reason): void {
     exit;
 }
 
-if (!in_array($category, ['Sick', 'PTO'], true)) {
-    rejectEdit($requestID, 'Choose Sick or PTO.');
+// PTO, plus Sick when offered; a Sick request may stay Sick even if Sick has been turned off
+$allowed = timeOffCategories(false, $req['Category'] === 'Sick' ? 'Sick' : null);
+if (!array_key_exists($category, $allowed)) {
+    rejectEdit($requestID, isset($allowed['Sick']) ? 'Choose Sick or PTO.' : 'Choose PTO.');
 }
 $dateRegex = '/^\d{4}-\d{2}-\d{2}$/';
 if (!preg_match($dateRegex, $startDate) || !preg_match($dateRegex, $endDate)) {
@@ -66,6 +76,18 @@ if ($endDate < $startDate) {
 // No past-date check on Approved edits — bookkeeper amendment use case explicitly needs to adjust past windows.
 if (!$isApproved && $startDate < date('Y-m-d')) {
     rejectEdit($requestID, 'Start date cannot be in the past.');
+}
+$hoursVal = null;
+if (!$partDay) {
+    $startTime = $endTime = ''; // full day
+} elseif ($partMode === 'hours') {
+    if (!is_numeric($hoursRaw) || (float) $hoursRaw <= 0 || (float) $hoursRaw > 24) {
+        rejectEdit($requestID, 'Enter the hours you will miss: more than 0 and at most 24.');
+    }
+    $hoursVal  = round((float) $hoursRaw, 2);
+    $startTime = $endTime = ''; // hours missed, no time window
+} elseif ($startTime === '' || $endTime === '') {
+    rejectEdit($requestID, 'Partial day requires both start time and end time, or choose Hours missed.');
 }
 $hasStartTime = $startTime !== '';
 $hasEndTime   = $endTime   !== '';
@@ -94,10 +116,10 @@ if (!$isApproved) {
     // Pending → edit in place (no amendment row, no admin email — admin sees updated values in queue)
     $u = $conn->prepare("
         UPDATE time_off_requests
-           SET Category=?, StartDate=?, EndDate=?, StartTime=?, EndTime=?, Notes=?, SubmittedAt=?
+           SET Category=?, StartDate=?, EndDate=?, StartTime=?, EndTime=?, Hours=?, Notes=?, SubmittedAt=?
          WHERE ID = ? AND EmployeeID = ? AND Status = 'Pending'
     ");
-    $u->bind_param("sssssssii", $category, $startDate, $endDate, $startTimeVal, $endTimeVal, $notesVal, $now, $requestID, $sessionEmpID);
+    $u->bind_param("sssssdssii", $category, $startDate, $endDate, $startTimeVal, $endTimeVal, $hoursVal, $notesVal, $now, $requestID, $sessionEmpID);
     $u->execute();
     header('Location: time_off.php?status=updated');
     exit;
@@ -115,13 +137,13 @@ if ($openAmend->get_result()->num_rows > 0) {
 
 $ins = $conn->prepare("
     INSERT INTO time_off_requests
-        (EmployeeID, Category, StartDate, EndDate, StartTime, EndTime, Notes, Reason,
+        (EmployeeID, Category, StartDate, EndDate, StartTime, EndTime, Hours, Notes, Reason,
          Status, SubmittedAt, AmendsRequestID)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?, ?)
 ");
 $ins->bind_param(
-    "issssssssi",
-    $sessionEmpID, $category, $startDate, $endDate, $startTimeVal, $endTimeVal,
+    "isssssdsssi",
+    $sessionEmpID, $category, $startDate, $endDate, $startTimeVal, $endTimeVal, $hoursVal,
     $notesVal, $reasonVal, $now, $requestID
 );
 if (!$ins->execute()) {
@@ -149,16 +171,18 @@ if ($adminAddresses) {
         : date('m/d/Y', strtotime($startDate)) . ' &ndash; ' . date('m/d/Y', strtotime($endDate));
     $origTimes = ($req['StartTime'] && $req['EndTime'])
         ? date('g:i a', strtotime($req['StartTime'])) . ' &ndash; ' . date('g:i a', strtotime($req['EndTime']))
-        : 'all day';
+        : ((float) ($req['Hours'] ?? 0) > 0
+            ? m365HoursPhrase((float) $req['Hours'], $req['StartDate'] !== $req['EndDate']) . ' missed'
+            : 'all day');
     $newTimes = ($hasStartTime && $hasEndTime)
         ? date('g:i a', strtotime($startTime)) . ' &ndash; ' . date('g:i a', strtotime($endTime))
-        : 'all day';
+        : ($hoursVal !== null ? m365HoursPhrase($hoursVal, $startDate !== $endDate) . ' missed' : 'all day');
 
     $subject = "Time-Off Amendment Submitted &ndash; " . htmlspecialchars($empName);
     $body  = "<p><strong>{$empName}</strong> has submitted an amendment to an approved time-off request.</p>";
     $body .= "<table cellpadding='4' cellspacing='0' border='1' style='border-collapse:collapse;'>";
     $body .= "<tr><th></th><th>Original (approved)</th><th>Requested change</th></tr>";
-    $body .= "<tr><td>Category</td><td>" . htmlspecialchars($req['Category']) . "</td><td>" . htmlspecialchars($category) . "</td></tr>";
+    $body .= "<tr><td>Category</td><td>" . htmlspecialchars(timeOffLabel($req['Category'])) . "</td><td>" . htmlspecialchars(timeOffLabel($category)) . "</td></tr>";
     $body .= "<tr><td>Dates</td><td>{$origDates}</td><td>{$newDates}</td></tr>";
     $body .= "<tr><td>Times</td><td>{$origTimes}</td><td>{$newTimes}</td></tr>";
     $body .= "<tr><td>Notes</td><td>" . nl2br(htmlspecialchars($req['Notes'] ?? '')) . "</td><td>" . nl2br(htmlspecialchars($notesVal ?? '')) . "</td></tr>";

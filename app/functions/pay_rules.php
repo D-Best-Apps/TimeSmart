@@ -543,3 +543,18 @@ function shiftChip(?array $shift): string {
     return '<span class="shift-chip" style="display:inline-block; padding:.1rem .5rem; border-radius:999px; font-size:.85em; color:#fff; background:' . $color . ';">'
          . htmlspecialchars($shift['Name']) . '</span>';
 }
+
+/**
+ * A shift's scheduled paid hours: start to end, less the shift's lunch. For punched
+ * lunches that's the "Expected lunch" on the shift editor (0 = none), since a full
+ * shift includes one even though the clock doesn't deduct it.
+ */
+function shiftScheduledHours(array $shift): float
+{
+    [$s, $e] = shiftWindow($shift);
+    $hours = ($e - $s) / 3600;
+    if ($hours >= (float) ($shift['LunchMinWorkedHours'] ?? 0)) {
+        $hours -= (int) ($shift['LunchMinutes'] ?? 0) / 60;
+    }
+    return round(max(0.0, $hours), 2);
+}

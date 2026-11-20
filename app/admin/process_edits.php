@@ -69,6 +69,7 @@ function resolveIncompleteLunch(mysqli $conn, array $edit, string $lunchEnd, str
     $s->execute();
     $s->close();
     $conn->commit();
+    reconcileClockStatus($conn, (int) $edit['EmployeeID']);
     return null;
 }
 // The time fields an employee request can change: pending_edits' column names, which
@@ -204,6 +205,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $conn->begin_transaction();
                 applyApprovedFields($conn, $edit, $fields, $admin);
                 $conn->commit();
+                reconcileClockStatus($conn, (int) $edit['EmployeeID']);
             }
 
             // Update pending_edits status. This marks the entire request as processed.

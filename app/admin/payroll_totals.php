@@ -244,7 +244,7 @@ require_once 'header.php';
                 <td class="num"><?= number_format($r['pto'], 2) ?></td>
                 <td class="num"><?= number_format($r['sick'], 2) ?></td>
                 <?php if ($showHoliday): ?>
-                <td class="num" title="<?= htmlspecialchars(implode(PHP_EOL, array_map(fn($d, $h) => date('D n/j', strtotime($d)) . ' ' . $h['name'] . ': ' . number_format($h['hours'], 2), array_keys($r['holidayDays']), $r['holidayDays']))) ?>"><?= number_format($r['holiday'], 2) ?></td>
+                <td class="num" title="<?= htmlspecialchars(implode(PHP_EOL, array_map(fn($d, $h) => date('D n/j', strtotime($d)) . ' ' . $h['name'] . ': ' . number_format($h['hours'], 2) . (!empty($h['adjusted']) ? ' (set by hand' . (!empty($h['note']) ? ': ' . $h['note'] : '') . ')' : ''), array_keys($r['holidayDays']), $r['holidayDays']))) ?>"><?= number_format($r['holiday'], 2) ?></td>
                 <?php endif; ?>
                 <td class="num"><strong><?= number_format($r['total'], 2) ?></strong></td>
             </tr>
@@ -265,7 +265,7 @@ require_once 'header.php';
     <p class="muted" style="color:var(--muted-text); font-size:.85rem; margin-top:.75rem;">
         Decimal hours. Overtime is hours over <?= overtimeWeeklyHours() ?> per <?= htmlspecialchars(workWeekLabel()) ?> week.
         Worked hours are paid hours after shift rounding and lunch rules. PTO and sick are approved time off and don't count toward overtime.
-        <?php if ($showHoliday): ?>Holiday is holiday pay (<a href="holidays.php">Settings → Holidays</a>); it doesn't count toward overtime either. Hover a holiday figure for the days.<?php endif; ?>
+        <?php if ($showHoliday): ?>Holiday is holiday pay (<a href="holidays.php">Settings → Holidays</a>); <?= holidayPayPolicy($conn)['countsOT'] ? 'it counts toward the overtime threshold, so worked hours in a holiday week reach overtime sooner' : "it doesn't count toward overtime either" ?>. Hover a holiday figure for the days.<?php endif; ?>
     </p>
     <?php if ($canClose): ?>
     <form method="POST" style="margin-top:1rem;"

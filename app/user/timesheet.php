@@ -1,6 +1,7 @@
 <?php
 require_once 'header.php';
 require_once __DIR__ . '/../functions/time_off_hours.php';
+require_once __DIR__ . '/../functions/holiday_pay.php'; // holiday hours (when holiday pay is on)
 
 // Display status messages
 $statusMessage = '';
@@ -42,12 +43,75 @@ while ($row = $result->fetch_assoc()) {
 
 // Approved time-off overlapping this date range
 $approvedTimeOff = fetchApprovedTimeOff($conn, $start, $end, (int) $empID);
-$timeOffSick = 0; $timeOffPTO = 0;
-foreach ($approvedTimeOff as $req) {
-    $hrs = timeOffHoursInPeriod($req, $start, $end);
-    if ($req['Category'] === 'Sick') $timeOffSick += $hrs;
-    else                              $timeOffPTO  += $hrs;
+
+/**
+ * Approved time off and company holidays per day, for the read-only lines in the
+ * timesheet (same lines as the admin timesheet, admin/view_punches.php).
+ * Each line: kind (PTO|Sick|Unpaid|Unexcused|Holiday), label, hours (null = none
+ * shown), note. Totals: PTO, Sick, Holiday hours.
+ */
+function tsTimeOffAndHolidays(mysqli $conn, int $empID, string $start, string $end): array
+{
+    $days = [];
+    $totals = ['PTO' => 0.0, 'Sick' => 0.0, 'Holiday' => 0.0];
+
+    // Company holidays (paid or not); hours only while holiday pay is on
+    $policy = holidayPayPolicy($conn);
+    $holidayPay   = $policy['enabled'] ? (holidayPayByEmployee($conn, $start, $end)[$empID]['days'] ?? []) : [];
+    $paidHolidays = $policy['enabled'] ? paidHolidaysInRange($start, $end) : [];
+    for ($d = new DateTime($start), $fin = new DateTime($end); $d <= $fin; $d->modify('+1 day')) {
+        $date = $d->format('Y-m-d');
+        $name = $holidayPay[$date]['name'] ?? isCompanyHoliday($date);
+        if ($name === null) {
+            continue;
+        }
+        $line = ['kind' => 'Holiday', 'label' => 'Holiday: ' . $name, 'hours' => null, 'note' => ''];
+        if (isset($holidayPay[$date])) {
+            $line['label'] .= ' — holiday pay';
+            $line['hours'] = (float) $holidayPay[$date]['hours'];
+            $totals['Holiday'] += $line['hours'];
+        } elseif ($policy['enabled']) {
+            $line['note'] = isset($paidHolidays[$date]) ? 'No holiday pay for this day' : 'Unpaid holiday';
+        }
+        $days[$date][] = $line;
+    }
+
+    // Approved time off, on the days it is charged
+    foreach (fetchApprovedTimeOff($conn, $start, $end, $empID) as $req) {
+        foreach (expandTimeOffToDays($req, $start, $end) as $dr) {
+            $cat  = $dr['Category'];
+            $paid = !in_array($cat, TIME_OFF_UNPAID, true);
+            $desc = ['Category' => $cat, 'StartTime' => $dr['StartTime'], 'EndTime' => $dr['EndTime'], 'Hours' => $dr['PartHours']];
+            $days[$dr['Date']][] = [
+                'kind'  => $cat,
+                'label' => ($paid && $dr['PartHours'] !== null) ? timeOffLabel($cat) . ' (part day)' : timeOffDescribe($desc, false),
+                'hours' => (float) $dr['Hours'], // 0 for an absence
+                'note'  => trim((string) ($dr['Notes'] ?? '')),
+            ];
+            if ($paid) {
+                $totals[$cat === 'Sick' ? 'Sick' : 'PTO'] += (float) $dr['Hours'];
+            }
+        }
+    }
+    return ['days' => $days, 'totals' => $totals, 'holidayPay' => $policy['enabled']];
 }
+$extras = tsTimeOffAndHolidays($conn, (int) $empID, $start, $end);
+$timeOffSick = $extras['totals']['Sick'];
+$timeOffPTO  = $extras['totals']['PTO'];
+$holidayHrs  = $extras['totals']['Holiday'];
+
+// Day list: punches plus the time off / holiday lines, in date order
+$dayList = [];
+foreach ($punches as $i => $row) {
+    $dayList[$row['Date']]['punches'][$i] = $row;
+}
+foreach ($extras['days'] as $date => $lines) {
+    $dayList[$date]['extras'] = $lines;
+}
+ksort($dayList);
+
+/** Row colours for the time off / holiday lines (same as the admin timesheet and attendance report). */
+const TS_EXTRA_COLORS = ['PTO' => '#e8f1fc', 'Sick' => '#fdecea', 'Unpaid' => '#eceff1', 'Unexcused' => '#ffe0b2', 'Holiday' => '#e6f4ea'];
 function tsFmtTime(?string $t): string {
     if (!$t) return '';
     return date('g:i a', strtotime($t));
@@ -74,14 +138,19 @@ function tsFmtRange(string $s, string $e): string {
 
 <?= $statusMessage ?>
 
-<?php if (!empty($approvedTimeOff)): ?>
-  <div class="card" style="background-color:#e8f1fc; border-left:4px solid #0078D7; padding:0.75rem 1rem; margin-bottom:1rem;">
-    <h3 style="margin-top:0;">Approved Time Off for this period</h3>
+<?php if (!empty($approvedTimeOff) || $holidayHrs > 0): ?>
+  <div class="card" style="background-color:#e8f1fc; color:#222; border-left:4px solid #0078D7; padding:0.75rem 1rem; margin-bottom:1rem;">
+    <h3 style="margin-top:0;">Approved Time Off<?= $extras['holidayPay'] ? ' &amp; Holidays' : '' ?> for this period</h3>
     <p style="margin:0.25rem 0;">
-      <strong>Sick:</strong> <?= tsFmtHours($timeOffSick) ?>
-      &nbsp;&middot;&nbsp;
       <strong>PTO/Vacation:</strong> <?= tsFmtHours($timeOffPTO) ?>
+      &nbsp;&middot;&nbsp;
+      <strong>Sick:</strong> <?= tsFmtHours($timeOffSick) ?>
+      <?php if ($extras['holidayPay']): ?>
+      &nbsp;&middot;&nbsp;
+      <strong>Holiday:</strong> <?= tsFmtHours($holidayHrs) ?>
+      <?php endif; ?>
     </p>
+    <?php if (!empty($approvedTimeOff)): ?>
     <table style="width:100%; border-collapse:collapse; margin-top:0.5rem;">
       <thead>
         <tr style="background-color:#d6e6f7;">
@@ -96,14 +165,17 @@ function tsFmtRange(string $s, string $e): string {
         <?php foreach ($approvedTimeOff as $req): ?>
           <?php
             $reqHours = timeOffHoursInPeriod($req, $start, $end);
-            $timesLabel = ($req['StartTime'] && $req['EndTime'])
-                ? tsFmtTime($req['StartTime']) . ' &ndash; ' . tsFmtTime($req['EndTime'])
-                : 'all day';
-            $catLabel = $req['Category'] === 'Sick' ? 'Sick' : ($req['Category'] === 'Unpaid' ? 'Unpaid absence' : 'PTO/Vacation');
+            if ($req['StartTime'] && $req['EndTime']) {
+                $timesLabel = tsFmtTime($req['StartTime']) . ' &ndash; ' . tsFmtTime($req['EndTime']);
+            } elseif ((float) ($req['Hours'] ?? 0) > 0) {
+                $timesLabel = 'part day, ' . tsFmtHours((float) $req['Hours']) . ' a day';
+            } else {
+                $timesLabel = 'all day';
+            }
           ?>
           <tr>
             <td style="padding:4px 6px; border:1px solid #b8d4ee;"><?= tsFmtRange($req['StartDate'], $req['EndDate']) ?></td>
-            <td style="padding:4px 6px; border:1px solid #b8d4ee;"><?= htmlspecialchars($catLabel) ?></td>
+            <td style="padding:4px 6px; border:1px solid #b8d4ee;"><?= htmlspecialchars(timeOffLabel($req['Category'])) ?></td>
             <td style="padding:4px 6px; border:1px solid #b8d4ee;"><?= $timesLabel ?></td>
             <td style="padding:4px 6px; border:1px solid #b8d4ee; text-align:right;"><?= tsFmtHours($reqHours) ?></td>
             <td style="padding:4px 6px; border:1px solid #b8d4ee;"><?= nl2br(htmlspecialchars($req['Notes'] ?? '')) ?: '&mdash;' ?></td>
@@ -111,6 +183,7 @@ function tsFmtRange(string $s, string $e): string {
         <?php endforeach; ?>
       </tbody>
     </table>
+    <?php endif; ?>
   </div>
 <?php endif; ?>
 
@@ -143,7 +216,8 @@ function tsFmtRange(string $s, string $e): string {
             </tr>
           </thead>
           <tbody>
-            <?php foreach ($punches as $i => $row): ?>
+            <?php foreach ($dayList as $listDate => $dayItems): ?>
+            <?php foreach ($dayItems['punches'] ?? [] as $i => $row): ?>
               <tr>
                 <td class="timesheet-date-cell">
                   <?= date('m/d/Y', strtotime($row['Date'])) ?>
@@ -164,6 +238,16 @@ function tsFmtRange(string $s, string $e): string {
                 <td><input type="text" name="entries[<?= $i ?>][Reason]" placeholder="Only required if edited" class="reason-field"></td>
               </tr>
             <?php endforeach; ?>
+            <?php foreach ($dayItems['extras'] ?? [] as $x): ?>
+              <?php /* Read-only time off / holiday line: no inputs, so nothing here is submitted */ ?>
+              <tr class="ts-extra" style="background-color:<?= TS_EXTRA_COLORS[$x['kind']] ?? '#e8f1fc' ?>; color:#222;">
+                <td class="timesheet-date-cell"><?= date('m/d/Y', strtotime($listDate)) ?></td>
+                <td colspan="4" style="text-align:left;"><?= htmlspecialchars($x['label']) ?></td>
+                <td style="white-space:nowrap;"><?= $x['hours'] !== null ? tsFmtHours($x['hours']) : '&mdash;' ?></td>
+                <td colspan="2" style="text-align:left; color:#555;"><?= htmlspecialchars($x['note']) ?></td>
+              </tr>
+            <?php endforeach; ?>
+            <?php endforeach; ?>
           </tbody>
         </table>
             </div>
@@ -179,5 +263,5 @@ function tsFmtRange(string $s, string $e): string {
   </div>
 </div>
 
-<script src="../js/user_timesheet.js"></script>
+<script src="../js/user_timesheet.js?v=2"></script>
 <?php require_once 'footer.php'; ?>

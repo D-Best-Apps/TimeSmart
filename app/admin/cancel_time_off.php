@@ -9,6 +9,8 @@ require '../auth/db.php';
 require_once __DIR__ . '/../functions/check_permission.php';
 require_once __DIR__ . '/../functions/time_off_email.php';
 require_once __DIR__ . '/../functions/m365_calendar.php';
+require_once __DIR__ . '/../functions/time_off_hours.php'; // timeOffLabel()
+require_once __DIR__ . '/../functions/csrf.php';
 date_default_timezone_set('America/Chicago');
 
 if (!isset($_SESSION['admin'])) {
@@ -31,6 +33,7 @@ if ($requestID === 0) {
     header('Location: edits_timesheet.php');
     exit;
 }
+require_csrf('edit_time_off.php?id=' . $requestID . '&status=invalid&reason=' . urlencode('The page had been open too long. Nothing was cancelled; try again.'));
 if ($reason !== '' && mb_strlen($reason) > 500) {
     $reason = mb_substr($reason, 0, 500);
 }
@@ -120,13 +123,15 @@ if ($employeeEmail !== '') {
         : date('m/d/Y', strtotime($req['StartDate'])) . ' – ' . date('m/d/Y', strtotime($req['EndDate']));
     $timesLabel = (!empty($req['StartTime']) && !empty($req['EndTime']))
         ? date('g:i a', strtotime($req['StartTime'])) . ' – ' . date('g:i a', strtotime($req['EndTime']))
-        : 'all day';
+        : ((float) ($req['Hours'] ?? 0) > 0
+            ? m365HoursPhrase((float) $req['Hours'], $req['StartDate'] !== $req['EndDate']) . ' missed'
+            : 'all day');
 
     $subject = "Your Approved Time Off was Cancelled";
     $body  = "<p>Hi " . htmlspecialchars($req['FirstName']) . ",</p>";
     $body .= "<p>An admin has <strong>cancelled</strong> time off that was previously approved:</p>";
     $body .= "<ul>";
-    $body .= "<li><strong>Category:</strong> " . htmlspecialchars($req['Category']) . "</li>";
+    $body .= "<li><strong>Category:</strong> " . htmlspecialchars(timeOffLabel($req['Category'])) . "</li>";
     $body .= "<li><strong>Dates:</strong> " . htmlspecialchars($datesLabel) . "</li>";
     $body .= "<li><strong>Times:</strong> " . htmlspecialchars($timesLabel) . "</li>";
     if ($reason !== '') {

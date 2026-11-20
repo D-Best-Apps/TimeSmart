@@ -4,6 +4,8 @@ require '../auth/db.php';
 require_once __DIR__ . '/../functions/check_permission.php';
 require_once __DIR__ . '/../functions/time_off_email.php';
 require_once __DIR__ . '/../functions/m365_calendar.php';
+require_once __DIR__ . '/../functions/time_off_hours.php'; // timeOffCategories(), timeOffLabel()
+require_once __DIR__ . '/../functions/csrf.php';
 date_default_timezone_set('America/Chicago');
 
 if (!isset($_SESSION['admin'])) {
@@ -23,6 +25,7 @@ if ($requestID === 0) {
     header('Location: edits_timesheet.php');
     exit;
 }
+require_csrf('edit_time_off.php?id=' . $requestID . '&status=invalid&reason=' . urlencode('The page had been open too long. Nothing was saved; try again.'));
 
 $stmt = $conn->prepare("
     SELECT tor.*, u.FirstName, u.LastName, u.Email
@@ -44,6 +47,10 @@ $startDate = $_POST['StartDate'] ?? '';
 $endDate   = $_POST['EndDate']   ?? '';
 $startTime = trim($_POST['StartTime'] ?? '');
 $endTime   = trim($_POST['EndTime']   ?? '');
+$hoursRaw  = trim($_POST['Hours']     ?? '');
+$partMode  = ($_POST['PartMode'] ?? '') === 'hours' ? 'hours' : 'times';
+// Partial day: the PartDay box, or (older forms without it) times filled in
+$partDay   = !empty($_POST['PartDay']) || (!isset($_POST['PartMode']) && ($startTime !== '' || $endTime !== ''));
 $notes     = trim($_POST['Notes']     ?? '');
 $adminNote = trim($_POST['AdminNote'] ?? '');
 $canViewPrivate = canViewPrivateNotes($conn);
@@ -54,10 +61,25 @@ function rejectAdmin(int $rid, string $reason): void {
     exit;
 }
 
-if (!in_array($category, ['Sick', 'PTO', 'Unpaid'], true)) rejectAdmin($requestID, 'Choose Sick, PTO or Unpaid.');
+// Sick stays allowed on an entry that is already Sick, even with Sick turned off
+if (!array_key_exists($category, timeOffCategories(true, $req['Category']))) {
+    rejectAdmin($requestID, 'Choose the category' . (timeOffSickEnabled() ? '.' : ' (Sick time is turned off).'));
+}
 $dateRegex = '/^\d{4}-\d{2}-\d{2}$/';
 if (!preg_match($dateRegex, $startDate) || !preg_match($dateRegex, $endDate)) rejectAdmin($requestID, 'Dates required.');
 if ($endDate < $startDate) rejectAdmin($requestID, 'End date before start date.');
+$hoursVal = null;
+if (!$partDay) {
+    $startTime = $endTime = ''; // full day
+} elseif ($partMode === 'hours') {
+    if (!is_numeric($hoursRaw) || (float) $hoursRaw <= 0 || (float) $hoursRaw > 24) {
+        rejectAdmin($requestID, 'Enter the hours missed: more than 0 and at most 24.');
+    }
+    $hoursVal  = round((float) $hoursRaw, 2);
+    $startTime = $endTime = ''; // hours missed, no time window
+} elseif ($startTime === '' || $endTime === '') {
+    rejectAdmin($requestID, 'Partial day needs both times, or choose Hours missed.');
+}
 $hasStartTime = $startTime !== '';
 $hasEndTime   = $endTime   !== '';
 if ($hasStartTime !== $hasEndTime) rejectAdmin($requestID, 'Both or neither time.');
@@ -88,19 +110,19 @@ if ($canViewPrivate) {
     $privVal = ($privateNote !== null && $privateNote !== '') ? $privateNote : null;
     $u = $conn->prepare("
         UPDATE time_off_requests
-           SET Category=?, StartDate=?, EndDate=?, StartTime=?, EndTime=?, Notes=?, ReviewNote=?, AdminPrivateNote=?, ReviewedAt=?, ReviewedBy=?
+           SET Category=?, StartDate=?, EndDate=?, StartTime=?, EndTime=?, Hours=?, Notes=?, ReviewNote=?, AdminPrivateNote=?, ReviewedAt=?, ReviewedBy=?
          WHERE ID=?
     ");
-    $u->bind_param("ssssssssssi",
-        $category, $startDate, $endDate, $startTimeVal, $endTimeVal, $notesVal, $mergedReviewNote, $privVal, $now, $admin, $requestID);
+    $u->bind_param("sssssdsssssi",
+        $category, $startDate, $endDate, $startTimeVal, $endTimeVal, $hoursVal, $notesVal, $mergedReviewNote, $privVal, $now, $admin, $requestID);
 } else {
     $u = $conn->prepare("
         UPDATE time_off_requests
-           SET Category=?, StartDate=?, EndDate=?, StartTime=?, EndTime=?, Notes=?, ReviewNote=?, ReviewedAt=?, ReviewedBy=?
+           SET Category=?, StartDate=?, EndDate=?, StartTime=?, EndTime=?, Hours=?, Notes=?, ReviewNote=?, ReviewedAt=?, ReviewedBy=?
          WHERE ID=?
     ");
-    $u->bind_param("sssssssssi",
-        $category, $startDate, $endDate, $startTimeVal, $endTimeVal, $notesVal, $mergedReviewNote, $now, $admin, $requestID);
+    $u->bind_param("sssssdssssi",
+        $category, $startDate, $endDate, $startTimeVal, $endTimeVal, $hoursVal, $notesVal, $mergedReviewNote, $now, $admin, $requestID);
 }
 $u->execute();
 
@@ -143,13 +165,13 @@ if ($employeeEmail !== '') {
         : date('m/d/Y', strtotime($startDate)) . ' – ' . date('m/d/Y', strtotime($endDate));
     $timesLabel = ($hasStartTime && $hasEndTime)
         ? date('g:i a', strtotime($startTime)) . ' – ' . date('g:i a', strtotime($endTime))
-        : 'all day';
+        : ($hoursVal !== null ? m365HoursPhrase($hoursVal, $startDate !== $endDate) . ' missed' : 'all day');
 
     $subject = "Your Time-Off Request was Adjusted by Admin";
     $body  = "<p>Hi " . htmlspecialchars($req['FirstName']) . ",</p>";
     $body .= "<p>An admin has adjusted your time-off request. Updated details:</p>";
     $body .= "<ul>";
-    $body .= "<li><strong>Category:</strong> " . htmlspecialchars($category) . "</li>";
+    $body .= "<li><strong>Category:</strong> " . htmlspecialchars(timeOffLabel($category)) . "</li>";
     $body .= "<li><strong>Dates:</strong> " . htmlspecialchars($datesLabel) . "</li>";
     $body .= "<li><strong>Times:</strong> " . htmlspecialchars($timesLabel) . "</li>";
     if ($notesVal !== null)  $body .= "<li><strong>Notes:</strong> " . nl2br(htmlspecialchars($notesVal)) . "</li>";

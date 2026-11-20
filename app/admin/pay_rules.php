@@ -15,6 +15,7 @@ requirePermission('manage_pay_rules');
 
 require_once __DIR__ . '/../functions/csrf.php';
 require_once __DIR__ . '/../functions/pay_rules.php';
+require_once __DIR__ . '/../functions/time_off_hours.php'; // timeOffDayPolicy(), timeOffSickEnabled()
 
 $weekdays = [1 => 'Monday', 2 => 'Tuesday', 3 => 'Wednesday', 4 => 'Thursday', 5 => 'Friday', 6 => 'Saturday', 7 => 'Sunday'];
 $increments = [0 => 'Off (exact minute)', 5 => '5 minutes', 6 => '6 minutes (1/10 hour)', 10 => '10 minutes', 15 => '15 minutes (1/4 hour)'];
@@ -44,8 +45,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $otWeekly   = (float) ($_POST['OvertimeWeeklyHours'] ?? 40);
     $increment  = (int) ($_POST['DefaultRoundIncrement'] ?? 0);
     $roundMode  = $_POST['DefaultRoundMode'] ?? 'nearest';
+    $toMode     = ($_POST['TimeOffDayHoursMode'] ?? 'fixed') === 'shift' ? 'shift' : 'fixed';
+    $toHours    = (float) ($_POST['TimeOffDayHours'] ?? 8);
+    $toSick     = isset($_POST['TimeOffSickEnabled']) ? '1' : '0';
 
     $errors = [];
+    if ($toHours <= 0 || $toHours > 24)                      $errors[] = 'A full day of time off must be between 0.25 and 24 hours.';
     if (!isset($weekdays[$weekStart]))                       $errors[] = 'Pick the day the work week starts.';
     if ($otWeekly <= 0 || $otWeekly > 80)                    $errors[] = 'Weekly overtime must be between 1 and 80 hours.';
     if (!isset($increments[$increment]))                     $errors[] = 'Pick a rounding increment from the list.';
@@ -69,6 +74,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'OvertimeWeeklyHours'   => rtrim(rtrim(number_format($otWeekly, 2, '.', ''), '0'), '.'),
             'DefaultRoundIncrement' => (string) $increment,
             'DefaultRoundMode'      => $roundMode,
+            'TimeOffDayHoursMode'   => $toMode,
+            'TimeOffDayHours'       => rtrim(rtrim(number_format($toHours, 2, '.', ''), '0'), '.'),
+            'TimeOffSickEnabled'    => $toSick,
         ];
         $stmt = $conn->prepare("INSERT INTO settings (SettingKey, SettingValue) VALUES (?, ?) ON DUPLICATE KEY UPDATE SettingValue = VALUES(SettingValue)");
         foreach ($values as $key => $value) {
@@ -90,7 +98,13 @@ $form = $_SERVER['REQUEST_METHOD'] === 'POST' ? [
     'otWeekly'       => (float) ($_POST['OvertimeWeeklyHours'] ?? 40),
     'roundIncrement' => (int) ($_POST['DefaultRoundIncrement'] ?? 0),
     'roundMode'      => $_POST['DefaultRoundMode'] ?? 'nearest',
-] : $policy;
+    'toMode'         => ($_POST['TimeOffDayHoursMode'] ?? 'fixed') === 'shift' ? 'shift' : 'fixed',
+    'toHours'        => (float) ($_POST['TimeOffDayHours'] ?? 8),
+    'toSick'         => isset($_POST['TimeOffSickEnabled']),
+] : $policy + (function () {
+    $tp = timeOffDayPolicy();
+    return ['toMode' => $tp['mode'], 'toHours' => $tp['hours'], 'toSick' => timeOffSickEnabled()];
+})();
 if (isset($_GET['reopened'])) {
     $message = '<div class="alert alert-success">Payroll lock updated.</div>';
 }
@@ -137,6 +151,23 @@ require_once 'header.php';
     <div class="field">
         <label for="OvertimeWeeklyHours">Overtime after this many hours per week</label>
         <input type="number" id="OvertimeWeeklyHours" name="OvertimeWeeklyHours" min="1" max="80" step="0.25" value="<?= htmlspecialchars($fmtHours((float) $form['otWeekly'])) ?>" style="max-width:8rem;">
+    </div>
+
+    <h2>Time Off</h2>
+    <div class="field">
+        <label for="TimeOffDayHoursMode">A full day of time off pays</label>
+        <div style="display:flex; gap:.5rem; flex-wrap:wrap; align-items:center;">
+            <select id="TimeOffDayHoursMode" name="TimeOffDayHoursMode" style="max-width:22rem;">
+                <option value="fixed" <?= $form['toMode'] === 'fixed' ? 'selected' : '' ?>>The same hours for everyone (Mon–Fri)</option>
+                <option value="shift" <?= $form['toMode'] === 'shift' ? 'selected' : '' ?>>The employee's shift hours, on the shift's days</option>
+            </select>
+            <input type="number" name="TimeOffDayHours" min="0.25" max="24" step="0.25" value="<?= htmlspecialchars($fmtHours((float) $form['toHours'])) ?>" aria-label="Hours for a full day" style="max-width:6rem;"> hours
+        </div>
+        <p>With shift hours, a full day of PTO pays the employee's shift less lunch (a 6:00–4:30 shift with a 30-minute lunch is 10 hours), and a week off is only charged on the shift's days. Employees without a shift, and the hours box, use the number here.</p>
+    </div>
+    <div class="field">
+        <label><input type="checkbox" name="TimeOffSickEnabled" value="1" <?= $form['toSick'] ? 'checked' : '' ?> style="width:auto;"> Offer Sick time</label>
+        <p>Untick if the company has no separate sick time: Sick is no longer offered when requesting or recording time off (past Sick entries stay as they are).</p>
     </div>
 
     <h2>Rounding for Employees Without a Shift</h2>

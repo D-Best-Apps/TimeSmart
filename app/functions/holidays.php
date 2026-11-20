@@ -86,8 +86,30 @@ function holidayRules(?mysqli $conn = null, bool $refresh = false): array
         }
     }
     $cache = $rows ?? array_map('holidayPresetRow', HOLIDAY_DEFAULT_KEYS);
+    $moves = &holidayMovesCache();
+    $moves = [];
+    if ($conn && $rows !== null) {
+        try {
+            $res = $conn->query("SELECT HolidayID, Year, MovedTo FROM holiday_moves");
+            while ($res && $m = $res->fetch_assoc()) {
+                $moves[(int) $m['HolidayID']][(int) $m['Year']] = $m['MovedTo'];
+            }
+        } catch (mysqli_sql_exception $e) {
+            // holiday_moves migration not applied yet
+        }
+    }
     holidayCalendarReset();
     return $cache;
+}
+
+/**
+ * One-year date moves (Settings -> Holidays -> Move): [holidayID][year] => 'Y-m-d'.
+ * A moved holiday is observed on that date that year instead of its usual one.
+ */
+function &holidayMovesCache(): array
+{
+    static $moves = [];
+    return $moves;
 }
 
 /** Easter Sunday for $year (Gregorian; anonymous/Meeus algorithm). */
@@ -208,7 +230,9 @@ function holidayScheduleForYear(int $year): array
                 continue;
             }
             $observed = holidayObservedDate($rule, $y);
-            $entries[] = ['rule' => $rule, 'year' => $y, 'natural' => $natural, 'date' => $observed];
+            $moved = holidayMovesCache()[(int) ($rule['ID'] ?? 0)][$y] ?? null;
+            $entries[] = ['rule' => $rule, 'year' => $y, 'natural' => $natural, 'date' => $moved ?? $observed,
+                          'usual' => $observed, 'moved' => $moved !== null];
         }
     }
     // Later holidays claim their day first; an earlier one that lands on a claimed day moves back
@@ -217,7 +241,7 @@ function holidayScheduleForYear(int $year): array
     $out = [];
     foreach ($entries as $e) {
         $date = $e['date'];
-        $canMove = (int) ($e['rule']['ObserveWeekday'] ?? 1) === 1 && ($e['rule']['RuleType'] ?? '') !== 'once';
+        $canMove = (int) ($e['rule']['ObserveWeekday'] ?? 1) === 1 && ($e['rule']['RuleType'] ?? '') !== 'once' && !$e['moved'];
         if ($canMove && isset($taken[$date]) && $taken[$date] !== $e['natural']) {
             $d = new DateTime($date);
             do {
@@ -227,7 +251,7 @@ function holidayScheduleForYear(int $year): array
         }
         $taken[$date] ??= $e['natural'];
         if ($e['year'] === $year) {
-            $out[] = ['rule' => $e['rule'], 'date' => $date];
+            $out[] = ['rule' => $e['rule'], 'date' => $date, 'moved' => $e['moved'], 'usual' => $e['usual']];
         }
     }
     usort($out, fn($a, $b) => strcmp($a['date'], $b['date']));
@@ -312,12 +336,20 @@ function holidayPayEnabled(?mysqli $conn = null): bool
  * Weekends never do. Holidays don't either, except that with holiday pay on, an
  * unpaid holiday (a closure day the company doesn't pay) does: an employee can cover
  * it with PTO, and someone on vacation that week is paid for it from PTO.
+ * (With full-day hours from the employee's shift, the shift's days replace Mon-Fri:
+ * timeOffChargedDay() in time_off_hours.php.)
  */
 function isTimeOffDay(string $date): bool
 {
     if ((int) (new DateTime($date))->format('N') >= 6) {
         return false;
     }
+    return timeOffHolidayCharged($date);
+}
+
+/** The holiday half of isTimeOffDay(): false on a holiday the company pays (or any holiday while holiday pay is off). */
+function timeOffHolidayCharged(string $date): bool
+{
     holidayRules(); // load (and reset the caches) once per request
     $paid = &holidayPaidCache();
     $year = (int) substr($date, 0, 4);

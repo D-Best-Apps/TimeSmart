@@ -226,7 +226,7 @@ function generatePayPeriods(string $start, string $end, bool $completeOnly = tru
  * @param array<string,float> $dailyTotals  map 'Y-m-d' => decimal hours
  * @return array{weeks:array<string,array{hours:float,regular:float,ot:float}>,totalHours:float,totalRegular:float,totalOT:float}
  */
-function weeklyOvertime(array $dailyTotals, ?float $weeklyLimit = null, ?float $dailyLimit = null): array {
+function weeklyOvertime(array $dailyTotals, ?float $weeklyLimit = null, ?float $dailyLimit = null, array $weeklyCredit = []): array {
     $weeklyLimit ??= overtimeWeeklyHours();
     $dailyLimit  ??= overtimeDailyHours();
     $weeks = [];
@@ -241,7 +241,10 @@ function weeklyOvertime(array $dailyTotals, ?float $weeklyLimit = null, ?float $
     foreach ($weeks as $key => $h) {
         $h   = round($h, 2);
         $dOT = $dailyOT[$key];
-        $ot  = $dOT + max(($h - $dOT) - $weeklyLimit, 0.0);
+        // $weeklyCredit: hours not worked that still count toward the weekly threshold
+        // (holiday hours with HolidayPayCountsOT), so fewer worked hours reach overtime
+        $limit = max(0.0, $weeklyLimit - (float) ($weeklyCredit[$key] ?? 0.0));
+        $ot  = $dOT + max(($h - $dOT) - $limit, 0.0);
         $reg = $h - $ot;
         $out['weeks'][$key] = ['hours' => $h, 'regular' => round($reg, 2), 'ot' => round($ot, 2)];
         $out['totalHours']   += $h;

@@ -96,6 +96,7 @@ $torStmt = $conn->prepare("
            orig.EndDate    AS Orig_EndDate,
            orig.StartTime  AS Orig_StartTime,
            orig.EndTime    AS Orig_EndTime,
+           orig.Hours      AS Orig_Hours,
            orig.Notes      AS Orig_Notes
       FROM time_off_requests tor
       JOIN users u ON u.ID = tor.EmployeeID
@@ -124,7 +125,12 @@ function formatTorDateRange(string $start, string $end): string {
     if ($start === $end) return date('m/d/Y', strtotime($start));
     return date('m/d/Y', strtotime($start)) . ' – ' . date('m/d/Y', strtotime($end));
 }
-function formatTorTimeRange(?string $start, ?string $end): string {
+// Times column: the time window, the hours missed for a part day entered as hours, or "all day"
+function formatTorTimeRange(?string $start, ?string $end, $hours = null, bool $multiDay = false): string {
+    if ((!$start || !$end) && (float) $hours > 0) {
+        $n = rtrim(rtrim(number_format((float) $hours, 2, '.', ''), '0'), '.');
+        return $n . ($n === '1' ? ' hour' : ' hours') . ($multiDay ? ' per day' : '') . ' missed';
+    }
     if (!$start || !$end) return 'all day';
     return date('g:i a', strtotime($start)) . ' – ' . date('g:i a', strtotime($end));
 }
@@ -144,7 +150,9 @@ foreach ($timeOffRequests as $tor) {
         $tor['EndDate'],
         $tor['StartTime'] ?: null,
         $tor['EndTime']   ?: null,
-        $exclude
+        $exclude,
+        null,
+        isset($tor['Hours']) ? (float) $tor['Hours'] : null
     );
 }
 
@@ -299,6 +307,7 @@ require_once 'header.php';
         <p class="no-edits">✅ No pending time-off requests at the moment.</p>
     <?php else: ?>
         <form method="POST" action="process_time_off.php">
+        <?= csrf_field() ?>
             <div class="table-scroll">
             <table class="approval-table">
                 <thead>
@@ -335,10 +344,10 @@ require_once 'header.php';
                             </td>
                             <td>
                                 <?php if ($isAmendment && $tor['Orig_Category'] !== $tor['Category']): ?>
-                                    <s style="color:#999;"><?= htmlspecialchars($tor['Orig_Category']) ?></s><br>
-                                    <strong><?= htmlspecialchars($tor['Category']) ?></strong>
+                                    <s style="color:#999;"><?= htmlspecialchars(timeOffLabel($tor['Orig_Category'])) ?></s><br>
+                                    <strong><?= htmlspecialchars(timeOffLabel($tor['Category'])) ?></strong>
                                 <?php else: ?>
-                                    <strong><?= htmlspecialchars($tor['Category']) ?></strong>
+                                    <strong><?= htmlspecialchars(timeOffLabel($tor['Category'])) ?></strong>
                                 <?php endif; ?>
                             </td>
                             <td>
@@ -355,8 +364,8 @@ require_once 'header.php';
                             </td>
                             <td>
                                 <?php
-                                  $newTimes  = formatTorTimeRange($tor['StartTime'], $tor['EndTime']);
-                                  $origTimes = $isAmendment ? formatTorTimeRange($tor['Orig_StartTime'], $tor['Orig_EndTime']) : null;
+                                  $newTimes  = formatTorTimeRange($tor['StartTime'], $tor['EndTime'], $tor['Hours'] ?? null, $tor['StartDate'] !== $tor['EndDate']);
+                                  $origTimes = $isAmendment ? formatTorTimeRange($tor['Orig_StartTime'], $tor['Orig_EndTime'], $tor['Orig_Hours'] ?? null, $tor['Orig_StartDate'] !== $tor['Orig_EndDate']) : null;
                                 ?>
                                 <?php if ($isAmendment && $origTimes !== $newTimes): ?>
                                     <s style="color:#999;"><?= $origTimes ?></s><br>
@@ -423,9 +432,9 @@ require_once 'header.php';
                 <?php foreach ($recentApprovedTimeOff as $tor): ?>
                     <tr>
                         <td><?= htmlspecialchars($tor['FirstName'] . ' ' . $tor['LastName']) ?></td>
-                        <td><strong><?= htmlspecialchars($tor['Category']) ?></strong></td>
+                        <td><strong><?= htmlspecialchars(timeOffLabel($tor['Category'])) ?></strong></td>
                         <td><?= formatTorDateRange($tor['StartDate'], $tor['EndDate']) ?></td>
-                        <td><?= formatTorTimeRange($tor['StartTime'], $tor['EndTime']) ?></td>
+                        <td><?= formatTorTimeRange($tor['StartTime'], $tor['EndTime'], $tor['Hours'] ?? null, $tor['StartDate'] !== $tor['EndDate']) ?></td>
                         <td class="note-box"><?= nl2br(htmlspecialchars($tor['Notes'] ?? '')) ?: '-' ?></td>
                         <?php if ($canViewPrivate): ?>
                         <td class="note-box" style="color:#555;"><?= nl2br(htmlspecialchars($tor['AdminPrivateNote'] ?? '')) ?: '-' ?></td>

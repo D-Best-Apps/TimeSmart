@@ -1,10 +1,12 @@
 <?php
 // admin/record_time_off.php — an admin records time off or an absence for an employee:
-// PTO, Sick, or an unpaid absence with the reason (e.g. a no-show they called about
-// later). Past or future dates. Saved as already approved, so it shows straight away on
-// the Home board, Attendance, Payroll Totals and the employee's own Time Off page.
-// PTO/Sick pay hours the same way as an approved employee request; an unpaid absence
-// pays nothing but keeps the day from being flagged as a no-show.
+// PTO, Sick (when the company offers it), or an excused or unexcused absence with the
+// reason (e.g. a no-show they called about later). Past or future dates. Saved as
+// already approved, so it shows straight away on the Home board, Attendance, Payroll
+// Totals and the employee's own Time Off page.
+// PTO/Sick pay hours the same way as an approved employee request; an absence pays
+// nothing but keeps the day from being flagged as a no-show. Part of a day is either a
+// time window (StartTime/EndTime) or a number of hours missed (Hours, no times).
 require_once '../auth/db.php';
 session_start();
 
@@ -27,7 +29,9 @@ $errors = [];
 $isDate = fn($v) => is_string($v) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $v)
     && checkdate((int) substr($v, 5, 2), (int) substr($v, 8, 2), (int) substr($v, 0, 4));
 $isTime = fn($v) => is_string($v) && preg_match('/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/', $v);
+// m365HoursPhrase() (m365_calendar.php): "2 hours", "1.5 hours per day" for a part day entered as hours
 
+$categories = timeOffCategories(true); // no Sick when the company has no sick time
 $employees = $conn->query("SELECT ID, FirstName, LastName, Email FROM users ORDER BY LastName, FirstName")->fetch_all(MYSQLI_ASSOC);
 $empById = array_column($employees, null, 'ID');
 
@@ -38,13 +42,16 @@ $f = [
     'StartDate'  => (string) ($_POST['StartDate'] ?? $_GET['date'] ?? date('Y-m-d')),
     'EndDate'    => (string) ($_POST['EndDate'] ?? $_GET['date'] ?? date('Y-m-d')),
     'PartDay'    => !empty($_POST['PartDay']),
+    'PartMode'   => ($_POST['PartMode'] ?? '') === 'hours' ? 'hours' : 'times',
+    'Hours'      => trim((string) ($_POST['Hours'] ?? '')),
     'StartTime'  => (string) ($_POST['StartTime'] ?? ''),
     'EndTime'    => (string) ($_POST['EndTime'] ?? ''),
     'Notes'      => trim((string) ($_POST['Notes'] ?? '')),
     'Private'    => trim((string) ($_POST['AdminPrivateNote'] ?? '')),
     'Email'      => !empty($_POST['EmailEmployee']),
 ];
-if (!isset(TIME_OFF_LABELS[$f['Category']])) {
+$badCategory = !isset($categories[$f['Category']]); // unknown, or Sick while the company has no sick time
+if ($badCategory) {
     $f['Category'] = 'PTO';
 }
 if (!$isDate($f['StartDate'])) $f['StartDate'] = date('Y-m-d');
@@ -56,13 +63,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$emp) {
         $errors[] = 'Choose the employee.';
     }
+    if ($badCategory) {
+        $errors[] = 'Choose the type of time off.';
+    }
     if ($f['EndDate'] < $f['StartDate']) {
         $errors[] = 'The end date is before the start date.';
     } elseif ((new DateTime($f['StartDate']))->diff(new DateTime($f['EndDate']))->days > 366) {
         $errors[] = 'Record at most a year at a time.';
     }
-    $startTime = $endTime = null;
-    if ($f['PartDay']) {
+    $startTime = $endTime = $hours = null;
+    if ($f['PartDay'] && $f['PartMode'] === 'hours') {
+        if (!is_numeric($f['Hours']) || (float) $f['Hours'] <= 0 || (float) $f['Hours'] > 24) {
+            $errors[] = 'For hours missed, enter a number of hours more than 0 and at most 24.';
+        } else {
+            $hours = round((float) $f['Hours'], 2);
+        }
+    } elseif ($f['PartDay']) {
         if (!$isTime($f['StartTime']) || !$isTime($f['EndTime'])) {
             $errors[] = 'For part of a day, enter both the start and end time.';
         } elseif ($f['EndTime'] <= $f['StartTime']) {
@@ -72,7 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $endTime   = strlen($f['EndTime']) === 5 ? $f['EndTime'] . ':00' : $f['EndTime'];
         }
     }
-    if ($f['Category'] === 'Unpaid' && $f['Notes'] === '') {
+    if (in_array($f['Category'], TIME_OFF_UNPAID, true) && $f['Notes'] === '') {
         $errors[] = 'Give the reason for the absence.';
     }
     if (mb_strlen($f['Notes']) > 500 || mb_strlen($f['Private']) > 500) {
@@ -104,10 +120,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $private = ($canViewPrivate && $f['Private'] !== '') ? $f['Private'] : null;
         $reviewNote = 'Recorded by ' . $admin;
         $st = $conn->prepare("INSERT INTO time_off_requests
-            (EmployeeID, Category, StartDate, EndDate, StartTime, EndTime, Notes, Status, SubmittedAt, ReviewedAt, ReviewedBy, ReviewNote, AdminPrivateNote)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'Approved', ?, ?, ?, ?, ?)");
-        $st->bind_param("isssssssssss", $f['EmployeeID'], $f['Category'], $f['StartDate'], $f['EndDate'], $startTime, $endTime,
-                        $notes, $now, $now, $admin, $reviewNote, $private);
+            (EmployeeID, Category, StartDate, EndDate, StartTime, EndTime, Hours, Notes, Status, SubmittedAt, ReviewedAt, ReviewedBy, ReviewNote, AdminPrivateNote)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Approved', ?, ?, ?, ?, ?)");
+        $st->bind_param("isssssdssssss", $f['EmployeeID'], $f['Category'], $f['StartDate'], $f['EndDate'], $startTime, $endTime,
+                        $hours, $notes, $now, $now, $admin, $reviewNote, $private);
         $st->execute();
         $newID = $conn->insert_id;
         $name = $emp['FirstName'] . ' ' . $emp['LastName'];
@@ -127,6 +143,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                   . ' recorded time off for you:</p><ul><li><strong>Type:</strong> ' . htmlspecialchars(timeOffLabel($f['Category']))
                   . '</li><li><strong>Dates:</strong> ' . htmlspecialchars($dates) . '</li>'
                   . ($startTime ? '<li><strong>Time:</strong> ' . date('g:i A', strtotime($startTime)) . ' – ' . date('g:i A', strtotime($endTime)) . '</li>' : '')
+                  . ($hours ? '<li><strong>Hours:</strong> ' . htmlspecialchars(m365HoursPhrase($hours, $f['StartDate'] !== $f['EndDate'])) . '</li>' : '')
                   . ($notes ? '<li><strong>Reason:</strong> ' . nl2br(htmlspecialchars($notes)) . '</li>' : '')
                   . '</ul><p>You can see it on your Time Off page.</p>';
             sendTimeOffEmail($conn, $emp['Email'], 'Time off recorded: ' . timeOffLabel($f['Category']) . ' ' . $dates, $body);
@@ -141,7 +158,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Recently recorded by admins
 $recent = $conn->query("
-    SELECT tor.ID, tor.Category, tor.StartDate, tor.EndDate, tor.StartTime, tor.EndTime, tor.Notes, tor.Status, tor.ReviewedBy, tor.ReviewedAt,
+    SELECT tor.ID, tor.Category, tor.StartDate, tor.EndDate, tor.StartTime, tor.EndTime, tor.Hours, tor.Notes, tor.Status, tor.ReviewedBy, tor.ReviewedAt,
            u.FirstName, u.LastName
       FROM time_off_requests tor
       JOIN users u ON u.ID = tor.EmployeeID
@@ -159,7 +176,7 @@ require_once 'header.php';
     .rto-form .inline { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; }
     .rto-form .inline label { display: flex; gap: .4rem; align-items: center; font-weight: normal; margin: 0; }
     .rto-form .inline input[type=radio], .rto-form .inline input[type=checkbox] { width: auto; margin: 0; }
-    .rto-form input[type=date], .rto-form input[type=time], .rto-form select { width: auto; margin: 0; }
+    .rto-form input[type=date], .rto-form input[type=time], .rto-form input[type=number], .rto-form select { width: auto; margin: 0; }
     .rto-form .hint { color: var(--muted-text); font-size: .85rem; margin: .25rem 0 0; }
     .rto-errors { background: #fdecea; color: #b02a37; padding: .6rem .9rem; border-radius: 6px; margin-bottom: 1rem; }
     .rto-errors a { color: inherit; }
@@ -171,8 +188,8 @@ require_once 'header.php';
 
 <p style="color:var(--muted-text); margin-top:0;">
     Record time off or an absence for an employee, for past or future days. It's saved as approved.
-    PTO and Sick are paid like an approved request. An unpaid absence pays nothing, but the day
-    no longer shows as a no-show. Employees see these on their Time Off page.
+    <?= isset($categories['Sick']) ? 'PTO and Sick are' : 'PTO is' ?> paid like an approved request. An excused or
+    unexcused absence pays nothing, but the day no longer shows as a no-show. Employees see these on their Time Off page.
 </p>
 
 <?php if (!empty($_GET['saved'])): ?><div class="rto-ok"><?= htmlspecialchars($_GET['saved']) ?></div><?php endif; ?>
@@ -192,8 +209,8 @@ require_once 'header.php';
     <div class="field">
         <label class="title">Type</label>
         <div class="inline">
-            <?php foreach (TIME_OFF_LABELS as $cat => $label): ?>
-            <label><input type="radio" name="Category" value="<?= $cat ?>" <?= $f['Category'] === $cat ? 'checked' : '' ?>> <?= htmlspecialchars($label) ?></label>
+            <?php foreach ($categories as $cat => $label): ?>
+            <label><input type="radio" name="Category" value="<?= htmlspecialchars($cat) ?>" <?= $f['Category'] === $cat ? 'checked' : '' ?>> <?= htmlspecialchars($label) ?></label>
             <?php endforeach; ?>
         </div>
     </div>
@@ -204,18 +221,31 @@ require_once 'header.php';
             <span>to</span>
             <input type="date" name="EndDate" aria-label="To" value="<?= htmlspecialchars($f['EndDate']) ?>" required>
         </div>
-        <p class="hint">Full days count working days only (weekends and company holidays are skipped), 8 hours each.</p>
+        <?php $dayPolicy = timeOffDayPolicy(); ?>
+        <p class="hint">Full days count working days only (weekends and company holidays are skipped),
+            <?= htmlspecialchars($dayPolicy['mode'] === 'shift'
+                ? "the employee's shift hours each (" . m365HoursPhrase($dayPolicy['hours'], false) . ' without a shift)'
+                : m365HoursPhrase($dayPolicy['hours'], false) . ' each') ?>.</p>
     </div>
     <div class="field">
         <div class="inline">
-            <label><input type="checkbox" name="PartDay" value="1" id="rtoPart" <?= $f['PartDay'] ? 'checked' : '' ?>> Part of the day:</label>
+            <label><input type="checkbox" name="PartDay" value="1" id="rtoPart" <?= $f['PartDay'] ? 'checked' : '' ?>> Part of the day, as</label>
+            <label><input type="radio" name="PartMode" value="times" <?= $f['PartMode'] === 'times' ? 'checked' : '' ?>> Times</label>
+            <label><input type="radio" name="PartMode" value="hours" <?= $f['PartMode'] === 'hours' ? 'checked' : '' ?>> Hours missed</label>
+        </div>
+        <div class="inline" id="rtoTimes" style="margin-top:.4rem;">
             <input type="time" name="StartTime" aria-label="From time" value="<?= htmlspecialchars($f['StartTime']) ?>">
             <span>to</span>
             <input type="time" name="EndTime" aria-label="To time" value="<?= htmlspecialchars($f['EndTime']) ?>">
         </div>
+        <div class="inline" id="rtoHours" style="margin-top:.4rem;">
+            <input type="number" name="Hours" aria-label="Hours missed" step="0.25" min="0.25" max="24" value="<?= htmlspecialchars($f['Hours']) ?>" style="width:6rem;">
+            <span>hours missed (each day)</span>
+        </div>
+        <p class="hint">Hours missed is for part of a day without set times, e.g. came in 2 hours late.</p>
     </div>
     <div class="field">
-        <label class="title" for="rtoNotes">Reason <span id="rtoReq" style="font-weight:normal; color:var(--muted-text);">(required for an unpaid absence)</span></label>
+        <label class="title" for="rtoNotes">Reason <span id="rtoReq" style="font-weight:normal; color:var(--muted-text);">(required for an absence)</span></label>
         <textarea id="rtoNotes" name="Notes" rows="2" maxlength="500" placeholder="e.g. Called in, family emergency"><?= htmlspecialchars($f['Notes']) ?></textarea>
         <p class="hint">The employee can see this.</p>
     </div>
@@ -245,7 +275,8 @@ require_once 'header.php';
             <td><?= htmlspecialchars(timeOffLabel($r['Category'])) ?><?= $r['Status'] !== 'Approved' ? ' <span style="color:var(--muted-text);">(' . htmlspecialchars($r['Status']) . ')</span>' : '' ?></td>
             <td style="white-space:nowrap;">
                 <?= date('m/d/Y', strtotime($r['StartDate'])) ?><?= $r['EndDate'] !== $r['StartDate'] ? ' – ' . date('m/d/Y', strtotime($r['EndDate'])) : '' ?>
-                <?php if ($r['StartTime']): ?><br><span style="color:var(--muted-text);"><?= date('g:i A', strtotime($r['StartTime'])) ?> – <?= date('g:i A', strtotime($r['EndTime'])) ?></span><?php endif; ?>
+                <?php if ($r['StartTime']): ?><br><span style="color:var(--muted-text);"><?= date('g:i A', strtotime($r['StartTime'])) ?> – <?= date('g:i A', strtotime($r['EndTime'])) ?></span>
+                <?php elseif ((float) $r['Hours'] > 0): ?><br><span style="color:var(--muted-text);"><?= htmlspecialchars(m365HoursPhrase((float) $r['Hours'], $r['EndDate'] !== $r['StartDate'])) ?></span><?php endif; ?>
             </td>
             <td><?= nl2br(htmlspecialchars($r['Notes'] ?? '')) ?: '—' ?></td>
             <td style="white-space:nowrap;"><?= htmlspecialchars($r['ReviewedBy'] ?? '') ?><br><span style="color:var(--muted-text);"><?= $r['ReviewedAt'] ? date('m/d g:i A', strtotime($r['ReviewedAt'])) : '' ?></span></td>
@@ -258,10 +289,29 @@ require_once 'header.php';
 <?php endif; ?>
 
 <script>
-// The time boxes only matter for part of a day: ticking happens when a time is entered
-document.querySelectorAll('.rto-form input[type=time]').forEach(function (el) {
-    el.addEventListener('change', function () { if (el.value) document.getElementById('rtoPart').checked = true; });
-});
+// Part of a day is a time window or a number of hours missed: show the boxes for the
+// chosen one, and tick "Part of the day" when a time or hours are entered.
+(function () {
+    var part = document.getElementById('rtoPart');
+    var times = document.getElementById('rtoTimes');
+    var hours = document.getElementById('rtoHours');
+    function sync() {
+        var m = document.querySelector('.rto-form input[name=PartMode]:checked');
+        var isHours = !!m && m.value === 'hours';
+        times.style.display = isHours ? 'none' : '';
+        hours.style.display = isHours ? '' : 'none';
+        // A disabled box isn't checked or sent, so the hidden one can't block saving
+        times.querySelectorAll('input').forEach(function (el) { el.disabled = isHours; });
+        hours.querySelectorAll('input').forEach(function (el) { el.disabled = !isHours; });
+    }
+    document.querySelectorAll('.rto-form input[name=PartMode]').forEach(function (el) {
+        el.addEventListener('change', function () { part.checked = true; sync(); });
+    });
+    document.querySelectorAll('#rtoTimes input, #rtoHours input').forEach(function (el) {
+        el.addEventListener('change', function () { if (el.value) part.checked = true; });
+    });
+    sync();
+})();
 </script>
 
 <?php require_once 'footer.php'; ?>

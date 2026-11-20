@@ -82,6 +82,7 @@
 .ex-missing { background: #dc3545; }
 .ex-lunch { background: #e0a800; color: #222; }
 .ex-absent { background: #7f1d1d; }
+.ex-unexcused { background: #9a3412; }
 
 .open-tag {
     display: inline-block; margin-left: 0.35rem; padding: 0 0.4rem; border-radius: 4px;

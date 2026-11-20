@@ -3,43 +3,189 @@
 // Used by the summary report (HTML + PDF), per-employee detail pages, and the
 // employee timesheet view to surface approved Sick/PTO hours within a date range.
 
-require_once __DIR__ . '/hours.php';    // canonical payPeriodStart/End + read-stored-hours conventions
-require_once __DIR__ . '/holidays.php'; // canonical workday / observed-holiday calendar
+require_once __DIR__ . '/hours.php';     // canonical payPeriodStart/End + read-stored-hours conventions
+require_once __DIR__ . '/holidays.php';  // canonical workday / observed-holiday calendar
+require_once __DIR__ . '/pay_rules.php'; // listShifts(), shiftRunsOn(), shiftScheduledHours()
 
 /**
- * Time-off categories and how they're shown. 'Unpaid' is an excused absence an admin
- * records (admin/record_time_off.php): it pays 0 hours, but the day counts as accounted
- * for, so it isn't flagged as a no-show.
+ * Time-off categories and how they're shown. 'Unpaid' (excused) and 'Unexcused' are
+ * absences an admin records (admin/record_time_off.php): they pay 0 hours, but the day
+ * counts as accounted for, so it isn't flagged as a no-show. 'Unexcused' is shown as
+ * such on the board and attendance.
  */
-const TIME_OFF_LABELS = ['PTO' => 'PTO', 'Sick' => 'Sick', 'Unpaid' => 'Unpaid absence'];
+const TIME_OFF_LABELS = ['PTO' => 'PTO', 'Sick' => 'Sick', 'Unpaid' => 'Excused absence (unpaid)', 'Unexcused' => 'Unexcused absence'];
+const TIME_OFF_UNPAID = ['Unpaid', 'Unexcused'];
 
 function timeOffLabel(string $category): string
 {
     return TIME_OFF_LABELS[$category] ?? $category;
 }
 
-/** Does this time-off request pay hours? (Sick and PTO do; an unpaid absence doesn't.) */
+/** Short label for tight spaces (board cells, calendar chips). */
+function timeOffShortLabel(string $category): string
+{
+    return ['Unpaid' => 'Excused', 'Unexcused' => 'Unexcused'][$category] ?? $category;
+}
+
+/** Does this time-off request pay hours? (Sick and PTO do; absences don't.) */
 function timeOffIsPaid(array $request): bool
 {
-    return ($request['Category'] ?? '') !== 'Unpaid';
+    return !in_array($request['Category'] ?? '', TIME_OFF_UNPAID, true);
+}
+
+/** Is the Sick category offered (Settings -> Pay Rules -> Time off)? */
+function timeOffSickEnabled(): bool
+{
+    return payRuleSetting('TimeOffSickEnabled', '1') !== '0';
+}
+
+/**
+ * Categories to offer on a time-off form: [value => label]. Employees get PTO (and Sick
+ * when it's on); admins also get the two absence types. $keep is the current value of
+ * an entry being edited, kept even if it's no longer offered.
+ */
+function timeOffCategories(bool $forAdmin, ?string $keep = null): array
+{
+    $out = ['PTO' => TIME_OFF_LABELS['PTO']];
+    if (timeOffSickEnabled() || $keep === 'Sick') {
+        $out['Sick'] = TIME_OFF_LABELS['Sick'];
+    }
+    if ($forAdmin || in_array($keep, TIME_OFF_UNPAID, true)) {
+        $out['Unpaid']    = TIME_OFF_LABELS['Unpaid'];
+        $out['Unexcused'] = TIME_OFF_LABELS['Unexcused'];
+    }
+    return $out;
+}
+
+/**
+ * How many hours a full day of time off pays (Settings -> Pay Rules -> Time off):
+ *   'fixed'  TimeOffDayHours (default 8) on Mon-Fri
+ *   'shift'  the employee's shift hours less lunch, on the shift's days; employees
+ *            without a shift fall back to 'fixed'
+ * @return array{mode:string,hours:float}
+ */
+function timeOffDayPolicy(): array
+{
+    $h = (float) payRuleSetting('TimeOffDayHours', '8');
+    return [
+        'mode'  => payRuleSetting('TimeOffDayHoursMode', 'fixed') === 'shift' ? 'shift' : 'fixed',
+        'hours' => ($h > 0 && $h <= 24) ? $h : 8.0,
+    ];
+}
+
+/** The employee's shift row for time-off purposes, or null. Uses $request['ShiftID'] when present. */
+function timeOffEmployeeShift(array $request): ?array
+{
+    static $shifts = null;
+    static $userShift = [];
+    $conn = ($GLOBALS['conn'] ?? null) instanceof mysqli ? $GLOBALS['conn'] : null;
+    if ($conn === null) {
+        return null; // CLI tests without a database
+    }
+    if ($shifts === null) {
+        try {
+            $shifts = listShifts($conn, true);
+        } catch (mysqli_sql_exception $e) {
+            $shifts = [];
+        }
+    }
+    if (array_key_exists('ShiftID', $request)) {
+        $sid = $request['ShiftID'];
+    } else {
+        $eid = (int) ($request['EmployeeID'] ?? 0);
+        if (!array_key_exists($eid, $userShift)) {
+            $st = $conn->prepare("SELECT ShiftID FROM users WHERE ID = ?");
+            $st->bind_param("i", $eid);
+            $st->execute();
+            $userShift[$eid] = $st->get_result()->fetch_row()[0] ?? null;
+            $st->close();
+        }
+        $sid = $userShift[$eid];
+    }
+    return $sid !== null ? ($shifts[(int) $sid] ?? null) : null;
+}
+
+/**
+ * How a request is charged, day by day:
+ *   hoursPerDay  hours each charged day pays (0 for an unpaid absence)
+ *   asGiven      true for a time window: every date in the range counts, weekends
+ *                included (the employee picked specific hours on specific days)
+ *   shift        with 'shift' mode, the employee's shift: full days and hours-per-day
+ *                requests are charged on its days instead of Mon-Fri
+ * A part day entered as a number of hours (Hours, no times) is charged like a full day,
+ * just for that many hours.
+ * @return array{hoursPerDay:float,asGiven:bool,shift:?array}
+ */
+function timeOffDayPlan(array $request, ?float $defaultDayHours = null): array
+{
+    $hasTime = !empty($request['StartTime']) && !empty($request['EndTime']);
+    $shift = null;
+    if ($hasTime) {
+        $hoursPerDay = (strtotime("1970-01-01 " . $request['EndTime']) - strtotime("1970-01-01 " . $request['StartTime'])) / 3600.0;
+    } else {
+        $policy = timeOffDayPolicy();
+        if ($defaultDayHours === null && $policy['mode'] === 'shift') {
+            $shift = timeOffEmployeeShift($request);
+        }
+        $dayHours = $defaultDayHours ?? ($shift && shiftScheduledHours($shift) > 0 ? shiftScheduledHours($shift) : $policy['hours']);
+        $hoursPerDay = (float) ($request['Hours'] ?? 0) > 0 ? (float) $request['Hours'] : (float) $dayHours;
+    }
+    if (!timeOffIsPaid($request)) {
+        $hoursPerDay = 0.0;
+    }
+    return ['hoursPerDay' => $hoursPerDay, 'asGiven' => $hasTime, 'shift' => $shift];
+}
+
+/** Is $date charged under $plan (timeOffDayPlan())? */
+function timeOffChargedDay(array $plan, string $date): bool
+{
+    if ($plan['asGiven']) {
+        return true;
+    }
+    if ($plan['shift']) {
+        return shiftRunsOn($plan['shift'], $date) && timeOffHolidayCharged($date);
+    }
+    return isTimeOffDay($date);
+}
+
+/** A part day entered as hours, or a time window (not a full day)? */
+function timeOffIsPartDay(array $request): bool
+{
+    return (!empty($request['StartTime']) && !empty($request['EndTime'])) || (float) ($request['Hours'] ?? 0) > 0;
+}
+
+/** "PTO", "PTO 2h", "Sick 9am–1pm": category plus the part-day detail. */
+function timeOffDescribe(array $request, bool $short = true): string
+{
+    $label = $short ? timeOffShortLabel($request['Category']) : timeOffLabel($request['Category']);
+    if (!empty($request['StartTime']) && !empty($request['EndTime'])) {
+        $f = fn($t) => str_replace(':00', '', date('g:ia', strtotime($t)));
+        return $label . ' ' . $f($request['StartTime']) . '–' . $f($request['EndTime']);
+    }
+    if ((float) ($request['Hours'] ?? 0) > 0) {
+        return $label . ' ' . rtrim(rtrim(number_format((float) $request['Hours'], 2), '0'), '.') . 'h';
+    }
+    return $label;
 }
 
 /**
  * Compute hours for a single approved time-off request, intersected with [periodStart, periodEnd].
  *
- * Full-day requests count as $defaultDayHours (default 8) per WORKING day — weekends
- * and observed company holidays are skipped, because the office is closed and no PTO
- * is consumed. A Thu-to-the-following-Tue request is 3 days of PTO, not 6.
+ * Full-day requests pay a day's hours (timeOffDayPolicy()) per charged day: Mon-Fri, or
+ * the employee's shift days in 'shift' mode. Observed company holidays are skipped,
+ * because the office is closed and no PTO is consumed. A Thu-to-the-following-Tue
+ * request is 3 days of PTO, not 6.
  * Exception: with holiday pay on, an unpaid holiday is charged like a workday
- * (isTimeOffDay()), so PTO can cover a closure day the company doesn't pay.
+ * (timeOffHolidayCharged()), so PTO can cover a closure day the company doesn't pay.
  *
- * Partial-day requests (StartTime + EndTime set) count the time delta for every day in
- * the range as given, weekends included: the explicit times mean the employee picked
- * specific hours on specific days, including the occasional weekend shift.
+ * Partial-day requests with times (StartTime + EndTime) count the time delta for every
+ * day in the range as given, weekends included. Partial days entered as hours (Hours)
+ * count those hours on the same days a full day would.
  *
+ * $defaultDayHours forces the full-day hours (tests); null = the setting.
  * Returns a float of decimal hours; caller can convert to H:MM.
  */
-function timeOffHoursInPeriod(array $request, string $periodStart, string $periodEnd, int $defaultDayHours = 8): float
+function timeOffHoursInPeriod(array $request, string $periodStart, string $periodEnd, ?float $defaultDayHours = null): float
 {
     if (!timeOffIsPaid($request)) {
         return 0.0; // unpaid absence
@@ -49,19 +195,14 @@ function timeOffHoursInPeriod(array $request, string $periodStart, string $perio
     if ($reqStart > $reqEnd) {
         return 0.0;
     }
-
-    $hasTime = !empty($request['StartTime']) && !empty($request['EndTime']);
-    if ($hasTime) {
-        $startSec = strtotime("1970-01-01 " . $request['StartTime']);
-        $endSec   = strtotime("1970-01-01 " . $request['EndTime']);
-        $hoursPerDay = ($endSec - $startSec) / 3600.0;
-        $days = (int) (new DateTime($reqEnd))->diff(new DateTime($reqStart))->days + 1;
-    } else {
-        $hoursPerDay = (float) $defaultDayHours;
-        $days = countTimeOffDays($reqStart, $reqEnd);
+    $plan = timeOffDayPlan($request, $defaultDayHours);
+    $days = 0;
+    for ($d = new DateTime($reqStart), $fin = new DateTime($reqEnd); $d <= $fin; $d->modify('+1 day')) {
+        if (timeOffChargedDay($plan, $d->format('Y-m-d'))) {
+            $days++;
+        }
     }
-
-    return $days * $hoursPerDay;
+    return $days * $plan['hoursPerDay'];
 }
 
 /**
@@ -72,7 +213,7 @@ function timeOffHoursInPeriod(array $request, string $periodStart, string $perio
 function fetchApprovedTimeOff(mysqli $conn, string $periodStart, string $periodEnd, ?int $employeeID = null): array
 {
     $sql = "
-        SELECT tor.*, u.FirstName, u.LastName
+        SELECT tor.*, u.FirstName, u.LastName, u.ShiftID
           FROM time_off_requests tor
           JOIN users u ON u.ID = tor.EmployeeID
          WHERE tor.Status = 'Approved'
@@ -97,7 +238,7 @@ function fetchApprovedTimeOff(mysqli $conn, string $periodStart, string $periodE
  * Group approved time-off into per-employee Sick/PTO buckets for a period.
  * Returns: [employeeID => ['Sick' => float hours, 'PTO' => float hours]]
  */
-function timeOffTotalsByEmployee(mysqli $conn, string $periodStart, string $periodEnd, ?int $employeeID = null, int $defaultDayHours = 8): array
+function timeOffTotalsByEmployee(mysqli $conn, string $periodStart, string $periodEnd, ?int $employeeID = null, ?float $defaultDayHours = null): array
 {
     $rows = fetchApprovedTimeOff($conn, $periodStart, $periodEnd, $employeeID);
     $totals = [];
@@ -107,6 +248,9 @@ function timeOffTotalsByEmployee(mysqli $conn, string $periodStart, string $peri
             $totals[$empId] = ['Sick' => 0.0, 'PTO' => 0.0];
         }
         $hours = timeOffHoursInPeriod($r, $periodStart, $periodEnd, $defaultDayHours);
+        if (!timeOffIsPaid($r)) {
+            continue; // absences pay nothing
+        }
         $bucket = $r['Category'] === 'Sick' ? 'Sick' : 'PTO';
         $totals[$empId][$bucket] += $hours;
     }
@@ -127,7 +271,7 @@ function timeOffTotalsByEmployee(mysqli $conn, string $periodStart, string $peri
  * Returns periods where excess > 0:
  *   [['weekStart' => 'YYYY-MM-DD', 'clocked' => float, 'timeOff' => float, 'excess' => float], ...]
  */
-function weeklyTimeOffExcess(mysqli $conn, int $empID, string $periodStart, string $periodEnd, int $defaultDayHours = 8): array {
+function weeklyTimeOffExcess(mysqli $conn, int $empID, string $periodStart, string $periodEnd, ?float $defaultDayHours = null): array {
     $result = [];
     $seen   = [];
     $cursor = new DateTime($periodStart);
@@ -201,7 +345,8 @@ function projectedWeeklyHours(
     ?string $reqStartTime = null,
     ?string $reqEndTime = null,
     ?int $excludeRequestID = null,
-    int $defaultDayHours = 8
+    ?float $defaultDayHours = null,
+    ?float $reqHours = null
 ): array {
     // Build a synthetic request row so we can reuse timeOffHoursInPeriod() for the per-week slice.
     $synthetic = [
@@ -209,6 +354,9 @@ function projectedWeeklyHours(
         'EndDate'   => $reqEndDate,
         'StartTime' => $reqStartTime ?: null,
         'EndTime'   => $reqEndTime   ?: null,
+        'Hours'     => $reqHours ?: null,
+        'EmployeeID' => $empID,
+        'Category'  => 'PTO',
     ];
 
     // Determine the set of work weeks the request spans
@@ -282,7 +430,7 @@ function projectedWeeklyHours(
  * requests emit rows for working days only, so the per-day rows always sum to
  * timeOffHoursInPeriod() for the same range — keep these two in step.
  */
-function expandTimeOffToDays(array $request, string $periodStart, string $periodEnd, int $defaultDayHours = 8): array
+function expandTimeOffToDays(array $request, string $periodStart, string $periodEnd, ?float $defaultDayHours = null): array
 {
     $reqStart = $request['StartDate'] > $periodStart ? $request['StartDate'] : $periodStart;
     $reqEnd   = $request['EndDate']   < $periodEnd   ? $request['EndDate']   : $periodEnd;
@@ -290,33 +438,25 @@ function expandTimeOffToDays(array $request, string $periodStart, string $period
         return [];
     }
 
-    $hasTime = !empty($request['StartTime']) && !empty($request['EndTime']);
-    if ($hasTime) {
-        $startSec = strtotime("1970-01-01 " . $request['StartTime']);
-        $endSec   = strtotime("1970-01-01 " . $request['EndTime']);
-        $hoursPerDay = ($endSec - $startSec) / 3600.0;
-    } else {
-        $hoursPerDay = (float) $defaultDayHours;
-    }
-    if (!timeOffIsPaid($request)) {
-        $hoursPerDay = 0.0; // unpaid absence: the day is listed, but pays nothing
-    }
+    $plan = timeOffDayPlan($request, $defaultDayHours); // 0 hours for an absence: listed, pays nothing
+    $hasTime = $plan['asGiven'];
 
     $rows = [];
     $d = new DateTime($reqStart);
     $end = new DateTime($reqEnd);
     while ($d <= $end) {
-        // Full-day time off only lands on working days; partial-day requests are taken as given.
-        if (!$hasTime && !isTimeOffDay($d->format('Y-m-d'))) {
+        // Full days (and hours-per-day) only land on charged days; time windows are taken as given.
+        if (!timeOffChargedDay($plan, $d->format('Y-m-d'))) {
             $d->modify('+1 day');
             continue;
         }
         $rows[] = [
             'Date'      => $d->format('Y-m-d'),
             'Category'  => $request['Category'],
-            'Hours'     => $hoursPerDay,
+            'Hours'     => $plan['hoursPerDay'],
             'StartTime' => $hasTime ? $request['StartTime'] : null,
             'EndTime'   => $hasTime ? $request['EndTime']   : null,
+            'PartHours' => !$hasTime && (float) ($request['Hours'] ?? 0) > 0 ? (float) $request['Hours'] : null,
             'Notes'     => $request['Notes'] ?? null,
         ];
         $d->modify('+1 day');

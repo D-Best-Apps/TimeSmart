@@ -1,6 +1,16 @@
 <?php
 // Include necessary files (e.g., database connection)
 include_once '../auth/db.php';
+// Admins only: this page had no sign-in check of its own
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+if (!isset($_SESSION['admin'])) {
+    http_response_code(403);
+    exit('Please sign in.');
+}
+require_once __DIR__ . '/../functions/check_permission.php';
+requirePermission('edit_timesheets');
 
 // Get parameters from URL
 $employeeID = isset($_GET['emp']) ? $_GET['emp'] : null;

@@ -4,6 +4,16 @@ ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
 require_once '../auth/db.php';
+// Admins only: this page had no sign-in check of its own
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+if (!isset($_SESSION['admin'])) {
+    http_response_code(403);
+    exit('Please sign in.');
+}
+require_once __DIR__ . '/../functions/check_permission.php';
+requirePermission('export_reports');
 require_once __DIR__ . '/../vendor/tecnickcom/tcpdf/tcpdf.php'; // Composer package tecnickcom/tcpdf
 require_once __DIR__ . '/../functions/hours.php';
 require_once __DIR__ . '/../functions/pay_rules.php'; // punchRoundingActive()
@@ -211,9 +221,17 @@ foreach ($grouped as $eid => $data) {
     }
     foreach ($timeOffByEmpFull[$eid] ?? [] as $req) {
         foreach (expandTimeOffToDays($req, $start, $end) as $dr) {
+            $type = ['Sick' => 'Sick', 'Unpaid' => 'Excused absence', 'Unexcused' => 'Unexcused absence'][$dr['Category']] ?? 'Vacation';
+            if ($dr['PartHours'] !== null) {
+                $type .= ' (part day, ' . decimalToHM($dr['PartHours']) . ')'; // entered as hours, no times
+            }
+            if (!timeOffIsPaid($dr) && trim((string) ($dr['Notes'] ?? '')) !== '') {
+                $type .= ': ' . trim($dr['Notes']); // the absence's reason
+            }
             $merged[] = [
                 'Date'  => $dr['Date'],
-                'Type'  => $dr['Category'] === 'Sick' ? 'Sick' : ($dr['Category'] === 'Unpaid' ? 'Unpaid' : 'Vacation'),
+                'Type'  => $type,
+                'Kind'  => $dr['Category'],
                 'In'    => $dr['StartTime'],
                 'Out'   => $dr['EndTime'],
                 'Hours' => $dr['Hours'],
@@ -256,9 +274,8 @@ foreach ($grouped as $eid => $data) {
                 </thead>
                 <tbody>';
     foreach ($merged as $row) {
-        $rowBg = '';
-        if ($row['Type'] === 'Sick')     $rowBg = " style='background-color:#fdecea;'";
-        if ($row['Type'] === 'Vacation') $rowBg = " style='background-color:#e8f1fc;'";
+        $bg = ['Sick' => '#fdecea', 'PTO' => '#e8f1fc', 'Unpaid' => '#eceff1', 'Unexcused' => '#ffe0b2'][$row['Kind'] ?? ''] ?? null;
+        $rowBg = $bg ? " style='background-color:{$bg};'" : '';
 
         $html .= "<tr{$rowBg}>
                     <td>" . date("m/d/Y", strtotime($row['Date'])) . "</td>

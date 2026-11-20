@@ -66,7 +66,7 @@ $prevUrl = $rangeUrl($shiftBy($start, -$spanDays), $shiftBy($end, -$spanDays));
 $nextUrl = $rangeUrl($shiftBy($start, $spanDays), $shiftBy($end, $spanDays));
 
 // ---------- Employees, shifts, punches, time off ----------
-$sql = "SELECT ID, FirstName, LastName, BadgeID, ClockStatus, Office, ScheduledStartTime, ShiftID
+$sql = "SELECT ID, FirstName, LastName, BadgeID, EmployeeNumber, ClockStatus, Office, ScheduledStartTime, ShiftID
           FROM users" . ($office !== '' ? " WHERE Office = ?" : "") . "
          ORDER BY LastName, FirstName";
 $stmt = $conn->prepare($sql);
@@ -80,6 +80,12 @@ foreach ($stmt->get_result()->fetch_all(MYSQLI_ASSOC) as $u) {
 }
 $stmt->close();
 $empIDs = array_keys($employees);
+// The company's own employee # (Edit User) replaces the badge column once anyone has one:
+// it identifies people without being something you can clock in with, so every admin sees it
+$showEmpNumbers = (bool) array_filter(array_column($employees, 'EmployeeNumber'), fn($v) => $v !== null && $v !== '');
+if ($showEmpNumbers) {
+    $showBadges = false;
+}
 
 try {
     $shifts = listShifts($conn, true);
@@ -161,6 +167,7 @@ foreach (fetchApprovedTimeOff($conn, $from, $to) as $req) {
             'Category'  => $req['Category'],
             'StartTime' => $hasTime ? $req['StartTime'] : null,
             'EndTime'   => $hasTime ? $req['EndTime'] : null,
+            'Hours'     => $hasTime ? null : $req['Hours'],
         ];
     }
 }
@@ -174,18 +181,13 @@ $fmtHrs  = fn(float $h) => number_format($h, 2);
 $timeOffLabel = function (array $entries): string {
     $parts = [];
     foreach ($entries as $t) {
-        $label = $t['Category'] === 'Sick' ? 'Sick' : ($t['Category'] === 'Unpaid' ? 'Unpaid' : 'PTO');
-        if ($t['StartTime']) {
-            $label .= ' ' . str_replace(':00', '', date('g:ia', strtotime($t['StartTime'])))
-                    . '–' . str_replace(':00', '', date('g:ia', strtotime($t['EndTime'])));
-        }
-        $parts[] = $label;
+        $parts[] = timeOffDescribe($t); // "PTO", "PTO 2h", "Sick 9am–1pm", "Unexcused"
     }
     return implode(', ', array_unique($parts));
 };
 $isFullDayOff = function (array $entries): bool {
     foreach ($entries as $t) {
-        if (!$t['StartTime']) {
+        if (!timeOffIsPartDay($t)) {
             return true;
         }
     }
@@ -204,11 +206,19 @@ $statusCounts = ['In' => 0, 'Lunch' => 0, 'Out' => 0, 'Absent' => 0, 'Off' => 0]
 foreach ($employees as $eid => $u) {
     $sched    = $scheduleOf($u);
     $todayOff = $timeOffDays[$eid][$today] ?? [];
-    $clock    = in_array($u['ClockStatus'], ['In', 'Lunch'], true) ? $u['ClockStatus'] : 'Out';
+    // In / Lunch / Out comes from the same punch row as "Last punch", so the two always
+    // agree (users.ClockStatus can lag behind admin punch edits made elsewhere)
+    $lp       = $lastPunch[$eid] ?? null;
+    $clock    = 'Out';
+    if ($lp && empty($lp['TimeOut'])) {
+        $clock = (!empty($lp['LunchStart']) && empty($lp['LunchEnd'])) ? 'Lunch' : 'In';
+    }
     $status   = $clock;
     if ($clock === 'Out') {
         if ($todayOff && $isFullDayOff($todayOff)) {
-            $status = 'Off';
+            // a recorded unexcused absence reads as Absent; any other full day off as Time off
+            $allUnexcused = !array_filter($todayOff, fn($t) => $t['Category'] !== 'Unexcused');
+            $status = $allUnexcused ? 'Absent' : 'Off';
         } elseif ($scheduledOn($sched, $today) && empty($punches[$eid][$today]) && !$todayOff
                   && $nowSec >= $sched['start'] && isset($firstDay[$eid]) && $firstDay[$eid] <= $today) {
             $status = 'Absent';
@@ -216,7 +226,6 @@ foreach ($employees as $eid => $u) {
     }
     $statusCounts[$status]++;
 
-    $lp = $lastPunch[$eid] ?? null;
     $lastText = '';
     $lastKind = '';
     if ($lp) {
@@ -239,14 +248,15 @@ foreach ($employees as $eid => $u) {
 
     $board[] = [
         'id' => $eid, 'name' => $u['LastName'] . ', ' . $u['FirstName'],
-        'badge' => $u['BadgeID'] ?? '', 'sched' => $sched, 'status' => $status,
+        'badge' => $u['BadgeID'] ?? '', 'empNo' => $u['EmployeeNumber'] ?? '', 'sched' => $sched, 'status' => $status,
         'last' => $lastText, 'lastKind' => $lastKind, 'absence' => $absence,
     ];
 }
 $statusLabels = ['In' => 'In', 'Lunch' => 'On lunch', 'Out' => 'Out', 'Absent' => 'Absent', 'Off' => 'Time off'];
 
 // ---------- Panel 2: Hours Summary (range) ----------
-$showHoliday = holidayPayPolicy($conn)['enabled'];
+$holidayPolicy = holidayPayPolicy($conn);
+$showHoliday = $holidayPolicy['enabled'];
 $holidayPay  = $showHoliday ? holidayPayByEmployee($conn, $start, $end) : [];
 $hours = [];
 $totals = ['regular' => 0.0, 'ot' => 0.0, 'pto' => 0.0, 'sick' => 0.0, 'holiday' => 0.0, 'total' => 0.0];
@@ -265,7 +275,7 @@ foreach ($employees as $eid => $u) {
             }
         }
     }
-    $ot   = weeklyOvertime($daily, $policy['otWeekly'], $policy['otDaily']);
+    $ot   = weeklyOvertime($daily, $policy['otWeekly'], $policy['otDaily'], holidayOvertimeCredit($holidayPolicy, $holidayPay[$eid] ?? []));
     $pto  = (float) ($timeOffTotals[$eid]['PTO'] ?? 0);
     $sick = (float) ($timeOffTotals[$eid]['Sick'] ?? 0);
     $hol  = (float) ($holidayPay[$eid]['hours'] ?? 0);
@@ -291,6 +301,7 @@ $exTypes = [
     'missing' => 'Missed punch',
     'lunch'   => 'Lunch punch',
     'absent'  => 'No-show',
+    'unexcused' => 'Unexcused',
 ];
 $exCounts = array_fill_keys(array_keys($exTypes), 0);
 $addEx = function (int $eid, string $date, string $type, string $time, string $detail) use (&$exceptions, &$exCounts, $employees) {
@@ -306,6 +317,14 @@ foreach ($employees as $eid => $u) {
         $rows  = $punches[$eid][$date] ?? [];
         $off   = !empty($timeOffDays[$eid][$date]);
         $onDay = $scheduledOn($sched, $date);
+        // An unexcused absence an admin recorded stays on the list (as handled), so the
+        // range shows every one; no-shows are the ones nobody has recorded yet
+        foreach ($timeOffDays[$eid][$date] ?? [] as $t) {
+            if ($t['Category'] === 'Unexcused' && ($date <= $today)) {
+                $addEx($eid, $date, 'unexcused', '', timeOffDescribe($t, false) . ' (recorded)');
+                break;
+            }
+        }
 
         if (!$rows) {
             if ($onDay && !$off && isset($firstDay[$eid]) && $date >= $firstDay[$eid]
@@ -369,7 +388,7 @@ foreach ($employees as $eid => $u) {
 usort($exceptions, fn($a, $b) => [$b['date'], $a['name']] <=> [$a['date'], $b['name']]);
 
 $pageTitle = "Home";
-$extraCSS = ["../css/home.css?v=4"];
+$extraCSS = ["../css/home.css?v=5"];
 require_once 'header.php';
 ?>
 
@@ -413,13 +432,13 @@ require_once 'header.php';
     <div class="home-panel-body">
         <table id="whosInTable">
             <thead>
-                <tr><th>Name</th><?php if ($showBadges): ?><th>Badge</th><?php endif; ?><th>Shift</th><th>Status</th><th>Last punch</th><th>Absence</th></tr>
+                <tr><th>Name</th><?php if ($showEmpNumbers): ?><th>Emp #</th><?php elseif ($showBadges): ?><th>Badge</th><?php endif; ?><th>Shift</th><th>Status</th><th>Last punch</th><th>Absence</th></tr>
             </thead>
             <tbody>
             <?php foreach ($board as $b): ?>
                 <tr data-row="<?= $b['status'] ?>">
                     <td><a href="<?= htmlspecialchars($punchLink($b['id'], $periodStart, $periodEnd)) ?>"><?= htmlspecialchars($b['name']) ?></a></td>
-                    <?php if ($showBadges): ?><td><?= htmlspecialchars($b['badge']) ?></td><?php endif; ?>
+                    <?php if ($showEmpNumbers): ?><td><?= htmlspecialchars($b['empNo']) ?></td><?php elseif ($showBadges): ?><td><?= htmlspecialchars($b['badge']) ?></td><?php endif; ?>
                     <td>
                         <?php if ($b['sched'] && $b['sched']['shift']): ?>
                             <?= shiftChip($b['sched']['shift']) ?> <span class="muted"><?= htmlspecialchars(shiftTimeRange($b['sched']['shift'])) ?></span>
@@ -429,13 +448,13 @@ require_once 'header.php';
                             <span class="muted">—</span>
                         <?php endif; ?>
                     </td>
-                    <td><span class="st st-<?= strtolower($b['status']) ?>"><?= $statusLabels[$b['status']] ?></span><?php if ($b['status'] === 'Absent' && $canRecordTimeOff): ?> <a class="rec-link" href="record_time_off.php?<?= htmlspecialchars(http_build_query(['emp' => $b['id'], 'date' => $today, 'type' => 'Unpaid'])) ?>" title="Record time off or an absence with the reason">Record</a><?php endif; ?></td>
+                    <td><span class="st st-<?= strtolower($b['status']) ?>"><?= $statusLabels[$b['status']] ?></span><?php if ($b['status'] === 'Absent' && $b['absence'] === '' && $canRecordTimeOff): ?> <a class="rec-link" href="record_time_off.php?<?= htmlspecialchars(http_build_query(['emp' => $b['id'], 'date' => $today, 'type' => 'Unpaid'])) ?>" title="Record time off or an absence with the reason">Record</a><?php endif; ?></td>
                     <td><?= htmlspecialchars($b['last']) ?><?php if ($b['lastKind']): ?> <span class="muted"><?= htmlspecialchars($b['lastKind']) ?></span><?php endif; ?></td>
                     <td><?= htmlspecialchars($b['absence']) ?></td>
                 </tr>
             <?php endforeach; ?>
             <?php if (!$board): ?>
-                <tr><td colspan="<?= $showBadges ? 6 : 5 ?>" class="muted">No employees.</td></tr>
+                <tr><td colspan="<?= ($showBadges || $showEmpNumbers) ? 6 : 5 ?>" class="muted">No employees.</td></tr>
             <?php endif; ?>
             </tbody>
         </table>

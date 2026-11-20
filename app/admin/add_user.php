@@ -21,12 +21,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password  = $_POST['Password'] ?? '';
     $scheduledStartTime = trim($_POST['ScheduledStartTime'] ?? '');
     $shiftID   = (int) ($_POST['ShiftID'] ?? 0);
+    $empNumber = trim($_POST['EmployeeNumber'] ?? '');
 
     // Basic validation
     if (!$firstName || !$lastName || !$office || !$password) {
         header('Location: ../error.php?code=400&message=' . urlencode('First name, last name, office, and password are required.'));
         exit;
     }
+
+    // Employee # (optional): unique, at most 20 characters
+    if (strlen($empNumber) > 20) {
+        header('Location: ../error.php?code=400&message=' . urlencode('Employee # can be at most 20 characters.'));
+        exit;
+    }
+    if ($empNumber !== '') {
+        $chk = $conn->prepare("SELECT ID FROM users WHERE EmployeeNumber = ?");
+        $chk->bind_param("s", $empNumber);
+        $chk->execute();
+        $chk->store_result();
+        if ($chk->num_rows > 0) {
+            header('Location: ../error.php?code=400&message=' . urlencode('Employee # ' . $empNumber . ' is already used by someone else.'));
+            exit;
+        }
+        $chk->close();
+    }
+    $empNumber = $empNumber !== '' ? $empNumber : null;
 
     // PIN, if given, must meet the PIN length setting
     if ($pin !== '' && !isValidNewPin($pin, $conn)) {
@@ -113,10 +132,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Insert user with default 2FA disabled and admin override ON
     $stmt = $conn->prepare("
-        INSERT INTO users (FirstName, LastName, BadgeID, PIN, Office, ClockStatus, Pass, TwoFAEnabled, AdminOverride2FA, ScheduledStartTime, ShiftID)
-        VALUES (?, ?, ?, ?, ?, 'Out', ?, 0, 1, ?, ?)
+        INSERT INTO users (FirstName, LastName, BadgeID, PIN, EmployeeNumber, Office, ClockStatus, Pass, TwoFAEnabled, AdminOverride2FA, ScheduledStartTime, ShiftID)
+        VALUES (?, ?, ?, ?, ?, ?, 'Out', ?, 0, 1, ?, ?)
     ");
-    $stmt->bind_param("sssssssi", $firstName, $lastName, $badgeID, $pin, $office, $hashed, $scheduledStartTime, $shiftID);
+    $stmt->bind_param("ssssssssi", $firstName, $lastName, $badgeID, $pin, $empNumber, $office, $hashed, $scheduledStartTime, $shiftID);
 
     if ($stmt->execute()) {
         header("Location: manage_users.php");

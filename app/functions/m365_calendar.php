@@ -90,20 +90,36 @@ function m365GetToken(array $config): array {
 }
 
 /**
+ * "2 hours", "1.5 hours per day": a part day entered as a number of hours missed
+ * (time_off_requests.Hours with no StartTime/EndTime). Also used by the time-off emails.
+ */
+function m365HoursPhrase(float $hours, bool $perDay = false): string {
+    $n = rtrim(rtrim(number_format($hours, 2, '.', ''), '0'), '.');
+    return $n . ($n === '1' ? ' hour' : ' hours') . ($perDay ? ' per day' : '');
+}
+
+/**
  * Build the Graph event payload for a time_off_requests row.
  * - Single day with times → partial-day event with the supplied window
  * - Otherwise → all-day event (multi-day partial requests collapse to all-day)
+ * - A part day entered as hours (Hours, no times) is an all-day event whose subject
+ *   names the hours, e.g. "Pat Smith — PTO (2 hours)"
+ * Excused and unexcused absences both show as 'Out'.
  * Notes deliberately NOT included in event body — per "no notes" decision.
  */
 function m365BuildEvent(array $request, string $employeeName, string $timezone, ?string $employeeEmail = null): array {
-    $category    = $request['Category'] === 'Unpaid' ? 'Out' : (($request['Category'] === 'Sick') ? 'Sick' : 'PTO');
-    $subject     = "{$employeeName} — {$category}";
+    $category    = in_array($request['Category'], ['Unpaid', 'Unexcused'], true) ? 'Out' : (($request['Category'] === 'Sick') ? 'Sick' : 'PTO');
     $isSingleDay = ($request['StartDate'] === $request['EndDate']);
     $hasTime     = !empty($request['StartTime']) && !empty($request['EndTime']);
+    $partHours   = !$hasTime && (float) ($request['Hours'] ?? 0) > 0 ? (float) $request['Hours'] : null;
+    $subject     = "{$employeeName} — {$category}"
+                 . ($partHours !== null ? ' (' . m365HoursPhrase($partHours, !$isSingleDay) . ')' : '');
 
     $base = [
         'subject'    => $subject,
-        'body'       => ['contentType' => 'text', 'content' => $subject],
+        'body'       => ['contentType' => 'text', 'content' => $partHours !== null
+            ? $subject . ' — part of the day, no set times'
+            : $subject],
         'showAs'     => 'oof',
         'categories' => [$category],
     ];

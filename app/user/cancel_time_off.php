@@ -10,6 +10,8 @@ require '../auth/db.php';
 require_once __DIR__ . '/../functions/time_off_email.php';
 require_once __DIR__ . '/../functions/app_url.php';
 require_once __DIR__ . '/../functions/m365_calendar.php';
+require_once __DIR__ . '/../functions/time_off_hours.php'; // timeOffLabel()
+require_once __DIR__ . '/../functions/csrf.php';
 date_default_timezone_set('America/Chicago');
 
 if (!isset($_SESSION['EmployeeID'])) {
@@ -21,6 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header("Location: time_off.php");
     exit;
 }
+require_csrf('time_off.php?status=invalid&reason=' . urlencode('The page had been open too long. Nothing was cancelled; please try again.'));
 
 $sessionEmpID = (int) $_SESSION['EmployeeID'];
 $requestID    = (int) ($_POST['RequestID'] ?? 0);
@@ -40,12 +43,13 @@ if (mb_strlen($reason) > 500) {
     $reason = mb_substr($reason, 0, 500);
 }
 
-// Must be the owner's own approved request.
+// Must be the owner's own approved request, and not an absence an admin recorded.
 $stmt = $conn->prepare("
     SELECT tor.*, u.FirstName, u.LastName
       FROM time_off_requests tor
       JOIN users u ON u.ID = tor.EmployeeID
      WHERE tor.ID = ? AND tor.EmployeeID = ? AND tor.Status = 'Approved'
+       AND tor.Category NOT IN ('Unpaid','Unexcused')
 ");
 $stmt->bind_param("ii", $requestID, $sessionEmpID);
 $stmt->execute();
@@ -77,7 +81,7 @@ if (mb_strlen($mergedReviewNote) > 500) {
 $u = $conn->prepare("
     UPDATE time_off_requests
        SET Status = 'Cancelled', ReviewNote = ?, ReviewedAt = ?, ReviewedBy = ?
-     WHERE ID = ? AND EmployeeID = ? AND Status = 'Approved' AND Category <> 'Unpaid'
+     WHERE ID = ? AND EmployeeID = ? AND Status = 'Approved' AND Category NOT IN ('Unpaid','Unexcused')
 ");
 $u->bind_param("sssii", $mergedReviewNote, $now, $employeeName, $requestID, $sessionEmpID);
 if (!$u->execute() || $u->affected_rows === 0) {
@@ -135,12 +139,14 @@ if ($adminAddresses) {
         : date('m/d/Y', strtotime($req['StartDate'])) . ' &ndash; ' . date('m/d/Y', strtotime($req['EndDate']));
     $timesLabel = (!empty($req['StartTime']) && !empty($req['EndTime']))
         ? date('g:i a', strtotime($req['StartTime'])) . ' &ndash; ' . date('g:i a', strtotime($req['EndTime']))
-        : 'all day';
+        : ((float) ($req['Hours'] ?? 0) > 0
+            ? m365HoursPhrase((float) $req['Hours'], $req['StartDate'] !== $req['EndDate']) . ' missed'
+            : 'all day');
 
     $subject = "Time Off Cancelled by Employee &ndash; " . htmlspecialchars($employeeName);
     $body  = "<p><strong>" . htmlspecialchars($employeeName) . "</strong> has cancelled time off that was previously approved. No action is needed &mdash; the hours no longer count.</p>";
     $body .= "<ul>";
-    $body .= "<li><strong>Category:</strong> " . htmlspecialchars($req['Category']) . "</li>";
+    $body .= "<li><strong>Category:</strong> " . htmlspecialchars(timeOffLabel($req['Category'])) . "</li>";
     $body .= "<li><strong>Dates:</strong> " . $datesLabel . "</li>";
     $body .= "<li><strong>Times:</strong> " . $timesLabel . "</li>";
     $body .= "<li><strong>Reason given:</strong> " . nl2br(htmlspecialchars($reason)) . "</li>";

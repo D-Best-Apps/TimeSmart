@@ -349,9 +349,12 @@ Stored in `settings` table:
 | `OvertimeDailyHours` | decimal | Daily overtime threshold, 0 = off. Engine support only — not on the Pay Rules page yet | 0 |
 | `DefaultRoundIncrement` | int | Round every punch of employees **without** a shift to this many minutes, 0 = off | 0 |
 | `DefaultRoundMode` | `nearest` / `up` / `down` | Direction for `DefaultRoundIncrement` | nearest |
+| `TimeOffDayHoursMode` | `fixed` / `shift` | What a full day of time off pays: `fixed` = `TimeOffDayHours` on Mon–Fri; `shift` = the employee's shift hours less lunch, charged on the shift's days (a week off on a Mon–Thu 10-hour shift is 4 × 10). Employees without a shift use `TimeOffDayHours` | fixed |
+| `TimeOffDayHours` | decimal | Hours for a full day of time off (`fixed`, and employees without a shift) | 8 |
+| `TimeOffSickEnabled` | boolean | Offer the Sick category when requesting/recording time off. Off for companies without separate sick time; past Sick entries are unchanged | 1 |
 | `PayrollLockedThrough` | date | Punches dated on/before this day can't be edited, approved or recalculated. Set by **Close payroll** on Payroll Totals, which also saves that period's totals (`payroll_closes`, `payroll_close_lines`): Payroll Totals then shows the saved figures for the period and marks employees whose current figures differ (e.g. after a holiday change); `&live=1` shows the current ones. Moved back or cleared on Pay Rules | empty |
 
-The pay-rule settings are edited on **Settings → Pay Rules** (super admins only).
+The pay-rule settings (including the Time Off section) are edited on **Settings → Pay Rules** (super admins only).
 
 ### Shifts, Rounding and Auto-Lunch
 
@@ -390,18 +393,27 @@ Labor Day, Thanksgiving and Christmas Day.
 - A holiday on a Saturday is observed the Friday before, on a Sunday the Monday after (can be
   turned off per custom holiday). When two holidays land on the same weekday, the earlier one
   moves back a day (Christmas Eve moves to Thursday when Christmas is observed Friday).
+- **Move** (next to each year's date) observes that one year's holiday on another date, e.g. the
+  Friday after Thanksgiving instead of Thursday (`holiday_moves`: holiday, year, date; other
+  years keep the rule). Not allowed inside a closed payroll.
 - On a holiday, full-day time off uses no PTO/Sick hours and the admin Home board doesn't flag
   no-shows or late arrivals. Exception: while holiday pay is on, a holiday switched to Unpaid is
   charged to full-day PTO like a workday, so employees can cover the closure day with PTO.
 - **Holiday pay** (same page, off by default) adds a Holiday column to Payroll Totals (screen,
-  Excel, CSV) and the Home board's Hours Summary. Holiday hours count in the total, never toward
-  overtime; working on a holiday is paid on top. Each holiday can be switched Paid/Unpaid.
+  Excel, CSV), the Home board's Hours Summary and timesheets. Holiday hours count in the total;
+  by default not toward overtime, or with `HolidayPayCountsOT` = 1 toward the weekly threshold
+  (a 10-hour holiday means overtime after 30 worked hours that week; the holiday hours stay in
+  the Holiday column). Working on a holiday is paid on top. Each holiday can be switched Paid/Unpaid.
   Settings: `HolidayPayEnabled`, `HolidayPayMode` (`shift` = the employee's scheduled shift hours
   less lunch, `fixed` = `HolidayPayFixedHours`, also used for employees without a shift; for a
   punched-lunch shift the lunch is the shift's **Expected lunch**, 0 = none),
   `HolidayPayDayOff` (`none`/`pay` when the holiday is on the employee's day off) and
   `HolidayPayRequireAdjacent` (must work the scheduled day before and after; approved time off
-  counts). Holidays before an employee's first punch are never paid, nor holidays with no punch
+  counts). An employee's own **Holiday hours** (`users.HolidayHours`, Edit User; e.g. 8 for a
+  part-timer) replace the mode for them. **Hours by employee** (links under the holiday lists,
+  `admin/holiday_pay_adjust.php`) sets one employee's hours for one holiday by hand — half a
+  holiday, a full one the rules skipped, or 0 — with a note (`holiday_pay_adjustments`); that
+  wins over every rule and shows as "set by hand" on Payroll Totals. Holidays before an employee's first punch are never paid, nor holidays with no punch
   or approved PTO/Sick in the 14 days before them (company holidays not counted), which leaves
   out people who have left but aren't archived yet and long unpaid leave. Logic:
   `app/functions/holiday_pay.php`.
@@ -411,13 +423,26 @@ Labor Day, Thanksgiving and Christmas Day.
 ### Time Off Recorded by Admins
 
 `admin/record_time_off.php` (menu **Time Off**, super admins) records time off for an employee,
-saved as already approved: PTO, Sick, or an **unpaid absence** (`time_off_requests.Category =
-'Unpaid'`, reason in `Notes`, required). Past and future dates are allowed, except days inside a
-closed payroll; overlapping entries are refused. PTO/Sick pay hours like an approved request; an
-unpaid absence pays 0 hours but keeps the day from being flagged as a no-show and shows as
-"Unpaid" (gray) on the Attendance report. Employees see these entries on their Time Off page but
-can't edit or cancel an unpaid absence. For holiday pay's before/after rule, an unpaid absence
+saved as already approved: PTO, Sick (when offered), an **excused absence** (unpaid,
+`time_off_requests.Category = 'Unpaid'`) or an **unexcused absence** (`'Unexcused'`); for both
+absences the reason (`Notes`) is required. Past and future dates are allowed, except days inside
+a closed payroll; overlapping entries are refused. PTO/Sick pay hours like an approved request;
+absences pay 0 hours but keep the day from being flagged as a no-show. On the Home board an
+unexcused absence shows the employee as Absent and is listed under Exceptions → Unexcused; the
+Attendance report shows each type in its own color. Employees see these entries on their Time
+Off page but can't edit or cancel an absence. For holiday pay's before/after rule, an absence
 doesn't count as a day worked.
+
+A part day can be entered as start/end times, or as a number of **hours missed**
+(`time_off_requests.Hours`, no times): those hours are charged on the same days a full day would
+be. Approved time off and company holidays are listed on the admin and employee timesheets.
+
+### Employee Number
+
+`users.EmployeeNumber` (Add/Edit User, optional, unique) is the company's own employee number.
+Once any employee has one, the Home board's Who's In panel shows an **Emp #** column, to every
+admin, in place of the badge column. It is not a clock-in credential; PINs and badge IDs are
+never shown on the board.
 
 ### Notification Recipients
 

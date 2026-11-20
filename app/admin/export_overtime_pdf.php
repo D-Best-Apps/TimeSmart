@@ -4,6 +4,16 @@ ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
 require_once '../auth/db.php';
+// Admins only: this page had no sign-in check of its own
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+if (!isset($_SESSION['admin'])) {
+    http_response_code(403);
+    exit('Please sign in.');
+}
+require_once __DIR__ . '/../functions/check_permission.php';
+requirePermission('export_reports');
 require_once __DIR__ . '/../vendor/tecnickcom/tcpdf/tcpdf.php'; // Composer package tecnickcom/tcpdf
 require_once __DIR__ . '/../functions/hours.php';
 require_once __DIR__ . '/../functions/pay_rules.php'; // punchRoundingActive()

@@ -60,7 +60,8 @@ function payrollTotals(mysqli $conn, string $start, string $end): array
     $stmt->close();
 
     $timeOff = timeOffTotalsByEmployee($conn, $start, $end);
-    $showHoliday = holidayPayPolicy($conn)['enabled'];
+    $holidayPolicy = holidayPayPolicy($conn);
+    $showHoliday = $holidayPolicy['enabled'];
     $holidayPay  = $showHoliday ? holidayPayByEmployee($conn, $start, $end) : [];
 
     $rows = [];
@@ -71,7 +72,7 @@ function payrollTotals(mysqli $conn, string $start, string $end): array
         if (!isset($daily[$id]) && !isset($timeOff[$id]) && !isset($unresolved[$id]) && !isset($holidayPay[$id])) {
             continue; // nothing to pay this period
         }
-        $ot   = weeklyOvertime($daily[$id] ?? []);
+        $ot   = weeklyOvertime($daily[$id] ?? [], null, null, holidayOvertimeCredit($holidayPolicy, $holidayPay[$id] ?? []));
         $pto  = round($timeOff[$id]['PTO'] ?? 0.0, 2);
         $sick = round($timeOff[$id]['Sick'] ?? 0.0, 2);
         $hol  = round($holidayPay[$id]['hours'] ?? 0.0, 2);

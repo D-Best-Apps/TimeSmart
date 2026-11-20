@@ -1,19 +1,22 @@
 document.getElementById("editForm").addEventListener("submit", function(e) {
-  const rows = Array.from(document.querySelectorAll("tbody tr"));
+  // Only the punch rows of this form: time off / holiday lines have no inputs
+  const rows = Array.from(this.querySelectorAll("tbody tr"));
   let valid = true;
 
-  rows.forEach((row, index) => {
+  rows.forEach(row => {
+    const reason = row.querySelector('[name$="[Reason]"]');
+    if (!reason) return;
+
     const fields = ["TimeIN", "LunchStart", "LunchEnd", "TimeOut"];
     let changed = false;
 
     fields.forEach(field => {
-      const input = row.querySelector(`[name="entries[${index}][${field}]"]`);
+      const input = row.querySelector(`[name$="[${field}]"]`);
       if (input && input.value !== input.dataset.original) {
         changed = true;
       }
     });
 
-    const reason = row.querySelector(`[name="entries[${index}][Reason]"]`);
     if (changed && reason.value.trim() === "") {
       reason.style.borderColor = "red";
       reason.placeholder = "Required for edited rows";

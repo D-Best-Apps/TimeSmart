@@ -19,7 +19,7 @@ require_once __DIR__ . '/../functions/csrf.php';
  * Fetch data for page
  */
 $users_result = $conn->query("
-    SELECT ID, FirstName, LastName, BadgeID, PIN, ClockStatus, Office, TwoFAEnabled, LockOut, ShiftID
+    SELECT ID, FirstName, LastName, BadgeID, PIN, EmployeeNumber, ClockStatus, Office, TwoFAEnabled, LockOut, ShiftID
     FROM users
     ORDER BY LastName
 ");
@@ -103,6 +103,7 @@ require_once 'header.php';
         <thead>
         <tr>
             <th><input type="checkbox" id="selectAllUsers" title="Select all" style="width:auto;"></th>
+            <th>Emp #</th>
             <th>Badge ID</th>
             <th>PIN</th>
             <th>Full Name</th>
@@ -125,6 +126,7 @@ require_once 'header.php';
         <?php foreach ($users_data as $user): ?>
             <tr>
                 <td><input type="checkbox" class="user-select" name="UserIDs[]" value="<?= (int) $user['ID'] ?>" form="assignShiftForm" style="width:auto;"></td>
+                <td><?= htmlspecialchars($user['EmployeeNumber'] ?? '') ?></td>
                 <td><?= htmlspecialchars($user['BadgeID'] ?? '') ?></td>
                 <td><?= !empty($user['PIN']) ? '••••' : '' ?></td>
                 <td><?= htmlspecialchars(($user['FirstName'] ?? '') . ' ' . ($user['LastName'] ?? '')) ?></td>
@@ -168,6 +170,7 @@ require_once 'header.php';
             <h3>Add New User</h3>
             <input type="text" name="FirstName" placeholder="First Name" required>
             <input type="text" name="LastName" placeholder="Last Name" required>
+            <input type="text" name="EmployeeNumber" placeholder="Employee # (optional)" maxlength="20" autocomplete="off">
             <input type="text" name="BadgeID" placeholder="Badge ID (optional)" autocomplete="off" data-1p-ignore="true" data-lpignore="true">
             <input type="text" name="PIN" placeholder="PIN — <?= htmlspecialchars(pinRuleText($conn)) ?> (optional)" inputmode="numeric" pattern="<?= htmlspecialchars(pinInputPattern($conn)) ?>" maxlength="<?= PIN_MAX_LENGTH ?>" autocomplete="off" data-1p-ignore="true" data-lpignore="true">
             <select name="Office" required onchange="var d = this.options[this.selectedIndex].dataset.defaultShift; if (d !== undefined) document.getElementById('addUserShift').value = d;">
