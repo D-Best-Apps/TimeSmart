@@ -128,18 +128,28 @@ function sendAdjustmentEmail($employeeID, $oldTime, $newTime, $note, $conn) {
 }
 
 /**
- * Gets the real client IP address, accounting for proxies.
- * @return string|null The client's IP address or null if not found.
+ * The visitor's address, for the office IP allowlist, the PIN throttle and punch records.
+ *
+ * nginx (deploy/docker/nginx.conf) already puts the visitor's address in REMOTE_ADDR
+ * for requests through Cloudflare (CF-Connecting-IP, only trusted from Cloudflare and
+ * the Docker networks). The first X-Forwarded-For entry is whatever the browser sent, so
+ * it is never used: anyone could claim an office address or dodge the PIN throttle.
+ * When REMOTE_ADDR is still a private address, another proxy on the Docker network
+ * (Nginx Proxy Manager, Caddy) forwarded the request, and the last X-Forwarded-For entry
+ * is the address that proxy saw.
+ * @return string|null
  */
 function get_client_ip() {
-    if (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
-        $ip = explode(',', $_SERVER['HTTP_X_FORWARDED_FOR'])[0];
-    } elseif (!empty($_SERVER['HTTP_X_REAL_IP'])) {
-        $ip = $_SERVER['HTTP_X_REAL_IP'];
-    } else {
-        $ip = $_SERVER['REMOTE_ADDR'] ?? null;
+    $remote = trim((string) ($_SERVER['REMOTE_ADDR'] ?? ''));
+    $isPublic = fn (string $ip) => filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) !== false;
+    if ($remote !== '' && !$isPublic($remote) && !empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+        $hops = array_map('trim', explode(',', (string) $_SERVER['HTTP_X_FORWARDED_FOR']));
+        $last = end($hops);
+        if ($last !== false && filter_var($last, FILTER_VALIDATE_IP) !== false) {
+            return $last;
+        }
     }
-    return $ip ? trim($ip) : null;
+    return $remote !== '' ? $remote : null;
 }
 
 /**
@@ -209,7 +219,8 @@ function logPendingEdit($conn, $empID, $date, $field, $newTime, $note) {
 }
 
 // --- Quick-clock brute-force throttle (file-based, per client IP) ---
-// Only failed PIN/badge lookups count, so a busy shared kiosk with many quick
+// Used by quick-clock, the kiosk and the public board's password check.
+// Only failed PIN/badge lookups and wrong passwords count, so a busy shared kiosk with many quick
 // successes is never throttled; an automated guesser is. Tunable below.
 function qc_rl_path($ip) { return sys_get_temp_dir() . '/qc_rl_' . md5((string) $ip) . '.json'; }
 function qc_rl_blocked_for($ip) {
@@ -230,21 +241,20 @@ function qc_rl_record_fail($ip) {
     if ($j['fails'] >= $maxFails) { $j['blockedUntil'] = $now + $blockSecs; $j['fails'] = 0; $j['first'] = $now; }
     @file_put_contents($f, json_encode($j));
 }
-function qc_rl_reset($ip) { $f = qc_rl_path($ip); if (is_file($f)) { @unlink($f); } }
 
 /**
  * Kiosk: find the employee for a scanned badge or a typed PIN (one box takes both).
  * A value is matched as a BadgeID, and (when kiosk PINs are on) as a 3-6 digit PIN.
  *
- * PIN guessing: wrong PINs count toward the throttle above, keyed on the real
- * connection address (REMOTE_ADDR — a spoofable X-Forwarded-For can't dodge it), and
- * a success does NOT reset the count, so a known PIN can't be used to keep guessing.
+ * PIN guessing: wrong PINs count toward the throttle above, keyed on the visitor's
+ * address (get_client_ip(), which ignores a forged X-Forwarded-For), and a success
+ * does NOT reset the count, so a known PIN can't be used to keep guessing.
  * Badge misreads don't count: badge numbers are too long to guess, and a busy kiosk
  * shouldn't lock itself at shift change. Ends the request with an error on failure.
  * @return array{0:int,1:string} [employee ID, first name]
  */
 function kiosk_identify(mysqli $conn, string $value): array {
-    $device = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
+    $device = (string) get_client_ip();
     $wait = qc_rl_blocked_for($device);
     if ($wait > 0) {
         send_json_response(false, "🚫 Too many wrong PINs. Wait {$wait}s, or scan your badge.", 429);
@@ -568,7 +578,8 @@ if (!empty($_POST['mode']) && $_POST['mode'] === 'quickclock') {
         send_json_response(false, $method === 'pin' ? "❌ PIN not recognized." : "❌ Badge not recognized.", 404);
     }
     $stmt->close();
-    qc_rl_reset($ip); // a valid PIN/badge clears any failure streak
+    // A valid PIN doesn't clear the failure count (as on the kiosk): otherwise anyone
+    // who knows one PIN could type it every few guesses and never be throttled.
 
     // Current open punch, if any
     $punch = $conn->prepare("SELECT ID, Date, TimeIN, LunchStart, LunchEnd FROM timepunches WHERE EmployeeID = ? AND TimeOUT IS NULL ORDER BY Date DESC, TimeIN DESC LIMIT 1");
@@ -646,15 +657,27 @@ if (!$empID || !$action) {
 // Anything else (a blind POST with an EmployeeID and neither) is rejected.
 $providedPassword = (string) ($input['password'] ?? '');
 if ($providedPassword !== '') {
-    $authStmt = $conn->prepare("SELECT Pass FROM users WHERE ID = ?");
+    // Wrong passwords here count toward the same per-address throttle as quick-clock
+    // PINs: this form takes any employee's ID, so it would otherwise allow unlimited
+    // password guessing. Locked-out accounts (too many sign-in failures) can't punch here.
+    $rlWait = qc_rl_blocked_for((string) $ip);
+    if ($rlWait > 0) {
+        send_json_response(false, "🚫 Too many wrong passwords. Try again in {$rlWait}s.", 429);
+    }
+    $authStmt = $conn->prepare("SELECT Pass, LockOut FROM users WHERE ID = ?");
     if (!$authStmt) { send_json_response(false, "DB prepare error (auth)", 500, $conn->error); }
     $authStmt->bind_param("i", $empID);
     $authStmt->execute();
-    $authStmt->bind_result($passHash);
-    $authOk = $authStmt->fetch() && !empty($passHash) && password_verify($providedPassword, $passHash);
+    $authStmt->bind_result($passHash, $lockedOut);
+    $found  = $authStmt->fetch();
     $authStmt->close();
+    $authOk = $found && !empty($passHash) && password_verify($providedPassword, $passHash);
     if (!$authOk) {
+        qc_rl_record_fail((string) $ip);
         send_json_response(false, "❌ Invalid password.", 401);
+    }
+    if (!empty($lockedOut)) {
+        send_json_response(false, "🔒 Your account is locked. Please contact an administrator.", 403);
     }
 } else {
     $sessionEmp = (int) ($_SESSION['EmployeeID'] ?? 0);
