@@ -15,6 +15,8 @@ DROP TABLE IF EXISTS `users`;
 DROP TABLE IF EXISTS `Offices`;
 DROP TABLE IF EXISTS `shifts`;
 DROP TABLE IF EXISTS `holidays`;
+DROP TABLE IF EXISTS `payroll_close_lines`;
+DROP TABLE IF EXISTS `payroll_closes`;
 DROP TABLE IF EXISTS `user-archive`;
 SET FOREIGN_KEY_CHECKS = 1;
 
@@ -264,6 +266,35 @@ INSERT INTO `settings` (`SettingKey`, `SettingValue`) VALUES
   ('HolidayPayDayOff', 'none'),
   ('HolidayPayRequireAdjacent', '0')
 ON DUPLICATE KEY UPDATE `SettingKey` = `SettingKey`;
+
+-- Payroll totals saved when payroll is closed (Payroll Totals -> Close payroll)
+CREATE TABLE `payroll_closes` (
+  `ID` int(11) NOT NULL AUTO_INCREMENT,
+  `PeriodStart` date NOT NULL,
+  `PeriodEnd` date NOT NULL,
+  `ClosedAt` datetime NOT NULL,
+  `ClosedByID` int(11) DEFAULT NULL,
+  `ClosedByName` varchar(255) DEFAULT NULL,
+  `HolidayPay` tinyint(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`ID`),
+  KEY `Period` (`PeriodStart`, `PeriodEnd`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `payroll_close_lines` (
+  `CloseID` int(11) NOT NULL,
+  `EmployeeID` int(11) NOT NULL,
+  `EmployeeName` varchar(255) NOT NULL,
+  `Regular` decimal(8,2) NOT NULL DEFAULT 0.00,
+  `Overtime` decimal(8,2) NOT NULL DEFAULT 0.00,
+  `PTO` decimal(8,2) NOT NULL DEFAULT 0.00,
+  `Sick` decimal(8,2) NOT NULL DEFAULT 0.00,
+  `Holiday` decimal(8,2) NOT NULL DEFAULT 0.00,
+  `Total` decimal(8,2) NOT NULL DEFAULT 0.00,
+  `Unfinished` int(11) NOT NULL DEFAULT 0,
+  `HolidayDays` text DEFAULT NULL,
+  PRIMARY KEY (`CloseID`, `EmployeeID`),
+  CONSTRAINT `payroll_close_lines_close` FOREIGN KEY (`CloseID`) REFERENCES `payroll_closes` (`ID`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ===== Migration tracking (populated by deploy/scripts/run_migrations.php) =====
 CREATE TABLE IF NOT EXISTS `schema_migrations` (

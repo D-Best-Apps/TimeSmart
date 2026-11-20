@@ -349,7 +349,7 @@ Stored in `settings` table:
 | `OvertimeDailyHours` | decimal | Daily overtime threshold, 0 = off. Engine support only — not on the Pay Rules page yet | 0 |
 | `DefaultRoundIncrement` | int | Round every punch of employees **without** a shift to this many minutes, 0 = off | 0 |
 | `DefaultRoundMode` | `nearest` / `up` / `down` | Direction for `DefaultRoundIncrement` | nearest |
-| `PayrollLockedThrough` | date | Punches dated on/before this day can't be edited, approved or recalculated. Set by **Close payroll** on Payroll Totals; moved back or cleared on Pay Rules | empty |
+| `PayrollLockedThrough` | date | Punches dated on/before this day can't be edited, approved or recalculated. Set by **Close payroll** on Payroll Totals, which also saves that period's totals (`payroll_closes`, `payroll_close_lines`): Payroll Totals then shows the saved figures for the period and marks employees whose current figures differ (e.g. after a holiday change); `&live=1` shows the current ones. Moved back or cleared on Pay Rules | empty |
 
 The pay-rule settings are edited on **Settings → Pay Rules** (super admins only).
 

@@ -18,25 +18,33 @@ require_once __DIR__ . '/../functions/hours.php';
 require_once __DIR__ . '/../functions/pay_rules.php';
 require_once __DIR__ . '/../functions/time_off_hours.php';
 require_once __DIR__ . '/../functions/holiday_pay.php';
+require_once __DIR__ . '/../functions/payroll_totals.php'; // payrollTotals(), saved closes
 
 require_once __DIR__ . '/../functions/csrf.php';
 
 date_default_timezone_set('America/Chicago');
 
-// "Close payroll": lock every punch dated on/before the period end (super admins)
+// "Close payroll": lock every punch dated on/before the period end and save the
+// period's totals as closed (super admins)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'close') {
     require_csrf('payroll_totals.php');
     requirePermission('manage_pay_rules', 'payroll_totals.php');
+    $isDate = fn($v) => is_string($v) && ($x = DateTime::createFromFormat('Y-m-d', $v)) && $x->format('Y-m-d') === $v;
     $through = (string) ($_POST['through'] ?? '');
-    $d = DateTime::createFromFormat('Y-m-d', $through);
+    $from    = (string) ($_POST['start'] ?? '');
     // Only finished days: today's punches are still coming in, and live clock-outs are never blocked
-    if ($d && $d->format('Y-m-d') === $through && $through < date('Y-m-d')) {
+    if ($isDate($through) && $through < date('Y-m-d')) {
+        if (!$isDate($from) || $from > $through) {
+            $from = payPeriodRange($through, payPolicy($conn))[0];
+        }
         $current = payrollLockedThrough($conn);
         if ($current === null || $through > $current) {
             setPayrollLockedThrough($conn, $through);
+            savePayrollClose($conn, $from, $through, payrollTotals($conn, $from, $through),
+                isset($_SESSION['EmployeeID']) ? (int) $_SESSION['EmployeeID'] : null, (string) ($_SESSION['admin'] ?? ''));
         }
     }
-    header('Location: payroll_totals.php?' . http_build_query(['period' => 'custom', 'start' => $_POST['start'] ?? '', 'end' => $through, 'closed' => 1]));
+    header('Location: payroll_totals.php?' . http_build_query(['period' => 'custom', 'start' => $from, 'end' => $through, 'closed' => 1]));
     exit;
 }
 
@@ -55,70 +63,27 @@ if ($period === 'current') {
     [$start, $end] = payPeriodRange((new DateTime($curStart))->modify('-1 day')->format('Y-m-d'), $policy);
 }
 
-// Paid hours per employee per day
-$stmt = $conn->prepare("
-    SELECT tp.EmployeeID, tp.Date, SUM(GREATEST(COALESCE(tp.TotalHours, 0), 0)) AS Hours
-      FROM timepunches tp
-     WHERE tp.TimeIN IS NOT NULL AND tp.TimeOut IS NOT NULL
-       AND tp.Date BETWEEN ? AND ?
-     GROUP BY tp.EmployeeID, tp.Date
-");
-$stmt->bind_param("ss", $start, $end);
-$stmt->execute();
-$daily = [];
-foreach ($stmt->get_result()->fetch_all(MYSQLI_ASSOC) as $r) {
-    $daily[(int) $r['EmployeeID']][$r['Date']] = (float) $r['Hours'];
-}
-$stmt->close();
-
-// Punches that can't be paid yet: still open, or clocked out with hours awaiting review
-$stmt = $conn->prepare("
-    SELECT EmployeeID, COUNT(*) AS n
-      FROM timepunches
-     WHERE Date BETWEEN ? AND ? AND TimeIN IS NOT NULL AND (TimeOut IS NULL OR TotalHours IS NULL)
-     GROUP BY EmployeeID
-");
-$stmt->bind_param("ss", $start, $end);
-$stmt->execute();
-$unresolved = [];
-foreach ($stmt->get_result()->fetch_all(MYSQLI_ASSOC) as $r) {
-    $unresolved[(int) $r['EmployeeID']] = (int) $r['n'];
-}
-$stmt->close();
-
-$timeOff = timeOffTotalsByEmployee($conn, $start, $end);
-$showHoliday = holidayPayPolicy($conn)['enabled'];
-$holidayPay  = $showHoliday ? holidayPayByEmployee($conn, $start, $end) : [];
-
-$rows = [];
-$grand = ['regular' => 0.0, 'ot' => 0.0, 'pto' => 0.0, 'sick' => 0.0, 'holiday' => 0.0, 'total' => 0.0];
-$users = $conn->query("SELECT ID, FirstName, LastName, ShiftID FROM users ORDER BY LastName, FirstName");
-while ($u = $users->fetch_assoc()) {
-    $id = (int) $u['ID'];
-    if (!isset($daily[$id]) && !isset($timeOff[$id]) && !isset($unresolved[$id]) && !isset($holidayPay[$id])) {
-        continue; // nothing to pay this period
+// Closed periods show the totals saved at close (functions/payroll_totals.php explains
+// why); ?live=1 shows today's figures instead.
+$lockedThrough = payrollLockedThrough($conn);
+$isClosed = $lockedThrough !== null && $end <= $lockedThrough;
+$live  = payrollTotals($conn, $start, $end);
+$saved = $isClosed ? loadPayrollClose($conn, $start, $end) : null;
+$showLive = !$saved || isset($_GET['live']);
+$data = $showLive ? $live : $saved;
+$changes = $saved ? payrollCloseChanges($saved, $live) : [];
+$rows        = array_values($data['rows']);
+$grand       = $data['grand'];
+$unresolved  = $data['unresolved'];
+$showHoliday = $data['showHoliday'];
+$colNames = ['regular' => 'Regular', 'ot' => 'Overtime', 'pto' => 'PTO', 'sick' => 'Sick', 'holiday' => 'Holiday', 'total' => 'Total'];
+$changeText = function (int $eid) use ($changes, $colNames): string {
+    $parts = [];
+    foreach ($changes[$eid] ?? [] as $k => [$was, $now]) {
+        $parts[] = $colNames[$k] . ': ' . number_format($was, 2) . ' at close, ' . number_format($now, 2) . ' now';
     }
-    $ot   = weeklyOvertime($daily[$id] ?? []);
-    $pto  = round($timeOff[$id]['PTO'] ?? 0.0, 2);
-    $sick = round($timeOff[$id]['Sick'] ?? 0.0, 2);
-    $hol  = round($holidayPay[$id]['hours'] ?? 0.0, 2);
-    $row = [
-        'name'    => $u['LastName'] . ', ' . $u['FirstName'],
-        'regular' => $ot['totalRegular'],
-        'ot'      => $ot['totalOT'],
-        'pto'     => $pto,
-        'sick'    => $sick,
-        'holiday' => $hol,
-        'holidayDays' => $holidayPay[$id]['days'] ?? [],
-        'total'   => round($ot['totalHours'] + $pto + $sick + $hol, 2),
-        'review'  => $unresolved[$id] ?? 0,
-        'id'      => $id,
-    ];
-    foreach (['regular', 'ot', 'pto', 'sick', 'holiday', 'total'] as $k) {
-        $grand[$k] += $row[$k];
-    }
-    $rows[] = $row;
-}
+    return implode(PHP_EOL, $parts);
+};
 
 // A range that cuts through a work week can't see that week's other hours, so its
 // overtime may be understated.
@@ -175,11 +140,12 @@ if ($format === 'xlsx') {
     exit;
 }
 
-$lockedThrough = payrollLockedThrough($conn);
-$isClosed  = $lockedThrough !== null && $end <= $lockedThrough;
 $canClose  = checkPermission('manage_pay_rules') && !$isClosed && $end < date('Y-m-d');
 
-$qs = fn(array $extra) => htmlspecialchars('payroll_totals.php?' . http_build_query(['period' => 'custom', 'start' => $start, 'end' => $end] + $extra));
+// Links keep the range, and the current-figures view when that's what's shown
+$qs = fn(array $extra) => htmlspecialchars('payroll_totals.php?' . http_build_query(['period' => 'custom', 'start' => $start, 'end' => $end]
+    + ($saved && $showLive ? ['live' => 1] : []) + $extra));
+$qsView = fn(bool $live) => htmlspecialchars('payroll_totals.php?' . http_build_query(['period' => 'custom', 'start' => $start, 'end' => $end] + ($live ? ['live' => 1] : [])));
 
 $pageTitle = "Payroll Totals";
 require_once 'header.php';
@@ -224,14 +190,37 @@ require_once 'header.php';
     <?php if (isset($_GET['closed']) && $isClosed): ?>
         <div class="alert alert-success">Payroll closed through <?= htmlspecialchars(date('m/d/Y', strtotime($lockedThrough))) ?>. Punches up to that date can no longer be edited, approved or recalculated.</div>
     <?php endif; ?>
-    <?php if ($isClosed): ?>
-        <div class="pt-warn" style="background:#eef3f6; border-color:#d5e0e8; color:inherit;">🔒 This period is closed (payroll closed through <?= htmlspecialchars(date('m/d/Y', strtotime($lockedThrough))) ?>). These totals won't change.</div>
+    <?php if ($saved && !$showLive): ?>
+        <div class="pt-warn" style="background:#eef3f6; border-color:#d5e0e8; color:inherit;">
+            🔒 This period is closed. These are the totals as closed on <?= htmlspecialchars(date('m/d/Y g:i A', strtotime($saved['close']['ClosedAt']))) ?><?= ($saved['close']['ClosedByName'] ?? '') !== '' ? ' by ' . htmlspecialchars($saved['close']['ClosedByName']) : '' ?>; the Excel and CSV downloads match them.
+        </div>
+        <?php if ($changes): ?>
+        <div class="pt-warn">
+            <?= count($changes) ?> employee<?= count($changes) === 1 ? ' has' : 's have' ?> different figures now than when payroll was closed
+            (<?= htmlspecialchars(implode('; ', array_map(fn($eid) => $saved['rows'][$eid]['name'] ?? $live['rows'][$eid]['name'] ?? ('#' . $eid), array_slice(array_keys($changes), 0, 10)))) ?><?= count($changes) > 10 ? '; …' : '' ?>),
+            usually because a holiday or a holiday-pay setting changed since. They're marked ⚠ (hover for what changed).
+            The closed totals are what was paid; <a href="<?= $qsView(true) ?>">see the current figures</a> to work out an adjustment.
+        </div>
+        <?php endif; ?>
+    <?php elseif ($saved): ?>
+        <div class="pt-warn">
+            Showing <strong>current</strong> figures for a closed period<?= $changes ? '; ' . count($changes) . ' employee' . (count($changes) === 1 ? ' differs' : 's differ') . ' from the totals saved at close (marked ⚠)' : ', which match the totals saved at close' ?>.
+            <a href="<?= $qsView(false) ?>">Back to the closed totals</a>
+        </div>
+    <?php elseif ($isClosed): ?>
+        <div class="pt-warn" style="background:#eef3f6; border-color:#d5e0e8; color:inherit;">
+            🔒 This period is closed (payroll closed through <?= htmlspecialchars(date('m/d/Y', strtotime($lockedThrough))) ?>), so its punches and time off can't change.
+            These dates have no saved totals (closed as a different date range, or before totals were saved), so these are current figures:
+            a later holiday or holiday-pay change can still move PTO, Sick and Holiday hours here.
+        </div>
     <?php endif; ?>
 
     <?php if (!$alignedStart || !$alignedEnd): ?>
         <div class="pt-warn">These dates cut through a work week (weeks run <?= htmlspecialchars(workWeekLabel()) ?>). Overtime only counts hours inside the dates shown, so it may be understated.</div>
     <?php endif; ?>
-    <?php if ($unresolved): ?>
+    <?php if ($unresolved && !$showLive): ?>
+        <div class="pt-warn"><?= array_sum($unresolved) ?> punch(es) were unfinished when payroll was closed and were paid at 0 hours. They're marked below.</div>
+    <?php elseif ($unresolved): ?>
         <div class="pt-warn"><?= array_sum($unresolved) ?> punch(es) in this period aren't finished — still clocked in, or waiting on a missing lunch-end time — and are not counted yet. They're marked below; fix them on <a href="edits_timesheet.php">Pending Approvals</a> or the timesheet before running payroll.</div>
     <?php endif; ?>
 
@@ -248,6 +237,7 @@ require_once 'header.php';
                 <td>
                     <a href="view_punches.php?emp=<?= $r['id'] ?>&amp;from=<?= urlencode(date('m/d/Y', strtotime($start))) ?>&amp;to=<?= urlencode(date('m/d/Y', strtotime($end))) ?>"><?= htmlspecialchars($r['name']) ?></a>
                     <?php if ($r['review']): ?><span style="color:#b02a37; font-size:.85em;"> ⚠ <?= $r['review'] ?> unfinished</span><?php endif; ?>
+                    <?php if (isset($changes[$r['id']])): ?><span style="color:#856404; font-size:.85em; cursor:help;" title="<?= htmlspecialchars($changeText($r['id'])) ?>"> ⚠ changed since close</span><?php endif; ?>
                 </td>
                 <td class="num"><?= number_format($r['regular'], 2) ?></td>
                 <td class="num"><?= $r['ot'] > 0 ? '<strong>' . number_format($r['ot'], 2) . '</strong>' : '0.00' ?></td>
