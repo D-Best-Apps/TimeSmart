@@ -245,14 +245,14 @@ function timeOffTotalsByEmployee(mysqli $conn, string $periodStart, string $peri
     $rows = fetchApprovedTimeOff($conn, $periodStart, $periodEnd, $employeeID);
     $totals = [];
     foreach ($rows as $r) {
+        if (!timeOffIsPaid($r)) {
+            continue; // absences pay nothing (and don't give the employee an all-zero payroll line)
+        }
         $empId = (int) $r['EmployeeID'];
         if (!isset($totals[$empId])) {
             $totals[$empId] = ['Sick' => 0.0, 'PTO' => 0.0];
         }
         $hours = timeOffHoursInPeriod($r, $periodStart, $periodEnd, $defaultDayHours);
-        if (!timeOffIsPaid($r)) {
-            continue; // absences pay nothing
-        }
         $bucket = $r['Category'] === 'Sick' ? 'Sick' : 'PTO';
         $totals[$empId][$bucket] += $hours;
     }
