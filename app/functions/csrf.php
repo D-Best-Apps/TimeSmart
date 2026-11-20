@@ -40,6 +40,17 @@ function csrf_valid(): bool {
 }
 
 /**
+ * Redirect target for a rejected post from a page in admin/ or user/: the shared
+ * error page, saying nothing was changed. For handlers whose own page has no
+ * spot to show the message.
+ */
+function csrf_error_url(): string {
+    return '../error.php?code=403&message=' . urlencode(
+        'This page had been open too long, so nothing was changed. Go back, reload the page and try again.'
+    );
+}
+
+/**
  * Reject the request unless it carries a valid token.
  *
  * @param string|null $redirect Where to send a rejected browser POST. Null (or a

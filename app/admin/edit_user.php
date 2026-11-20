@@ -15,6 +15,8 @@ if (!isset($_SESSION['admin'])) {
 // Permission check
 require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('manage_users');
+require_once __DIR__ . '/../functions/csrf.php';
+require_csrf(csrf_error_url());
 require_once __DIR__ . '/../functions/profile_photo.php';
 require_once __DIR__ . '/../functions/pay_rules.php'; // listShifts()
 require_once __DIR__ . '/../functions/pin_policy.php';
@@ -191,6 +193,7 @@ require_once 'header.php';
     <?php endif; ?>
 
     <form method="POST" class="uman-form" enctype="multipart/form-data">
+        <?= csrf_field() ?>
         <label>First Name
             <input type="text" name="FirstName" value="<?= htmlspecialchars($user['FirstName'] ?? '') ?>" required>
         </label>

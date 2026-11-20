@@ -12,7 +12,10 @@ document.getElementById('confirmResetBtn').addEventListener('click', () => {
     if (!resetUserId) return;
     fetch('reset_password.php', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRF-Token': document.getElementById('confirmResetBtn').dataset.csrf || ''
+        },
         body: 'id=' + encodeURIComponent(resetUserId)
     })
     .then(r => r.json())

@@ -10,6 +10,8 @@ if (!isset($_SESSION['admin'])) {
 // Permission check
 require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('manage_users');
+require_once __DIR__ . '/../functions/csrf.php';
+require_csrf(csrf_error_url());
 require_once __DIR__ . '/../functions/pin_policy.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

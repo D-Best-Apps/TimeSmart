@@ -7,6 +7,9 @@ if (!isset($_SESSION['admin'])) {
     exit("Unauthorized");
 }
 
+require_once __DIR__ . '/../functions/csrf.php';
+require_csrf(csrf_error_url());
+
 function generateRecoveryCodes($count = 5) {
     $codes = [];
     for ($i = 0; $i < $count; $i++) {

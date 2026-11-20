@@ -64,6 +64,7 @@ require_once 'header.php';
             For a single employee, use <strong>Actions → 2FA Options</strong> in the table below.
         </p>
         <form method="POST" action="generate_backup_codes.php">
+            <?= csrf_field() ?>
             <input type="hidden" name="mode" value="all">
             <button type="submit" class="btn primary">Generate for All Users</button>
         </form>
@@ -136,6 +137,7 @@ require_once 'header.php';
                 <td><?= !empty($user['TwoFAEnabled']) ? '✅ Enabled' : '❌ Disabled' ?></td>
                 <td>
                     <form method="POST" action="update_2fa_status.php" style="display:inline;">
+                        <?= csrf_field() ?>
                         <input type="hidden" name="id" value="<?= (int)$user['ID'] ?>">
                         <?php if (!empty($user['LockOut'])): ?>
                             <input type="hidden" name="action" value="unlock">
@@ -167,6 +169,7 @@ require_once 'header.php';
 <div id="addUserModal" class="modal">
     <div class="modal-content">
         <form action="add_user.php" method="POST">
+            <?= csrf_field() ?>
             <h3>Add New User</h3>
             <input type="text" name="FirstName" placeholder="First Name" required>
             <input type="text" name="LastName" placeholder="Last Name" required>
@@ -202,7 +205,7 @@ require_once 'header.php';
         <p>This will replace the user's password with a one-time temporary password, clear any login lockout, and show the temp password on the next screen so you can read it off to the employee. They should change it in <strong>User Settings</strong> after logging in.</p>
         <div class="modal-actions">
             <button class="btn" onclick="closeResetModal()">Cancel</button>
-            <button class="btn primary" id="confirmResetBtn">Reset &amp; Show Temp Password</button>
+            <button class="btn primary" id="confirmResetBtn" data-csrf="<?= htmlspecialchars(csrf_token(), ENT_QUOTES) ?>">Reset &amp; Show Temp Password</button>
         </div>
     </div>
 </div>
@@ -218,6 +221,7 @@ require_once 'header.php';
         </p>
 
         <form id="form2FA" method="POST" action="update_2fa_status.php">
+            <?= csrf_field() ?>
             <input type="hidden" name="id" id="2faUserId">
 
             <div class="modal-actions" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; margin-top: 1.5rem;">
@@ -231,6 +235,7 @@ require_once 'header.php';
             Backup codes let this user sign in if they lose their authenticator.
         </p>
         <form id="form2FACodes" method="POST" action="generate_backup_codes.php" style="text-align:center;">
+            <?= csrf_field() ?>
             <input type="hidden" name="mode" value="single">
             <input type="hidden" name="userID" id="2faCodesUserId">
             <button type="submit" class="btn small secondary" onclick="return confirm('Generate new backup codes for this user? Any existing codes will be replaced.');">🔑 Generate Backup Codes</button>
@@ -238,7 +243,7 @@ require_once 'header.php';
     </div>
 </div>
 
-<script src="../js/manage_users.js?v=1.4"></script>
+<script src="../js/manage_users.js?v=1.5"></script>
 <script>
 // Bulk shift assignment: row checkboxes belong to #assignShiftForm via form=""
 (function () {
@@ -264,6 +269,7 @@ require_once 'header.php';
         <div class="modal-actions">
             <button class="btn" onclick="closeArchiveModal()">Cancel</button>
             <form id="archiveForm" action="archive_user.php" method="POST" style="display:inline;">
+                <?= csrf_field() ?>
                 <input type="hidden" name="ID" id="archiveUserId">
                 <button type="submit" class="btn primary">Yes, Archive</button>
             </form>

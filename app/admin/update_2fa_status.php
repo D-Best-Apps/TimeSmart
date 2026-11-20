@@ -8,6 +8,9 @@ if (!isset($_SESSION['admin'])) {
     exit('Forbidden');
 }
 
+require_once __DIR__ . '/../functions/csrf.php';
+require_csrf(csrf_error_url());
+
 $id     = isset($_POST['id']) ? (int)$_POST['id'] : 0;
 $action = $_POST['action'] ?? '';
 
