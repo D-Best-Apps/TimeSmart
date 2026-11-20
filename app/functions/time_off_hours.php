@@ -30,6 +30,8 @@ function timeOffIsPaid(array $request): bool
  * Full-day requests count as $defaultDayHours (default 8) per WORKING day — weekends
  * and observed company holidays are skipped, because the office is closed and no PTO
  * is consumed. A Thu-to-the-following-Tue request is 3 days of PTO, not 6.
+ * Exception: with holiday pay on, an unpaid holiday is charged like a workday
+ * (isTimeOffDay()), so PTO can cover a closure day the company doesn't pay.
  *
  * Partial-day requests (StartTime + EndTime set) count the time delta for every day in
  * the range as given, weekends included: the explicit times mean the employee picked
@@ -56,7 +58,7 @@ function timeOffHoursInPeriod(array $request, string $periodStart, string $perio
         $days = (int) (new DateTime($reqEnd))->diff(new DateTime($reqStart))->days + 1;
     } else {
         $hoursPerDay = (float) $defaultDayHours;
-        $days = countWorkdays($reqStart, $reqEnd);
+        $days = countTimeOffDays($reqStart, $reqEnd);
     }
 
     return $days * $hoursPerDay;
@@ -305,7 +307,7 @@ function expandTimeOffToDays(array $request, string $periodStart, string $period
     $end = new DateTime($reqEnd);
     while ($d <= $end) {
         // Full-day time off only lands on working days; partial-day requests are taken as given.
-        if (!$hasTime && !isWorkday($d->format('Y-m-d'))) {
+        if (!$hasTime && !isTimeOffDay($d->format('Y-m-d'))) {
             $d->modify('+1 day');
             continue;
         }

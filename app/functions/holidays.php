@@ -7,7 +7,9 @@
  *
  * On a company holiday the office is closed, so full-day time off does not consume
  * PTO/Sick hours (the same as a Saturday or Sunday), and the admin Home board does
- * not flag no-shows or late arrivals. Holidays add no pay by themselves.
+ * not flag no-shows or late arrivals. Holidays add no pay by themselves; holiday pay
+ * (functions/holiday_pay.php) does. With holiday pay on, a holiday marked Unpaid is a
+ * closure day the company doesn't pay, so full-day PTO is charged for it (isTimeOffDay()).
  *
  * The list is edited on Settings -> Holidays (admin/holidays.php) and stored in the
  * `holidays` table as rules, not dates, so there is nothing to re-enter each January:
@@ -260,10 +262,84 @@ function &holidayCalendarCache(): array
     return $byYear;
 }
 
+/** Per-request cache of holidayPaidDates(), cleared with the calendar cache. */
+function &holidayPaidCache(): array
+{
+    static $byYear = [];
+    return $byYear;
+}
+
 function holidayCalendarReset(): void
 {
     $cache = &holidayCalendarCache();
     $cache = [];
+    $paid = &holidayPaidCache();
+    $paid = [];
+}
+
+/** Observed holiday dates for $year => true when any holiday on that date is Paid. */
+function holidayPaidDates(int $year): array
+{
+    $out = [];
+    foreach (holidayScheduleForYear($year) as $h) {
+        $out[$h['date']] = ($out[$h['date']] ?? false) || (int) ($h['rule']['Paid'] ?? 1) === 1;
+    }
+    return $out;
+}
+
+/** Is holiday pay turned on (Settings -> Holidays)? Cached per request; off without a database. */
+function holidayPayEnabled(?mysqli $conn = null): bool
+{
+    static $on = null;
+    if ($on !== null) {
+        return $on;
+    }
+    $conn ??= ($GLOBALS['conn'] ?? null) instanceof mysqli ? $GLOBALS['conn'] : null;
+    $on = false;
+    if ($conn) {
+        try {
+            $res = $conn->query("SELECT SettingValue FROM settings WHERE SettingKey = 'HolidayPayEnabled'");
+            $on = $res && ($row = $res->fetch_row()) && $row[0] === '1';
+        } catch (mysqli_sql_exception $e) {
+            $on = false;
+        }
+    }
+    return $on;
+}
+
+/**
+ * Does full-day time off on $date use PTO/Sick hours?
+ * Weekends never do. Holidays don't either, except that with holiday pay on, an
+ * unpaid holiday (a closure day the company doesn't pay) does: an employee can cover
+ * it with PTO, and someone on vacation that week is paid for it from PTO.
+ */
+function isTimeOffDay(string $date): bool
+{
+    if ((int) (new DateTime($date))->format('N') >= 6) {
+        return false;
+    }
+    holidayRules(); // load (and reset the caches) once per request
+    $paid = &holidayPaidCache();
+    $year = (int) substr($date, 0, 4);
+    foreach ([$year - 1, $year, $year + 1] as $y) {
+        $paid[$y] ??= holidayPaidDates($y);
+        if (isset($paid[$y][$date])) {
+            return !$paid[$y][$date] && holidayPayEnabled();
+        }
+    }
+    return true;
+}
+
+/** Number of days in [$start, $end] inclusive that full-day time off is charged for (isTimeOffDay). */
+function countTimeOffDays(string $start, string $end): int
+{
+    $n = 0;
+    for ($d = new DateTime($start), $fin = new DateTime($end); $d <= $fin; $d->modify('+1 day')) {
+        if (isTimeOffDay($d->format('Y-m-d'))) {
+            $n++;
+        }
+    }
+    return $n;
 }
 
 /**

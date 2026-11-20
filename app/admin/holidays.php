@@ -239,7 +239,8 @@ require_once 'header.php';
 
 <p class="hol-muted" style="margin-top:0;">
     Days the company is closed. On a holiday, full-day time off doesn't use any PTO or Sick hours (like a weekend),
-    and the Home board doesn't flag no-shows or late arrivals. Holiday pay is set up on the right.
+    and the Home board doesn't flag no-shows or late arrivals. Holiday pay is set up on the right; while it's on,
+    a holiday marked Unpaid does use PTO, so employees can cover the closure day with it.
     A holiday that lands on a Saturday is observed the Friday before, and on a Sunday the Monday after,
     unless you turn that off for a custom holiday.
 </p>
