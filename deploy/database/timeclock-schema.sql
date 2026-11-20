@@ -92,7 +92,7 @@ CREATE TABLE `pending_edits` (
 CREATE TABLE `time_off_requests` (
   `ID` int(11) NOT NULL AUTO_INCREMENT,
   `EmployeeID` int(11) NOT NULL,
-  `Category` enum('Sick','PTO') NOT NULL,
+  `Category` enum('Sick','PTO','Unpaid') NOT NULL,
   `StartDate` date NOT NULL,
   `EndDate` date NOT NULL,
   `StartTime` time DEFAULT NULL,

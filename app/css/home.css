@@ -101,3 +101,5 @@
     .page-home .container { padding: 0.75rem; }
     .home-panel-body { max-height: none; }
 }
+.rec-link { font-size: 0.8rem; color: #0b5cad; text-decoration: none; }
+.rec-link:hover { text-decoration: underline; }

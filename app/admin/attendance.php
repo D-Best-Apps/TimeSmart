@@ -79,7 +79,7 @@ foreach ($timeOffRows as $req) {
     foreach (expandTimeOffToDays($req, $startDate, $endDate) as $dr) {
         $eid = (int) $req['EmployeeID'];
         $d   = $dr['Date'];
-        $cat = ($dr['Category'] === 'Sick') ? 'Sick' : 'PTO';
+        $cat = $dr['Category'] === 'Unpaid' ? 'Unpaid' : (($dr['Category'] === 'Sick') ? 'Sick' : 'PTO');
         $hrs = $dr['Hours'];
         if (!isset($attendance[$eid][$d]) || $attendance[$eid][$d]['status'] === 'Absent') {
             $attendance[$eid][$d] = [
@@ -251,6 +251,7 @@ require_once 'header.php';
         <span class="yellow"></span> Incomplete
         <span style="background-color:#fdecea; display:inline-block; width:14px; height:14px; border:1px solid #ccc; vertical-align:middle;"></span> Sick
         <span style="background-color:#e8f1fc; display:inline-block; width:14px; height:14px; border:1px solid #ccc; vertical-align:middle;"></span> PTO
+        <span style="background-color:#eceff1; display:inline-block; width:14px; height:14px; border:1px solid #ccc; vertical-align:middle;"></span> Unpaid (excused absence, counted as Absent)
         <span class="red"></span> Absent
     </div>
 
@@ -279,6 +280,7 @@ require_once 'header.php';
                         $style = '';
                         if ($e['status'] === 'Sick') $style = ' style="background-color:#fdecea;"';
                         elseif ($e['status'] === 'PTO') $style = ' style="background-color:#e8f1fc;"';
+                        elseif ($e['status'] === 'Unpaid') $style = ' style="background-color:#eceff1;"';
                         $tip = '';
                         if ($e['TimeIN'] || $e['TimeOUT']) {
                             $tip = "<div class='tooltiptext'>IN: {$e['TimeIN']}<br>OUT: {$e['TimeOUT']}</div>";

@@ -99,7 +99,7 @@ function tsFmtRange(string $s, string $e): string {
             $timesLabel = ($req['StartTime'] && $req['EndTime'])
                 ? tsFmtTime($req['StartTime']) . ' &ndash; ' . tsFmtTime($req['EndTime'])
                 : 'all day';
-            $catLabel = $req['Category'] === 'Sick' ? 'Sick' : 'PTO/Vacation';
+            $catLabel = $req['Category'] === 'Sick' ? 'Sick' : ($req['Category'] === 'Unpaid' ? 'Unpaid absence' : 'PTO/Vacation');
           ?>
           <tr>
             <td style="padding:4px 6px; border:1px solid #b8d4ee;"><?= tsFmtRange($req['StartDate'], $req['EndDate']) ?></td>

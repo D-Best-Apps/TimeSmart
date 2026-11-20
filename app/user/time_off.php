@@ -210,7 +210,7 @@ function plainDateRange(string $start, string $end): string {
           <tr>
             <td><?= date('m/d/Y', strtotime($r['SubmittedAt'])) ?></td>
             <td>
-              <?= htmlspecialchars($r['Category']) ?>
+              <?= htmlspecialchars($r['Category'] === 'Unpaid' ? 'Unpaid absence' : $r['Category']) ?>
               <?php if ($isAmendment): ?>
                 <span style="display:inline-block; padding:1px 6px; border-radius:3px; background-color:#fff3cd; color:#856404; font-size:0.75rem; margin-left:0.25rem;">amendment</span>
               <?php endif; ?>
@@ -232,6 +232,8 @@ function plainDateRange(string $start, string $end): string {
                   <input type="hidden" name="id" value="<?= (int) $r['ID'] ?>">
                   <button type="submit" class="withdraw-btn" onclick="return confirm('Withdraw this request?');">Withdraw</button>
                 </form>
+              <?php elseif ($r['Status'] === 'Approved' && $r['Category'] === 'Unpaid'): ?>
+                <span style="color:#666; font-size:0.85rem;">recorded by admin</span>
               <?php elseif ($r['Status'] === 'Approved' && !$hasOpenAmendment): ?>
                 <a href="edit_time_off.php?id=<?= (int) $r['ID'] ?>" class="withdraw-btn" style="background-color:#0078D7; text-decoration:none; display:inline-block; margin-right:0.25rem;">Edit</a>
                 <?php if ($r['StartDate'] > $today): ?>

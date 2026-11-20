@@ -77,7 +77,7 @@ if (mb_strlen($mergedReviewNote) > 500) {
 $u = $conn->prepare("
     UPDATE time_off_requests
        SET Status = 'Cancelled', ReviewNote = ?, ReviewedAt = ?, ReviewedBy = ?
-     WHERE ID = ? AND EmployeeID = ? AND Status = 'Approved'
+     WHERE ID = ? AND EmployeeID = ? AND Status = 'Approved' AND Category <> 'Unpaid'
 ");
 $u->bind_param("sssii", $mergedReviewNote, $now, $employeeName, $requestID, $sessionEmpID);
 if (!$u->execute() || $u->affected_rows === 0) {

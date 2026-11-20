@@ -151,6 +151,9 @@ unset($_SESSION['punch_save_notice']);
                 <a href="view_punches.php?emp=<?= $empParam ?>&from=<?= $fromParam ?>&to=<?= $toParam ?>" class="btn secondary">Cancel</a>
             <?php else: ?>
                 <a href="punch_history.php?emp=<?= $empParam ?>&from=<?= htmlspecialchars($from) ?>&to=<?= htmlspecialchars($to) ?>" class="btn secondary">📜 Change History</a>
+                <?php if (checkPermission('approve_edits')): ?>
+                <a href="record_time_off.php?emp=<?= $empParam ?>" class="btn secondary" title="Record PTO, sick time or an absence (with the reason) for this employee">🏖️ Record Time Off / Absence</a>
+                <?php endif; ?>
                 <a href="view_punches.php?emp=<?= $empParam ?>&from=<?= $fromParam ?>&to=<?= $toParam ?>&mode=edit" class="btn primary">✎ Edit Timesheet</a>
             <?php endif; ?>
         </div>

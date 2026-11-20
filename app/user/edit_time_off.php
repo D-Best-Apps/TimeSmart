@@ -10,13 +10,16 @@ if ($requestID === 0) {
 // Load the request — must belong to this employee and be Pending or Approved
 $stmt = $conn->prepare("
     SELECT * FROM time_off_requests
-     WHERE ID = ? AND EmployeeID = ? AND Status IN ('Pending','Approved')
+     WHERE ID = ? AND EmployeeID = ? AND Status IN ('Pending','Approved') AND Category <> 'Unpaid'
 ");
 $stmt->bind_param("ii", $requestID, $empID);
 $stmt->execute();
 $req = $stmt->get_result()->fetch_assoc();
 if (!$req) {
-    header('Location: time_off.php?status=invalid&reason=' . urlencode('Request not found or not editable.'));
+    // header.php has already sent the page header, so a redirect can't happen here
+    echo '<div class="container" style="padding:1.5rem;"><p>That time-off entry can\'t be changed here'
+       . ' (it may have been recorded by an admin, or already decided). <a href="time_off.php">Back to Time Off</a></p></div>';
+    require_once 'footer.php';
     exit;
 }
 

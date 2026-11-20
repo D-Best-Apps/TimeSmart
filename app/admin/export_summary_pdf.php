@@ -213,7 +213,7 @@ foreach ($grouped as $eid => $data) {
         foreach (expandTimeOffToDays($req, $start, $end) as $dr) {
             $merged[] = [
                 'Date'  => $dr['Date'],
-                'Type'  => $dr['Category'] === 'Sick' ? 'Sick' : 'Vacation',
+                'Type'  => $dr['Category'] === 'Sick' ? 'Sick' : ($dr['Category'] === 'Unpaid' ? 'Unpaid' : 'Vacation'),
                 'In'    => $dr['StartTime'],
                 'Out'   => $dr['EndTime'],
                 'Hours' => $dr['Hours'],

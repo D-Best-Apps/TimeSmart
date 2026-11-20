@@ -401,6 +401,7 @@ require_once 'header.php';
     <?php endif; ?>
 
     <h2 style="margin-top:2rem;">Recent Approved Time-Off <span style="font-size:0.6em; color:#666;">(last 60 days &mdash; use to adjust hours after the fact)</span></h2>
+    <p><a href="record_time_off.php" class="btn secondary small">🏖️ Record time off or an absence for an employee</a></p>
     <?php if (count($recentApprovedTimeOff) === 0): ?>
         <p class="no-edits">No approved time-off in the last 60 days.</p>
     <?php else: ?>

@@ -21,6 +21,7 @@ require_once __DIR__ . '/../functions/holiday_pay.php';
 requirePermission('view_dashboard');
 
 $canEdit = checkPermission('edit_timesheets');
+$canRecordTimeOff = checkPermission('approve_edits'); // admin/record_time_off.php
 // A badge ID clocks its owner in at the kiosk/quick clock: show it only to admins who
 // can already see it on the Users and Badges pages (not reports-only)
 $showBadges = checkPermission('manage_users');
@@ -173,7 +174,7 @@ $fmtHrs  = fn(float $h) => number_format($h, 2);
 $timeOffLabel = function (array $entries): string {
     $parts = [];
     foreach ($entries as $t) {
-        $label = $t['Category'] === 'Sick' ? 'Sick' : 'PTO';
+        $label = $t['Category'] === 'Sick' ? 'Sick' : ($t['Category'] === 'Unpaid' ? 'Unpaid' : 'PTO');
         if ($t['StartTime']) {
             $label .= ' ' . str_replace(':00', '', date('g:ia', strtotime($t['StartTime'])))
                     . '–' . str_replace(':00', '', date('g:ia', strtotime($t['EndTime'])));
@@ -368,7 +369,7 @@ foreach ($employees as $eid => $u) {
 usort($exceptions, fn($a, $b) => [$b['date'], $a['name']] <=> [$a['date'], $b['name']]);
 
 $pageTitle = "Home";
-$extraCSS = ["../css/home.css?v=3"];
+$extraCSS = ["../css/home.css?v=4"];
 require_once 'header.php';
 ?>
 
@@ -428,7 +429,7 @@ require_once 'header.php';
                             <span class="muted">—</span>
                         <?php endif; ?>
                     </td>
-                    <td><span class="st st-<?= strtolower($b['status']) ?>"><?= $statusLabels[$b['status']] ?></span></td>
+                    <td><span class="st st-<?= strtolower($b['status']) ?>"><?= $statusLabels[$b['status']] ?></span><?php if ($b['status'] === 'Absent' && $canRecordTimeOff): ?> <a class="rec-link" href="record_time_off.php?<?= htmlspecialchars(http_build_query(['emp' => $b['id'], 'date' => $today, 'type' => 'Unpaid'])) ?>" title="Record time off or an absence with the reason">Record</a><?php endif; ?></td>
                     <td><?= htmlspecialchars($b['last']) ?><?php if ($b['lastKind']): ?> <span class="muted"><?= htmlspecialchars($b['lastKind']) ?></span><?php endif; ?></td>
                     <td><?= htmlspecialchars($b['absence']) ?></td>
                 </tr>
@@ -509,7 +510,7 @@ require_once 'header.php';
                     <td><?= $fmtDate($x['date']) ?></td>
                     <td><span class="ex ex-<?= $x['type'] ?>"><?= $exTypes[$x['type']] ?></span></td>
                     <td><?= htmlspecialchars($x['time']) ?></td>
-                    <td class="muted"><?= htmlspecialchars($x['detail']) ?></td>
+                    <td class="muted"><?= htmlspecialchars($x['detail']) ?><?php if ($x['type'] === 'absent' && $canRecordTimeOff): ?> · <a class="rec-link" href="record_time_off.php?<?= htmlspecialchars(http_build_query(['emp' => $x['id'], 'date' => $x['date'], 'type' => 'Unpaid'])) ?>">Record absence</a><?php endif; ?></td>
                 </tr>
             <?php endforeach; ?>
             <?php if (!$exceptions): ?>

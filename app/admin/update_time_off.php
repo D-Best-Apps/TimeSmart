@@ -54,7 +54,7 @@ function rejectAdmin(int $rid, string $reason): void {
     exit;
 }
 
-if (!in_array($category, ['Sick', 'PTO'], true)) rejectAdmin($requestID, 'Choose Sick or PTO.');
+if (!in_array($category, ['Sick', 'PTO', 'Unpaid'], true)) rejectAdmin($requestID, 'Choose Sick, PTO or Unpaid.');
 $dateRegex = '/^\d{4}-\d{2}-\d{2}$/';
 if (!preg_match($dateRegex, $startDate) || !preg_match($dateRegex, $endDate)) rejectAdmin($requestID, 'Dates required.');
 if ($endDate < $startDate) rejectAdmin($requestID, 'End date before start date.');

@@ -7,6 +7,24 @@ require_once __DIR__ . '/hours.php';    // canonical payPeriodStart/End + read-s
 require_once __DIR__ . '/holidays.php'; // canonical workday / observed-holiday calendar
 
 /**
+ * Time-off categories and how they're shown. 'Unpaid' is an excused absence an admin
+ * records (admin/record_time_off.php): it pays 0 hours, but the day counts as accounted
+ * for, so it isn't flagged as a no-show.
+ */
+const TIME_OFF_LABELS = ['PTO' => 'PTO', 'Sick' => 'Sick', 'Unpaid' => 'Unpaid absence'];
+
+function timeOffLabel(string $category): string
+{
+    return TIME_OFF_LABELS[$category] ?? $category;
+}
+
+/** Does this time-off request pay hours? (Sick and PTO do; an unpaid absence doesn't.) */
+function timeOffIsPaid(array $request): bool
+{
+    return ($request['Category'] ?? '') !== 'Unpaid';
+}
+
+/**
  * Compute hours for a single approved time-off request, intersected with [periodStart, periodEnd].
  *
  * Full-day requests count as $defaultDayHours (default 8) per WORKING day — weekends
@@ -21,6 +39,9 @@ require_once __DIR__ . '/holidays.php'; // canonical workday / observed-holiday 
  */
 function timeOffHoursInPeriod(array $request, string $periodStart, string $periodEnd, int $defaultDayHours = 8): float
 {
+    if (!timeOffIsPaid($request)) {
+        return 0.0; // unpaid absence
+    }
     $reqStart = $request['StartDate'] > $periodStart ? $request['StartDate'] : $periodStart;
     $reqEnd   = $request['EndDate']   < $periodEnd   ? $request['EndDate']   : $periodEnd;
     if ($reqStart > $reqEnd) {
@@ -253,7 +274,7 @@ function projectedWeeklyHours(
 /**
  * Expand approved time-off requests into per-day rows for chronological merging
  * into a daily detail table. Returns array indexed numerically with keys:
- *   Date, Category ('Sick'|'PTO'), Hours (float), StartTime (or null), EndTime (or null)
+ *   Date, Category ('Sick'|'PTO'|'Unpaid'), Hours (float; 0 for Unpaid), StartTime (or null), EndTime (or null)
  *
  * One row per day in the request's range, with hours-per-day applied. Full-day
  * requests emit rows for working days only, so the per-day rows always sum to
@@ -274,6 +295,9 @@ function expandTimeOffToDays(array $request, string $periodStart, string $period
         $hoursPerDay = ($endSec - $startSec) / 3600.0;
     } else {
         $hoursPerDay = (float) $defaultDayHours;
+    }
+    if (!timeOffIsPaid($request)) {
+        $hoursPerDay = 0.0; // unpaid absence: the day is listed, but pays nothing
     }
 
     $rows = [];

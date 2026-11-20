@@ -10,7 +10,7 @@
  *   - Holiday on the employee's day off (not one of their shift's days; Mon-Fri without
  *     a shift): no holiday pay, or paid anyway, per HolidayPayDayOff.
  *   - Optional rule: the employee must work their last scheduled day before the holiday
- *     and their first scheduled day after it. Approved time off counts as worked. While
+ *     and their first scheduled day after it. Approved PTO/Sick counts as worked. While
  *     the day after is still to come, the holiday isn't counted yet.
  *   - Holidays before an employee's first day on the clock earn nothing.
  * Holiday hours are reported in their own column and never count toward overtime
@@ -107,6 +107,9 @@ function holidayPayByEmployee(mysqli $conn, string $start, string $end): array
             $worked[(int) $r['EmployeeID']][$r['Date']] = true;
         }
         foreach (fetchApprovedTimeOff($conn, $from, $to) as $req) {
+            if (!timeOffIsPaid($req)) {
+                continue; // an unpaid absence isn't paid leave
+            }
             for ($d = new DateTime(max($req['StartDate'], $from)); $d->format('Y-m-d') <= min($req['EndDate'], $to); $d->modify('+1 day')) {
                 $worked[(int) $req['EmployeeID']][$d->format('Y-m-d')] = true;
             }

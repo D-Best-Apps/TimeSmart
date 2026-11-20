@@ -96,7 +96,7 @@ function m365GetToken(array $config): array {
  * Notes deliberately NOT included in event body — per "no notes" decision.
  */
 function m365BuildEvent(array $request, string $employeeName, string $timezone, ?string $employeeEmail = null): array {
-    $category    = ($request['Category'] === 'Sick') ? 'Sick' : 'PTO';
+    $category    = $request['Category'] === 'Unpaid' ? 'Out' : (($request['Category'] === 'Sick') ? 'Sick' : 'PTO');
     $subject     = "{$employeeName} — {$category}";
     $isSingleDay = ($request['StartDate'] === $request['EndDate']);
     $hasTime     = !empty($request['StartTime']) && !empty($request['EndTime']);

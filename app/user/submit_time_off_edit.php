@@ -25,7 +25,7 @@ if ($sessionEmpID !== $postEmpID || $requestID === 0) {
 }
 
 // Load and lock the row — must belong to this employee, must be Pending or Approved
-$stmt = $conn->prepare("SELECT * FROM time_off_requests WHERE ID = ? AND EmployeeID = ? AND Status IN ('Pending','Approved')");
+$stmt = $conn->prepare("SELECT * FROM time_off_requests WHERE ID = ? AND EmployeeID = ? AND Status IN ('Pending','Approved') AND Category <> 'Unpaid'");
 $stmt->bind_param("ii", $requestID, $sessionEmpID);
 $stmt->execute();
 $req = $stmt->get_result()->fetch_assoc();

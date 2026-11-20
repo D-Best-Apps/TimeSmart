@@ -99,6 +99,7 @@ $showSettingsMenu = checkPermission('manage_settings') || checkPermission('manag
         <?php endif; ?>
         <?php if (checkPermission('approve_edits')): ?>
         <a href="edits_timesheet.php"<?= $currentPage == 'edits_timesheet.php' ? ' class="active"' : '' ?>>✅ Pending Approvals<?php if ($pendingCount > 0): ?> (<?= $pendingCount ?>)<?php endif; ?></a>
+        <a href="record_time_off.php"<?= $currentPage == 'record_time_off.php' ? ' class="active"' : '' ?>>🏖️ Time Off</a>
         <?php endif; ?>
         <?php if (checkPermission('manage_users')): ?>
         <a href="badges.php"<?= $currentPage == 'badges.php' ? ' class="active"' : '' ?>>🪪 Badges</a>

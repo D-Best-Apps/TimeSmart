@@ -16,6 +16,8 @@
   The admin home shows, for one date range (default: this pay period), who's in right now
   (badge, shift, status, last punch, time off), paid hours per employee (regular, OT, PTO,
   sick), and exceptions: late in, out early, missed punches and no-shows.
+  Admins can record PTO, sick time or an unpaid absence (with the reason) for any employee,
+  past or future, from the Time Off menu, the timesheet screen, or a no-show on the Home board.
   
 - **Reports & Exports**  
   Generate and export attendance data (PDF, Excel, summary reports).

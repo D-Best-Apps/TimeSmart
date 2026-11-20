@@ -106,6 +106,7 @@ require_once 'header.php';
         <label>Category:</label>
         <label><input type="radio" name="Category" value="Sick" <?= $req['Category'] === 'Sick' ? 'checked' : '' ?> required> Sick</label>
         <label><input type="radio" name="Category" value="PTO"  <?= $req['Category'] === 'PTO'  ? 'checked' : '' ?> required> PTO</label>
+        <label><input type="radio" name="Category" value="Unpaid" <?= $req['Category'] === 'Unpaid' ? 'checked' : '' ?> required> Unpaid absence</label>
       </div>
 
       <div class="row">

@@ -403,6 +403,17 @@ Labor Day, Thanksgiving and Christmas Day.
   `app/functions/holiday_pay.php`.
 - The calendar logic is `app/functions/holidays.php` (`isCompanyHoliday()`, `isWorkday()`).
 
+### Time Off Recorded by Admins
+
+`admin/record_time_off.php` (menu **Time Off**, super admins) records time off for an employee,
+saved as already approved: PTO, Sick, or an **unpaid absence** (`time_off_requests.Category =
+'Unpaid'`, reason in `Notes`, required). Past and future dates are allowed, except days inside a
+closed payroll; overlapping entries are refused. PTO/Sick pay hours like an approved request; an
+unpaid absence pays 0 hours but keeps the day from being flagged as a no-show and shows as
+"Unpaid" (gray) on the Attendance report. Employees see these entries on their Time Off page but
+can't edit or cancel an unpaid absence. For holiday pay's before/after rule, an unpaid absence
+doesn't count as a day worked.
+
 ### Notification Recipients
 
 Who gets notified when an employee submits a request is configured in the admin portal
