@@ -59,6 +59,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $empNumber = trim($_POST['EmployeeNumber'] ?? '');
     $holidayHoursIn = trim($_POST['HolidayHours'] ?? '');
 
+    // Email is optional (Add User doesn't ask for one), except that emailed 2FA codes need it
+    if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        header('Location: ../error.php?code=400&message=' . urlencode('That email address doesn\'t look right.'));
+        exit;
+    }
+    if ($email === '' && $enable2FA) {
+        header('Location: ../error.php?code=400&message=' . urlencode('Require 2FA needs an email on file (the sign-in codes are emailed). Add an email or turn 2FA off.'));
+        exit;
+    }
+
     // Employee # (optional): the company's own number, unique, shown on Home
     if (strlen($empNumber) > 20) {
         header('Location: ../error.php?code=400&message=' . urlencode('Employee # can be at most 20 characters.'));
@@ -129,8 +139,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Blank Badge ID / PIN stored as NULL so they don't collide on the UNIQUE keys
     $badgeID = $badgeID !== '' ? $badgeID : null;
     $pin     = $pin !== '' ? $pin : null;
+    $email   = $email !== '' ? $email : null;
 
-    if ($firstName && $lastName && $email && $clockStatus && $office) {
+    if ($firstName && $lastName && $clockStatus && $office) {
         if (!empty($password)) {
             require_once __DIR__ . '/../functions/password_policy.php';
             $pwErrors = validatePassword($password, $conn);
@@ -175,7 +186,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header("Location: manage_users.php");
         exit;
     } else {
-        $error = "All fields except password are required.";
+        $error = "First name, last name, clock status and office are required.";
     }
 }
 $pageTitle = "Edit User";
@@ -199,8 +210,8 @@ require_once 'header.php';
             <input type="text" name="LastName" value="<?= htmlspecialchars($user['LastName'] ?? '') ?>" required>
         </label>
 
-        <label>Email
-            <input type="text" name="Email" value="<?= htmlspecialchars($user['Email'] ?? '') ?>" required>
+        <label>Email <small>(optional; needed for emailed 2FA codes and time-off notices)</small>
+            <input type="email" name="Email" value="<?= htmlspecialchars($user['Email'] ?? '') ?>">
         </label>
 
         <label>Employee # <small>(your own employee number; shown on Home — not used to clock in)</small>
