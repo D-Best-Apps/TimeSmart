@@ -9,10 +9,12 @@ if (!isset($_SESSION['admin'])) {
 
 require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('manage_admins');
+require_once __DIR__ . '/../functions/csrf.php';
+require_csrf(csrf_error_url());
 
-// Demote (Role → employee)
-if (isset($_GET['demote'])) {
-    $id = (int) $_GET['demote'];
+// Demote (Role → employee). POST only, so a link or image elsewhere can't trigger it.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['demote'])) {
+    $id = (int) $_POST['demote'];
     if ($id > 0) {
         $stmt = $conn->prepare("UPDATE users SET Role = 'employee' WHERE ID = ?");
         $stmt->bind_param("i", $id);
@@ -94,7 +96,11 @@ require_once 'header.php';
                     <td style="white-space: nowrap;">
                         <div style="display: inline-flex; gap: 0.5rem; align-items: center;">
                             <a class="btn primary small" href="edit_admin.php?id=<?= (int) $u['ID'] ?>">Change Role</a>
-                            <a class="btn danger small" href="?demote=<?= (int) $u['ID'] ?>" onclick="return confirm('Demote <?= htmlspecialchars($u['FirstName'] . ' ' . $u['LastName'], ENT_QUOTES) ?> back to regular employee? (Their employee account stays.)');">Demote</a>
+                            <form method="POST" style="margin:0;" onsubmit="return confirm('Demote <?= htmlspecialchars($u['FirstName'] . ' ' . $u['LastName'], ENT_QUOTES) ?> back to regular employee? (Their employee account stays.)');">
+                                <?= csrf_field() ?>
+                                <input type="hidden" name="demote" value="<?= (int) $u['ID'] ?>">
+                                <button type="submit" class="btn danger small">Demote</button>
+                            </form>
                         </div>
                     </td>
                 </tr>

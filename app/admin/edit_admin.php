@@ -16,6 +16,9 @@ if ($id === 0) {
     exit;
 }
 
+require_once __DIR__ . '/../functions/csrf.php';
+require_csrf(csrf_error_url());
+
 $error = "";
 $success = "";
 
@@ -64,6 +67,7 @@ require_once 'header.php';
         </p>
 
         <form method="POST" class="summary-filter">
+            <?= csrf_field() ?>
             <div class="row">
                 <div class="field">
                     <label for="role">Role</label>

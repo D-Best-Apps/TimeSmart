@@ -9,6 +9,8 @@ if (!isset($_SESSION['admin'])) {
 
 require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('manage_admins');
+require_once __DIR__ . '/../functions/csrf.php';
+require_csrf(csrf_error_url());
 
 $error = "";
 $success = "";
@@ -69,6 +71,7 @@ require_once 'header.php';
     <?php endif; ?>
 
     <form method="POST" class="summary-filter">
+        <?= csrf_field() ?>
         <div class="row">
             <div class="field">
                 <label for="user_id">Employee</label>
