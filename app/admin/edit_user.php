@@ -17,6 +17,7 @@ require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('manage_users');
 require_once __DIR__ . '/../functions/profile_photo.php';
 require_once __DIR__ . '/../functions/pay_rules.php'; // listShifts()
+require_once __DIR__ . '/../functions/time_off_hours.php'; // freezeTimeOffShifts()
 require_once __DIR__ . '/../functions/pin_policy.php';
 
 $id = $_GET['id'] ?? null;
@@ -151,6 +152,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Shift (blank = none). Only a shift that exists; an archived one can stay assigned.
         $shiftID = (int) ($_POST['ShiftID'] ?? 0);
         $shiftID = isset($shifts[$shiftID]) ? $shiftID : null;
+        freezeTimeOffShifts($conn, [$id]); // past time off keeps the shift it was taken under
         $up = $conn->prepare("UPDATE users SET ShiftID = ? WHERE ID = ?");
         $up->bind_param("ii", $shiftID, $id);
         $up->execute();
