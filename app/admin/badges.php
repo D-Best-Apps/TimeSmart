@@ -16,8 +16,9 @@ const BADGE_MIN_LEN = 6;
 function gen_badge_id(mysqli $conn): string {
     do {
         $cand = (string) random_int(10000000, 99999999);
-        $s = $conn->prepare("SELECT 1 FROM users WHERE BadgeID = ? LIMIT 1");
-        $s->bind_param("s", $cand);
+        // Also skip badges held by archived employees, so they get theirs back on unarchive
+        $s = $conn->prepare("SELECT 1 FROM users WHERE BadgeID = ? OR PIN = ? OR ArchivedBadgeID = ? LIMIT 1");
+        $s->bind_param("sss", $cand, $cand, $cand);
         $s->execute();
         $s->store_result();
         $exists = $s->num_rows > 0;
@@ -91,7 +92,7 @@ function draw_badge(TCPDF $pdf, float $x, float $y, float $w, float $h, array $b
 
 // --- Action: fill in any missing / too-short Badge IDs with random 8-digit values ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'gen_missing') {
-    $res = $conn->query("SELECT ID FROM users WHERE BadgeID IS NULL OR BadgeID = '' OR CHAR_LENGTH(BadgeID) < " . BADGE_MIN_LEN);
+    $res = $conn->query("SELECT ID FROM users WHERE ArchivedAt IS NULL AND (BadgeID IS NULL OR BadgeID = '' OR CHAR_LENGTH(BadgeID) < " . BADGE_MIN_LEN . ")");
     $count = 0;
     while ($r = $res->fetch_assoc()) {
         $bid = gen_badge_id($conn);
@@ -146,7 +147,7 @@ if (isset($_GET['print'])) {
         $types = str_repeat('i', count($ids));
         $stmt = $conn->prepare("SELECT FirstName, LastName, Office, BadgeID, ProfilePhoto
                                 FROM users
-                                WHERE ID IN ($place) AND BadgeID IS NOT NULL AND BadgeID <> ''
+                                WHERE ID IN ($place) AND BadgeID IS NOT NULL AND BadgeID <> '' AND ArchivedAt IS NULL
                                 ORDER BY LastName, FirstName");
         $stmt->bind_param($types, ...$ids);
         $stmt->execute();
@@ -211,7 +212,7 @@ if (isset($_GET['print'])) {
 
 // --- Selection page ---
 $users = [];
-$res = $conn->query("SELECT ID, FirstName, LastName, Office, BadgeID, ProfilePhoto FROM users ORDER BY LastName, FirstName");
+$res = $conn->query("SELECT ID, FirstName, LastName, Office, BadgeID, ProfilePhoto FROM users WHERE ArchivedAt IS NULL ORDER BY LastName, FirstName");
 while ($row = $res->fetch_assoc()) { $users[] = $row; }
 $filled = isset($_GET['filled']) ? (int) $_GET['filled'] : null;
 $saved  = isset($_GET['saved']);

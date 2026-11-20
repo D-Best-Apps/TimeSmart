@@ -156,6 +156,7 @@ $quickDefault = getSettingValue('QuickDefaultField', $conn) ?: 'none';
                     lp.Note AS PunchNote
                 FROM users u
                 LEFT JOIN LatestPunches lp ON u.ID = lp.EmployeeID AND lp.rn = 1
+                WHERE u.ArchivedAt IS NULL
                 ORDER BY u.LastName, u.FirstName;
             ";
 

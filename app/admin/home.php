@@ -66,18 +66,25 @@ $prevUrl = $rangeUrl($shiftBy($start, -$spanDays), $shiftBy($end, -$spanDays));
 $nextUrl = $rangeUrl($shiftBy($start, $spanDays), $shiftBy($end, $spanDays));
 
 // ---------- Employees, shifts, punches, time off ----------
-$sql = "SELECT ID, FirstName, LastName, BadgeID, EmployeeNumber, ClockStatus, Office, ScheduledStartTime, ShiftID
-          FROM users" . ($office !== '' ? " WHERE Office = ?" : "") . "
+// Archived employees only while they still worked in the range: their hours and exceptions
+// up to the day they were archived, never on Who's In
+$sql = "SELECT ID, FirstName, LastName, BadgeID, EmployeeNumber, ClockStatus, Office, ScheduledStartTime, ShiftID, ArchivedAt
+          FROM users
+         WHERE (ArchivedAt IS NULL OR ArchivedAt >= ?)" . ($office !== '' ? " AND Office = ?" : "") . "
          ORDER BY LastName, FirstName";
 $stmt = $conn->prepare($sql);
 if ($office !== '') {
-    $stmt->bind_param("s", $office);
+    $stmt->bind_param("ss", $start, $office);
+} else {
+    $stmt->bind_param("s", $start);
 }
 $stmt->execute();
 $employees = [];
 foreach ($stmt->get_result()->fetch_all(MYSQLI_ASSOC) as $u) {
+    $u['ArchivedOn'] = $u['ArchivedAt'] !== null ? substr($u['ArchivedAt'], 0, 10) : null;
     $employees[(int) $u['ID']] = $u;
 }
+$nameOf = fn(array $u): string => $u['LastName'] . ', ' . $u['FirstName'] . ($u['ArchivedOn'] !== null ? ' (archived)' : '');
 $stmt->close();
 $empIDs = array_keys($employees);
 // The company's own employee # (Edit User) replaces the badge column once anyone has one:
@@ -204,6 +211,9 @@ $holidayToday = isCompanyHoliday($today);
 $board = [];
 $statusCounts = ['In' => 0, 'Lunch' => 0, 'Out' => 0, 'Absent' => 0, 'Off' => 0];
 foreach ($employees as $eid => $u) {
+    if ($u['ArchivedOn'] !== null) {
+        continue; // archived: not on the board
+    }
     $sched    = $scheduleOf($u);
     $todayOff = $timeOffDays[$eid][$today] ?? [];
     // In / Lunch / Out comes from the same punch row as "Last punch", so the two always
@@ -283,7 +293,7 @@ foreach ($employees as $eid => $u) {
         continue;
     }
     $row = [
-        'id' => $eid, 'name' => $u['LastName'] . ', ' . $u['FirstName'], 'open' => $open,
+        'id' => $eid, 'name' => $nameOf($u), 'open' => $open,
         'regular' => $ot['totalRegular'], 'ot' => $ot['totalOT'], 'pto' => $pto, 'sick' => $sick,
         'holiday' => $hol, 'total' => $ot['totalHours'] + $pto + $sick + $hol,
     ];
@@ -304,16 +314,17 @@ $exTypes = [
     'unexcused' => 'Unexcused',
 ];
 $exCounts = array_fill_keys(array_keys($exTypes), 0);
-$addEx = function (int $eid, string $date, string $type, string $time, string $detail) use (&$exceptions, &$exCounts, $employees) {
+$addEx = function (int $eid, string $date, string $type, string $time, string $detail) use (&$exceptions, &$exCounts, $employees, $nameOf) {
     $u = $employees[$eid];
-    $exceptions[] = ['id' => $eid, 'name' => $u['LastName'] . ', ' . $u['FirstName'],
+    $exceptions[] = ['id' => $eid, 'name' => $nameOf($u),
                      'date' => $date, 'type' => $type, 'time' => $time, 'detail' => $detail];
     $exCounts[$type]++;
 };
 $lastDay = min($end, $today);
 foreach ($employees as $eid => $u) {
     $sched = $scheduleOf($u);
-    for ($date = $start; $date <= $lastDay; $date = $shiftBy($date, 1)) {
+    $empLastDay = $u['ArchivedOn'] !== null ? min($lastDay, $u['ArchivedOn']) : $lastDay;
+    for ($date = $start; $date <= $empLastDay; $date = $shiftBy($date, 1)) {
         $rows  = $punches[$eid][$date] ?? [];
         $off   = !empty($timeOffDays[$eid][$date]);
         $onDay = $scheduledOn($sched, $date);
@@ -328,6 +339,7 @@ foreach ($employees as $eid => $u) {
 
         if (!$rows) {
             if ($onDay && !$off && isset($firstDay[$eid]) && $date >= $firstDay[$eid]
+                && ($u['ArchivedOn'] === null || $date < $u['ArchivedOn'])
                 && ($date < $today || $nowSec >= $sched['start'])) {
                 $addEx($eid, $date, 'absent', $fmtSec($sched['start']), 'Scheduled, no punches or time off');
             }

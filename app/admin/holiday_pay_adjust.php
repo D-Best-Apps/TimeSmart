@@ -83,12 +83,16 @@ if ($name !== null) {
     } catch (mysqli_sql_exception $e) {
         $shifts = [];
     }
-    $users = $conn->query("SELECT ID, FirstName, LastName, ShiftID, HolidayHours, Office FROM users ORDER BY LastName, FirstName")->fetch_all(MYSQLI_ASSOC);
+    $users = $conn->query("SELECT ID, FirstName, LastName, ShiftID, HolidayHours, Office, ArchivedAt FROM users ORDER BY LastName, FirstName")->fetch_all(MYSQLI_ASSOC);
     foreach ($users as $u) {
         $eid = (int) $u['ID'];
+        $archivedOn = $u['ArchivedAt'] !== null ? substr($u['ArchivedAt'], 0, 10) : null;
+        if ($archivedOn !== null && $archivedOn < $date && !isset($adjusted[$eid][$date])) {
+            continue; // archived before this holiday
+        }
         $shift = $u['ShiftID'] !== null ? ($shifts[(int) $u['ShiftID']] ?? null) : null;
         $rows[] = [
-            'id' => $eid, 'name' => $u['LastName'] . ', ' . $u['FirstName'], 'office' => $u['Office'],
+            'id' => $eid, 'name' => $u['LastName'] . ', ' . $u['FirstName'] . ($archivedOn !== null ? ' (archived)' : ''), 'office' => $u['Office'],
             'shift' => $shift, 'own' => $u['HolidayHours'],
             'rule' => (float) ($ruleHours[$eid]['days'][$date]['hours'] ?? 0),
             'adj' => $adjusted[$eid][$date] ?? null,

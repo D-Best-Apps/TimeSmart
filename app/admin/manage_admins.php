@@ -40,7 +40,7 @@ $rows = [];
 $result = $conn->query("
     SELECT ID, FirstName, LastName, Role
       FROM users
-     WHERE Role <> 'employee'
+     WHERE Role <> 'employee' AND ArchivedAt IS NULL
      ORDER BY LastName, FirstName
 ");
 if ($result) $rows = $result->fetch_all(MYSQLI_ASSOC);

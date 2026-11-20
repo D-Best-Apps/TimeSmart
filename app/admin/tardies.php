@@ -23,7 +23,7 @@ $extraCSS = ["https://cdn.jsdelivr.net/npm/litepicker/dist/css/litepicker.css", 
 require_once 'header.php';
 
 // Fetch employees for dropdown
-$employeeList = $conn->query("SELECT ID, FirstName, LastName FROM users ORDER BY LastName");
+$employeeList = $conn->query("SELECT ID, FirstName, CONCAT(LastName, IF(ArchivedAt IS NULL, '', ' (archived)')) AS LastName FROM users ORDER BY ArchivedAt IS NOT NULL, LastName, FirstName"); // archived marked, listed last
 
 // Build SQL query - Get first clock in per day for weekdays only
 $sql = "

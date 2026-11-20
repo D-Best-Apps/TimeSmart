@@ -30,7 +30,7 @@ if ($punchRounding) {
     $rounding = 0;
 }
 
-$employeeList = $conn->query("SELECT ID, FirstName, LastName FROM users ORDER BY LastName");
+$employeeList = $conn->query("SELECT ID, FirstName, CONCAT(LastName, IF(ArchivedAt IS NULL, '', ' (archived)')) AS LastName FROM users ORDER BY ArchivedAt IS NOT NULL, LastName, FirstName"); // archived marked, listed last
 
 // Helpers (hmsToDecimal / roundToNearestMinutes / decimalToHM / payPeriodStart) come from functions/hours.php
 

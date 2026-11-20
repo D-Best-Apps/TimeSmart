@@ -20,11 +20,18 @@ $endDate = $_GET['end'] ?? payPeriodEnd(date('Y-m-d'));
 $selectedEmp = $_GET['emp'] ?? 'all';
 $exportPDF = isset($_GET['export']) && $_GET['export'] === 'pdf';
 
+// Everyone for the picker (archived marked, listed last); "All employees" leaves out
+// those archived before the range starts, and days after an archive date read "Archived"
 $employees = [];
-$empResult = $conn->query("SELECT ID, FirstName, LastName FROM users ORDER BY LastName");
+$archivedOn = [];
+$empResult = $conn->query("SELECT ID, FirstName, LastName, ArchivedAt FROM users ORDER BY ArchivedAt IS NOT NULL, LastName, FirstName");
 while ($row = $empResult->fetch_assoc()) {
-    $employees[$row['ID']] = $row['FirstName'] . ' ' . $row['LastName'];
+    $employees[$row['ID']] = $row['FirstName'] . ' ' . $row['LastName'] . ($row['ArchivedAt'] !== null ? ' (archived)' : '');
+    if ($row['ArchivedAt'] !== null) {
+        $archivedOn[$row['ID']] = substr($row['ArchivedAt'], 0, 10);
+    }
 }
+$allIDs = array_keys(array_filter($employees, fn($name, $id) => !isset($archivedOn[$id]) || $archivedOn[$id] >= $startDate, ARRAY_FILTER_USE_BOTH));
 
 // Aggregate per employee per day so multiple sessions (multiple punch rows on the
 // same date) collapse into one row: first clock-in, last clock-out, summed hours.
@@ -108,9 +115,16 @@ while ($cur <= strtotime($endDate)) {
     $dates[] = date('Y-m-d', $cur);
     $cur = strtotime('+1 day', $cur);
 }
+foreach ($archivedOn as $eid => $day) {
+    foreach ($dates as $d) {
+        if ($d > $day && !isset($attendance[$eid][$d])) {
+            $attendance[$eid][$d] = ['status' => 'Archived', 'hours' => null, 'TimeIN' => null, 'TimeOUT' => null, 'timeOffHrs' => 0, 'timeOffCat' => null];
+        }
+    }
+}
 
 $totalPresent = $totalIncomplete = $totalAbsent = $totalSick = $totalPTO = $totalExcused = $totalUnexcused = 0;
-foreach (($selectedEmp === 'all' ? array_keys($employees) : [$selectedEmp]) as $eid) {
+foreach (($selectedEmp === 'all' ? $allIDs : [$selectedEmp]) as $eid) {
     foreach ($dates as $date) {
         $status = $attendance[$eid][$date]['status'] ?? 'Absent';
         if      ($status === 'Present')    $totalPresent++;
@@ -119,6 +133,7 @@ foreach (($selectedEmp === 'all' ? array_keys($employees) : [$selectedEmp]) as $
         elseif  ($status === 'PTO')        $totalPTO++;
         elseif  ($status === 'Excused')    $totalExcused++;
         elseif  ($status === 'Unexcused')  $totalUnexcused++;
+        elseif  ($status === 'Archived')   continue; // no longer employed
         else                                $totalAbsent++;
     }
 }
@@ -167,7 +182,7 @@ if ($exportPDF) {
     }
     $html .= "</tr>";
 
-    $empIDs = ($selectedEmp === 'all') ? array_keys($employees) : [$selectedEmp];
+    $empIDs = ($selectedEmp === 'all') ? $allIDs : [$selectedEmp];
     foreach ($empIDs as $eid) {
         $html .= "<tr><td>" . htmlspecialchars($employees[$eid]) . "</td>";
         foreach ($dates as $date) {
@@ -283,7 +298,7 @@ require_once 'header.php';
             </tr>
         </thead>
         <tbody>
-            <?php foreach (($selectedEmp === 'all' ? array_keys($employees) : [$selectedEmp]) as $eid): ?>
+            <?php foreach (($selectedEmp === 'all' ? $allIDs : [$selectedEmp]) as $eid): ?>
                 <tr>
                     <td><?= htmlspecialchars($employees[$eid]) ?></td>
                     <?php foreach ($dates as $d): ?>

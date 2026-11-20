@@ -32,7 +32,8 @@ $isTime = fn($v) => is_string($v) && preg_match('/^([01]\d|2[0-3]):[0-5]\d(:[0-5
 // m365HoursPhrase() (m365_calendar.php): "2 hours", "1.5 hours per day" for a part day entered as hours
 
 $categories = timeOffCategories(true); // no Sick when the company has no sick time
-$employees = $conn->query("SELECT ID, FirstName, LastName, Email FROM users ORDER BY LastName, FirstName")->fetch_all(MYSQLI_ASSOC);
+// Archived employees stay pickable (e.g. a leaver's last days), marked and listed last
+$employees = $conn->query("SELECT ID, FirstName, LastName, Email, ArchivedAt FROM users ORDER BY ArchivedAt IS NOT NULL, LastName, FirstName")->fetch_all(MYSQLI_ASSOC);
 $empById = array_column($employees, null, 'ID');
 
 // Form values: POST on a failed save, else prefilled from the link (?emp=&date=&type=)
@@ -202,7 +203,7 @@ require_once 'header.php';
         <select id="rtoEmp" name="EmployeeID" required>
             <option value="">Choose…</option>
             <?php foreach ($employees as $e): ?>
-            <option value="<?= (int) $e['ID'] ?>" <?= (int) $e['ID'] === $f['EmployeeID'] ? 'selected' : '' ?>><?= htmlspecialchars($e['LastName'] . ', ' . $e['FirstName']) ?></option>
+            <option value="<?= (int) $e['ID'] ?>" <?= (int) $e['ID'] === $f['EmployeeID'] ? 'selected' : '' ?>><?= htmlspecialchars($e['LastName'] . ', ' . $e['FirstName'] . ($e['ArchivedAt'] !== null ? ' (archived)' : '')) ?></option>
             <?php endforeach; ?>
         </select>
     </div>

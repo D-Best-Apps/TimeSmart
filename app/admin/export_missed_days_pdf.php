@@ -27,7 +27,7 @@ if (!$startDate || !$endDate) {
 // === DATA FETCH ===
 $employeeListData = [];
 if ($employeeID !== '') {
-    $stmt = $conn->prepare("SELECT ID, FirstName, LastName FROM users WHERE ID = ?");
+    $stmt = $conn->prepare("SELECT ID, FirstName, LastName, ArchivedAt FROM users WHERE ID = ?");
     $stmt->bind_param("i", $employeeID);
     $stmt->execute();
     $result = $stmt->get_result();
@@ -35,7 +35,11 @@ if ($employeeID !== '') {
         $employeeListData[] = $row;
     }
 } else {
-    $result = $conn->query("SELECT ID, FirstName, LastName FROM users ORDER BY LastName, FirstName");
+    // Archived employees only if they were still here when the range starts
+    $stmt = $conn->prepare("SELECT ID, FirstName, LastName, ArchivedAt FROM users WHERE ArchivedAt IS NULL OR ArchivedAt >= ? ORDER BY LastName, FirstName");
+    $stmt->bind_param("s", $startDate);
+    $stmt->execute();
+    $result = $stmt->get_result();
     while ($row = $result->fetch_assoc()) {
         $employeeListData[] = $row;
     }
@@ -53,6 +57,9 @@ foreach ($employeeListData as $emp) {
     foreach ($payPeriods as $period) {
         $periodStart = $period['start'];
         $periodEnd = $period['end'];
+        if ($emp['ArchivedAt'] !== null && $periodStart > substr($emp['ArchivedAt'], 0, 10)) {
+            continue; // archived before this pay period
+        }
         
         $sql = "
             SELECT SUM(GREATEST(COALESCE(tp.TotalHours, 0), 0)) AS TotalHours

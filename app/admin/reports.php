@@ -14,6 +14,7 @@ $statsResult = $conn->query("
         SUM(IF(ClockStatus = 'Lunch', 1, 0)) AS onLunch,
         SUM(IF(ClockStatus = 'Out', 1, 0))   AS clockedOut
     FROM users
+    WHERE ArchivedAt IS NULL
 ");
 if ($statsResult && $statsRow = $statsResult->fetch_assoc()) {
     $totalUsers = (int) ($statsRow['totalUsers'] ?? 0);

@@ -15,7 +15,7 @@
  *   - Holidays before an employee's first day on the clock earn nothing, and so do
  *     holidays with no punch or paid time off in the 14 days before them (company
  *     holidays not counted): someone who has left but isn't archived yet, or is on
- *     long unpaid leave.
+ *     long unpaid leave. Holidays after the day an employee was archived earn nothing.
  *   - An employee's own Holiday hours (Edit User) replace the setting, e.g. 8 for a
  *     part-timer; an admin can also set one employee's hours for one holiday by hand
  *     (holiday_pay_adjustments, e.g. half a holiday), which wins over every rule.
@@ -87,9 +87,9 @@ function holidayPayByEmployee(mysqli $conn, string $start, string $end, bool $wi
         $shifts = [];
     }
     try {
-        $users = $conn->query("SELECT ID, ShiftID, HolidayHours FROM users")->fetch_all(MYSQLI_ASSOC);
+        $users = $conn->query("SELECT ID, ShiftID, HolidayHours, ArchivedAt FROM users")->fetch_all(MYSQLI_ASSOC);
     } catch (mysqli_sql_exception $e) {
-        $users = $conn->query("SELECT ID, ShiftID, NULL AS HolidayHours FROM users")->fetch_all(MYSQLI_ASSOC);
+        $users = $conn->query("SELECT ID, ShiftID, NULL AS HolidayHours, NULL AS ArchivedAt FROM users")->fetch_all(MYSQLI_ASSOC);
     }
 
     $firstDay = [];
@@ -154,9 +154,13 @@ function holidayPayByEmployee(mysqli $conn, string $start, string $end, bool $wi
             return null;
         };
 
+        $archivedOn = $u['ArchivedAt'] !== null ? substr($u['ArchivedAt'], 0, 10) : null;
         foreach ($holidays as $date => $name) {
             if (!isset($firstDay[$eid]) || $firstDay[$eid] > $date) {
                 continue; // not on the clock yet
+            }
+            if ($archivedOn !== null && $date > $archivedOn) {
+                continue; // archived before the holiday
             }
             if (!$runs($date) && $policy['dayOff'] === 'none') {
                 continue; // the holiday falls on this employee's day off
