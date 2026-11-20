@@ -4,6 +4,7 @@ require_once '../auth/db.php';
 require_once __DIR__ . '/../functions/hours.php';
 require_once __DIR__ . '/../functions/pay_rules.php'; // punchRoundingActive()
 require_once __DIR__ . '/../functions/time_off_hours.php';
+require_once __DIR__ . '/../functions/holiday_pay.php'; // applyReportOvertime()
 
 if (!isset($_SESSION['admin'])) {
     header("Location: login.php");
@@ -78,35 +79,24 @@ while ($row = $result->fetch_assoc()) {
     $rows[] = $row;
 }
 
-// Reorganize for employee + week
-$employeeWeeklyHours = [];
+// Paid hours per employee per day, then overtime by the same rules as Payroll Totals
+// (weekly and daily limits, holiday hours toward the week when that's on)
+$byEmployee = [];
 foreach ($rows as $row) {
-    $empID = $row['EmployeeID'];
-    $weekStart = payPeriodStart($row['Date']); // work week (Admin > Pay Rules)
-
-    if (!isset($employeeWeeklyHours[$empID])) {
-        $employeeWeeklyHours[$empID] = [];
-    }
-    if (!isset($employeeWeeklyHours[$empID][$weekStart])) {
-        $employeeWeeklyHours[$empID][$weekStart] = 0;
-    }
-
-    $employeeWeeklyHours[$empID][$weekStart] += $row['DecimalHours'];
+    $eid = (int) $row['EmployeeID'];
+    $byEmployee[$eid]['days'][$row['Date']] = ($byEmployee[$eid]['days'][$row['Date']] ?? 0) + $row['DecimalHours'];
 }
+applyReportOvertime($conn, $byEmployee, $startDate, $endDate);
 
-// Accurate total regular/overtime (grand totals) + per-employee clocked/OT
 $totalRegular = 0;
 $totalOvertime = 0;
 $perEmpClocked = [];
 $perEmpOT = [];
-
-foreach ($employeeWeeklyHours as $empID2 => $weeks) {
-    foreach ($weeks as $hours) {
-        $totalRegular  += min($hours, overtimeWeeklyHours());
-        $totalOvertime += max($hours - overtimeWeeklyHours(), 0);
-        $perEmpClocked[$empID2] = ($perEmpClocked[$empID2] ?? 0) + $hours;
-        $perEmpOT[$empID2]      = ($perEmpOT[$empID2]      ?? 0) + max($hours - overtimeWeeklyHours(), 0);
-    }
+foreach ($byEmployee as $eid => $d) {
+    $perEmpClocked[$eid] = $d['totalHours'];
+    $perEmpOT[$eid]      = $d['totalOT'];
+    $totalRegular  += $d['totalHours'] - $d['totalOT'];
+    $totalOvertime += $d['totalOT'];
 }
 $totalHoursDecimal = $totalRegular + $totalOvertime;
 
@@ -252,11 +242,11 @@ require_once 'header.php';
                 <td><?= decimalToHM($totalHoursDecimal) ?></td>
             </tr>
             <tr class="summary-regular">
-                <td colspan="2">Regular Hours (≤ <?= overtimeWeeklyHours() ?>/week)</td>
+                <td colspan="2">Regular Hours</td>
                 <td><?= decimalToHM($totalRegular) ?></td>
             </tr>
             <tr class="summary-overtime">
-                <td colspan="2">Overtime Hours (> <?= overtimeWeeklyHours() ?>/week)</td>
+                <td colspan="2">Overtime Hours (<?= htmlspecialchars(overtimeRuleText($conn)) ?>)</td>
                 <td><?= decimalToHM($totalOvertime) ?></td>
             </tr>
         </table>

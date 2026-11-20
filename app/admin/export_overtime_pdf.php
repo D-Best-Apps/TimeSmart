@@ -16,6 +16,7 @@ require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('export_reports');
 require_once __DIR__ . '/../vendor/tecnickcom/tcpdf/tcpdf.php'; // Composer package tecnickcom/tcpdf
 require_once __DIR__ . '/../functions/hours.php';
+require_once __DIR__ . '/../functions/holiday_pay.php'; // applyReportOvertime()
 require_once __DIR__ . '/../functions/pay_rules.php'; // punchRoundingActive()
 
 $start = $_POST['start'] ?? '';
@@ -68,18 +69,11 @@ while ($row = $result->fetch_assoc()) {
         $byEmployee[$empId]['weeks'][$weekStart] = 0;
     }
     $byEmployee[$empId]['weeks'][$weekStart] += $hours;
+    $byEmployee[$empId]['days'][$row['Date']] = ($byEmployee[$empId]['days'][$row['Date']] ?? 0) + $hours;
 }
 
-foreach ($byEmployee as $empId => &$data) {
-    ksort($data['weeks']);
-    $data['totalHours'] = 0;
-    $data['totalOT'] = 0;
-    foreach ($data['weeks'] as $hours) {
-        $data['totalHours'] += $hours;
-        $data['totalOT'] += max(0, $hours - overtimeWeeklyHours());
-    }
-}
-unset($data);
+// Overtime by the same rules as Payroll Totals (daily limit, holiday hours when they count)
+applyReportOvertime($conn, $byEmployee, $start, $end);
 
 $grandTotalHours = 0;
 $grandTotalOT = 0;
@@ -112,7 +106,7 @@ if (empty($byEmployee)) {
         $html = '<h2 style="text-align:center; color:#0078D7;">Overtime Report</h2>';
         $html .= "<p><strong>Employee:</strong> {$name}<br>";
         $html .= "<strong>Date Range:</strong> {$rangeLabelHeader}<br>";
-        $html .= "<em>Work weeks run " . workWeekLabel() . ". Overtime = hours over " . overtimeWeeklyHours() . " per week. Hours counted only for days within the range.</em></p>";
+        $html .= "<em>Work weeks run " . workWeekLabel() . ". Overtime = " . htmlspecialchars(overtimeRuleText($conn)) . ". Hours counted only for days within the range.</em></p>";
 
         $html .= '<table border="1" cellpadding="5" cellspacing="0" style="width:100%; border-collapse: collapse;">
                     <thead style="background-color: #e6f0ff;">
@@ -125,7 +119,7 @@ if (empty($byEmployee)) {
                     <tbody>';
 
         foreach ($data['weeks'] as $weekStart => $hours) {
-            $ot = max(0, $hours - overtimeWeeklyHours());
+            $ot = ($data['weekOT'][$weekStart] ?? 0);
             $rowBg = $ot > 0 ? "style='background-color:#fff3cd;'" : '';
             $html .= "<tr $rowBg>
                         <td>" . date('m/d/Y', strtotime($weekStart)) . "</td>

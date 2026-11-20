@@ -251,3 +251,58 @@ function holidayOvertimeCredit(array $policy, array $employeeHolidayPay): array
     }
     return $credit;
 }
+
+/**
+ * holidayOvertimeCredit() for every employee with holiday pay in [$start, $end]:
+ * [employeeID => [week start => hours]], or [] when holiday pay or HolidayPayCountsOT
+ * is off. For reports that work out overtime for many employees at once.
+ */
+function holidayOvertimeCreditByEmployee(mysqli $conn, string $start, string $end): array
+{
+    $policy = holidayPayPolicy($conn);
+    if (empty($policy['enabled']) || empty($policy['countsOT'])) {
+        return [];
+    }
+    $out = [];
+    foreach (holidayPayByEmployee($conn, $start, $end) as $eid => $hp) {
+        $credit = holidayOvertimeCredit($policy, $hp);
+        if ($credit) {
+            $out[(int) $eid] = $credit;
+        }
+    }
+    return $out;
+}
+
+/**
+ * Overtime for report rows, by the same rules as Payroll Totals (weekly and daily
+ * limits from Pay Rules, holiday hours toward the weekly limit when that's on).
+ * Each $byEmployee entry needs 'days' (date => paid hours); this fills in 'weeks'
+ * (week start => hours), 'weekOT' (week start => overtime), 'totalHours', 'totalOT'.
+ */
+function applyReportOvertime(mysqli $conn, array &$byEmployee, string $start, string $end): void
+{
+    $credit = holidayOvertimeCreditByEmployee($conn, $start, $end);
+    foreach ($byEmployee as $eid => &$data) {
+        $w = weeklyOvertime($data['days'] ?? [], null, null, $credit[(int) $eid] ?? []);
+        $data['weeks']      = array_map(fn($x) => $x['hours'], $w['weeks']);
+        $data['weekOT']     = array_map(fn($x) => $x['ot'], $w['weeks']);
+        $data['totalHours'] = $w['totalHours'];
+        $data['totalOT']    = $w['totalOT'];
+    }
+    unset($data);
+}
+
+/** The overtime rule in words, for report footnotes: "hours over 40 per week or 10 in a day …". */
+function overtimeRuleText(mysqli $conn): string
+{
+    $fmt = fn(float $h) => rtrim(rtrim(number_format($h, 2, '.', ''), '0'), '.');
+    $text = 'hours over ' . $fmt(overtimeWeeklyHours()) . ' per week';
+    if (overtimeDailyHours() > 0) {
+        $text .= ' or ' . $fmt(overtimeDailyHours()) . ' in a day';
+    }
+    $p = holidayPayPolicy($conn);
+    if (!empty($p['enabled']) && !empty($p['countsOT'])) {
+        $text .= ', with holiday hours counting toward the week';
+    }
+    return $text;
+}

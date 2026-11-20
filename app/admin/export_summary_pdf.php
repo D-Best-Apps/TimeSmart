@@ -18,6 +18,7 @@ require_once __DIR__ . '/../vendor/tecnickcom/tcpdf/tcpdf.php'; // Composer pack
 require_once __DIR__ . '/../functions/hours.php';
 require_once __DIR__ . '/../functions/pay_rules.php'; // punchRoundingActive()
 require_once __DIR__ . '/../functions/time_off_hours.php';
+require_once __DIR__ . '/../functions/holiday_pay.php'; // applyReportOvertime()
 
 $start = $_POST['start'] ?? '';
 $end = $_POST['end'] ?? '';
@@ -74,23 +75,16 @@ while ($row = $result->fetch_assoc()) {
     $grouped[$eid]['rows'][] = $row;
 }
 
-// Per-employee weekly OT + clocked
-$perEmpClocked = [];
-$perEmpOT = [];
+// Per-employee clocked + overtime, by the same rules as Payroll Totals
+$otRows = [];
 foreach ($grouped as $eid => $data) {
-    $weekTotals = [];
     foreach ($data['rows'] as $r) {
-        $weekStart = payPeriodStart($r['Date']); // work week (Admin > Pay Rules)
-        $weekTotals[$weekStart] = ($weekTotals[$weekStart] ?? 0) + $r['RoundedHours'];
+        $otRows[$eid]['days'][$r['Date']] = ($otRows[$eid]['days'][$r['Date']] ?? 0) + $r['RoundedHours'];
     }
-    $clocked = 0; $ot = 0;
-    foreach ($weekTotals as $hrs) {
-        $clocked += $hrs;
-        $ot      += max(0, $hrs - overtimeWeeklyHours());
-    }
-    $perEmpClocked[$eid] = $clocked;
-    $perEmpOT[$eid]      = $ot;
 }
+applyReportOvertime($conn, $otRows, $start, $end);
+$perEmpClocked = array_map(fn($d) => $d['totalHours'], $otRows);
+$perEmpOT      = array_map(fn($d) => $d['totalOT'], $otRows);
 
 // Approved time-off in the period
 $timeOffTotals    = timeOffTotalsByEmployee($conn, $start, $end, !empty($emp) ? (int)$emp : null);

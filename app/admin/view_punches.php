@@ -271,6 +271,7 @@ unset($_SESSION['punch_save_notice']);
                 $interval = new DateInterval('P1D');
                 $range = new DatePeriod($start, $interval, $end->modify('+1 day'));
                 $weekTotal = 0.0;
+                $vpDaily = []; // date => paid hours, for overtime
 
                 $reasons = ['Forgot to punch','Shift change','System error','Time correction','Late arrival','Early departure','Manual update'];
 
@@ -300,6 +301,7 @@ unset($_SESSION['punch_save_notice']);
                             $lunchIn   = !empty($punch['LunchEnd'])    ? date('H:i', strtotime($punch['LunchEnd']))   : '';
                             $rowTotal  = (float) ($punch['TotalHours'] ?? 0);
                             $weekTotal += $rowTotal;
+                            $vpDaily[$date] = ($vpDaily[$date] ?? 0) + $rowTotal;
 
                             // Read-only display helper
                             $disp = function ($t) { return $t !== '' ? '<span class="vp-ro">' . htmlspecialchars(date('g:i a', strtotime($t))) . '</span>' : '<span class="vp-ro empty">—</span>'; };
@@ -413,7 +415,15 @@ unset($_SESSION['punch_save_notice']);
         <?php endif; ?>
         <div class="totals">
             <strong>Total Week:</strong> <span id="weekly-total"><?= number_format($weekTotal, 2) ?>h</span> &nbsp;|&nbsp;
-            <strong>Overtime:</strong> <span id="weekly-overtime"><?= number_format(max(0, $weekTotal - overtimeWeeklyHours()), 2) ?>h</span>
+            <?php
+            // Same overtime rules as Payroll Totals: weekly and daily limits, and holiday
+            // hours toward the week when that's on. The edit script's live figure uses the
+            // weekly limit less those holiday hours; daily overtime shows after saving.
+            $vpCredit  = holidayOvertimeCreditByEmployee($conn, date('Y-m-d', strtotime($from)), date('Y-m-d', strtotime($to)))[(int) $employeeID] ?? [];
+            $vpOT      = weeklyOvertime($vpDaily, null, null, $vpCredit);
+            $vpOTLimit = max(0.0, overtimeWeeklyHours() - array_sum($vpCredit));
+            ?>
+            <strong>Overtime:</strong> <span id="weekly-overtime" title="Overtime = <?= htmlspecialchars(overtimeRuleText($conn)) ?>"><?= number_format($vpOT['totalOT'], 2) ?>h</span>
             <?php
             // Time off / holiday hours: separate from the worked total (which the edit
             // script recalculates from the punch inputs only)
@@ -436,7 +446,7 @@ unset($_SESSION['punch_save_notice']);
 <script>
     // Tells the edit-mode "add punch" helper whether to render location cells
     window.VP_SHOW_LOCATIONS = <?= $showLocations ? 'true' : 'false' ?>;
-    window.VP_OT_WEEKLY_HOURS = <?= json_encode(overtimeWeeklyHours()) ?>;
+    window.VP_OT_WEEKLY_HOURS = <?= json_encode($vpOTLimit ?? overtimeWeeklyHours()) ?>;
 </script>
 <script src="https://cdn.jsdelivr.net/npm/litepicker/dist/bundle.js"></script>
 <?php if ($editMode): ?>
