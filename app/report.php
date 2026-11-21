@@ -2,6 +2,8 @@
 require_once __DIR__ . '/auth/db.php';
 require_once __DIR__ . '/vendor/autoload.php';
 require_once __DIR__ . '/functions/settings_helper.php';
+require_once __DIR__ . '/functions/csrf.php';
+csrf_token(); // starts the session before any output, so the form can carry the token
 date_default_timezone_set('America/Chicago');
 
 use PHPMailer\PHPMailer\PHPMailer;
@@ -28,7 +30,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $subjectIn = trim($_POST['subject'] ?? '');
     $messageIn = trim($_POST['message'] ?? '');
 
-    if ($name === '' || $messageIn === '') {
+    if (!csrf_valid()) {
+        $error = 'This page had been open too long, so nothing was sent. Please try again.';
+    } elseif ($name === '' || $messageIn === '') {
         $error = 'Please enter your name and a description of the issue.';
     } elseif ($fromEmail !== '' && !filter_var($fromEmail, FILTER_VALIDATE_EMAIL)) {
         $error = 'That email address doesn\'t look valid.';
@@ -118,6 +122,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <?php endif; ?>
 
       <form method="POST" class="report-form" style="display:flex; flex-direction:column; gap:1rem; margin-top:1rem;">
+        <?= csrf_field() ?>
         <label>Your Name *
           <input type="text" name="name" required value="<?= htmlspecialchars($name) ?>"
                  style="width:100%; padding:0.7rem; border:1px solid #ccc; border-radius:6px;">

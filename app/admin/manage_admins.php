@@ -96,7 +96,7 @@ require_once 'header.php';
                     <td style="white-space: nowrap;">
                         <div style="display: inline-flex; gap: 0.5rem; align-items: center;">
                             <a class="btn primary small" href="edit_admin.php?id=<?= (int) $u['ID'] ?>">Change Role</a>
-                            <form method="POST" style="margin:0;" onsubmit="return confirm('Demote <?= htmlspecialchars($u['FirstName'] . ' ' . $u['LastName'], ENT_QUOTES) ?> back to regular employee? (Their employee account stays.)');">
+                            <form method="POST" style="margin:0;" onsubmit="return confirm(<?= htmlspecialchars(json_encode('Demote ' . $u['FirstName'] . ' ' . $u['LastName'] . ' back to regular employee? (Their employee account stays.)'), ENT_QUOTES) ?>);">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="demote" value="<?= (int) $u['ID'] ?>">
                                 <button type="submit" class="btn danger small">Demote</button>

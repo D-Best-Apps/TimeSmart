@@ -59,7 +59,7 @@ function proceedWithAction(action) {
 function sendUserPunch(action, note, latitude, longitude, accuracy) {
     fetch('../functions/clock_action.php', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
         body: JSON.stringify({ EmployeeID: empID, action: action, note: note, latitude, longitude, accuracy })
     })
     .then(res => res.json())

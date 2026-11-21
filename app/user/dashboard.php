@@ -4,6 +4,7 @@ ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
 require_once 'header.php';
+require_once __DIR__ . '/../functions/csrf.php'; // token for the punch buttons
 $empID = $_SESSION['EmployeeID'] ?? null;
 $fullName = $_SESSION['Name'] ?? 'User';
 $nameParts = explode(' ', $fullName);
@@ -371,6 +372,6 @@ $timeOffHistory = $torStmt->get_result()->fetch_all(MYSQLI_ASSOC);
     <button id="popupClose">OK</button>
   </div>
 </div>
-<script>const empID = <?= (int)$empID ?>;</script>
+<script>const empID = <?= (int)$empID ?>; const csrfToken = <?= json_encode(csrf_token()) ?>;</script>
 <script src="../js/user_dashboard.js?v=2"></script>
 <?php require_once 'footer.php'; ?>

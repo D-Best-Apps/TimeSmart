@@ -11,6 +11,7 @@ require_once __DIR__ . '/../vendor/autoload.php'; // For PHPMailer
 require_once __DIR__ . '/settings_helper.php'; // Use the new helper for settings
 require_once __DIR__ . '/location_policy.php'; // is_mobile_ua(), ip_in_allowlist()
 require_once __DIR__ . '/pin_policy.php';      // looksLikePin()
+require_once __DIR__ . '/csrf.php';            // csrf_valid()
 date_default_timezone_set('America/Chicago');
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -684,6 +685,11 @@ if ($providedPassword !== '') {
     $sessionEmp = (int) ($_SESSION['EmployeeID'] ?? 0);
     if ($sessionEmp <= 0) {
         send_json_response(false, "🔒 Please verify your password to clock in/out.", 401);
+    }
+    // Only this path trusts the sign-in cookie, so only it needs the page's token: the
+    // kiosk, quick clock and board password punches carry their own secret each time.
+    if (!csrf_valid()) {
+        send_json_response(false, "This page had been open too long. Reload it and try again.", 403);
     }
     $empID = $sessionEmp; // a logged-in user can only punch themselves
 }
