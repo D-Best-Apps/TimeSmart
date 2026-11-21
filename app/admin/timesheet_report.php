@@ -6,6 +6,7 @@
 
 require_once '../auth/db.php'; // before hours.php is used: the week start comes from settings
 require_once __DIR__ . '/../functions/hours.php';
+require_once __DIR__ . '/../functions/timesheet_report_lines.php'; // time off + holiday lines
 
 // Default to the current work week
 $defaultStart = payPeriodStart(date('Y-m-d'));
@@ -75,7 +76,17 @@ while ($row = $result->fetch_assoc()) {
     $rows[] = $row;
     $totalHours += ($row['TotalHours'] ?? 0);
 }
+// Approved time off and holiday hours, listed between the punches (as in the exports)
+$extras = timesheetReportExtraLines($conn, $startDate, $endDate, $employeeID !== '' ? (int) $employeeID : null);
+$items  = timesheetReportMerge($rows, $extras['lines']);
+$xTotals = $extras['totals'];
 ?>
+<style>
+    tr.ts-extra td { color: #222; }
+    tr.ts-extra .ts-note { color: #555; font-size: .85em; margin-left: .4rem; }
+    <?php foreach (TIMESHEET_REPORT_LINE_COLORS as $k => $c): ?>tr.ts-extra-<?= strtolower($k) ?> td { background: #<?= $c ?>; }
+    <?php endforeach; ?>
+</style>
 
         <form method="GET" class="summary-filter">
             <div class="row">
@@ -122,8 +133,17 @@ while ($row = $result->fetch_assoc()) {
                 </tr>
             </thead>
             <tbody>
-                <?php if (count($rows) > 0): ?>
-                    <?php foreach ($rows as $row): ?>
+                <?php if (count($items) > 0): ?>
+                    <?php foreach ($items as $item):
+                        if (isset($item['extra'])): $x = $item['extra']; ?>
+                        <tr class="ts-extra ts-extra-<?= strtolower($x['kind']) ?>">
+                            <td><?= htmlspecialchars(date('m/d/Y', strtotime($x['Date']))) ?></td>
+                            <td><?= htmlspecialchars($x['FirstName'] . ' ' . $x['LastName']) ?></td>
+                            <td colspan="4"><?= htmlspecialchars($x['label']) ?><?php if ($x['note'] !== ''): ?><span class="ts-note"><?= htmlspecialchars($x['note']) ?></span><?php endif; ?></td>
+                            <td><?= $x['hours'] !== null ? number_format($x['hours'], 2) : '—' ?></td>
+                        </tr>
+                        <?php continue; endif;
+                        $row = $item['punch']; ?>
                         <tr>
                             <td><?= htmlspecialchars(date('m/d/Y', strtotime($row['Date']))) ?></td>
                             <td><?= htmlspecialchars($row['FirstName'] . ' ' . $row['LastName']) ?></td>
@@ -135,14 +155,23 @@ while ($row = $result->fetch_assoc()) {
                         </tr>
                     <?php endforeach; ?>
                 <?php else: ?>
-                    <tr><td colspan="7">No time punches found for the selected filters.</td></tr>
+                    <tr><td colspan="7">No time punches or time off found for the selected filters.</td></tr>
                 <?php endif; ?>
             </tbody>
             <tfoot>
                 <tr class="summary-total">
-                    <td colspan="6"><strong>Total Hours</strong></td>
+                    <td colspan="6"><strong><?= array_sum($xTotals) > 0 ? 'Worked Hours' : 'Total Hours' ?></strong></td>
                     <td><strong><?= number_format($totalHours, 2) ?></strong></td>
                 </tr>
+                <?php if (array_sum($xTotals) > 0): ?>
+                <?php foreach (['PTO' => 'PTO', 'Sick' => 'Sick', 'Holiday' => 'Holiday'] as $k => $lbl): if ($xTotals[$k] <= 0) continue; ?>
+                <tr class="summary-total"><td colspan="6"><?= $lbl ?></td><td><?= number_format($xTotals[$k], 2) ?></td></tr>
+                <?php endforeach; ?>
+                <tr class="summary-total">
+                    <td colspan="6"><strong>Total Paid Hours</strong></td>
+                    <td><strong><?= number_format($totalHours + array_sum($xTotals), 2) ?></strong></td>
+                </tr>
+                <?php endif; ?>
             </tfoot>
         </table>
 

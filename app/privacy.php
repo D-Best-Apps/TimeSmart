@@ -57,6 +57,5 @@ date_default_timezone_set('America/Chicago');
   </p>
 </footer>
 
-<script src="/js/script.js"></script>
 </body>
 </html>

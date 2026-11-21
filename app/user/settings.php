@@ -196,5 +196,4 @@ $logs = $logStmt->get_result();
                 <?php endwhile; ?>
             </div>
         </div>
-<script src="../js/script.js"></script>
 <?php require_once 'footer.php'; ?>

@@ -500,6 +500,5 @@ document.addEventListener("click", (e) => {
   if (!nameField.contains(e.target)) clearSuggestions();
 });
 </script>
-<script src="../js/script.js"></script>
 </body>
 </html>

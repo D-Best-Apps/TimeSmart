@@ -156,6 +156,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   </p>
 </footer>
 
-<script src="js/script.js"></script>
 </body>
 </html>

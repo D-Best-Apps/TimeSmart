@@ -7,6 +7,7 @@ session_start();
 require_once '../auth/db.php';
 require_once __DIR__ . '/../vendor/tecnickcom/tcpdf/tcpdf.php'; // Composer package tecnickcom/tcpdf
 require_once __DIR__ . '/../functions/check_permission.php';
+require_once __DIR__ . '/../functions/timesheet_report_lines.php'; // time off + holiday lines
 
 // Check admin authentication
 if (!isset($_SESSION['admin'])) {
@@ -59,6 +60,10 @@ while ($row = $result->fetch_assoc()) {
     $rows[] = $row;
     $totalHours += ($row['TotalHours'] ?? 0);
 }
+// Approved time off and holiday hours, listed between the punches (as on the report page)
+$extras  = timesheetReportExtraLines($conn, $startDate, $endDate, !empty($employeeID) ? (int) $employeeID : null);
+$items   = timesheetReportMerge($rows, $extras['lines']);
+$xTotals = $extras['totals'];
 
 // Helper function for time formatting
 function formatTime($time) {
@@ -92,7 +97,22 @@ $html .= '<table border="1" cellpadding="5" cellspacing="0" style="width: 100%; 
             </thead>
             <tbody>';
 
-foreach ($rows as $r) {
+foreach ($items as $item) {
+    if (isset($item['extra'])) {
+        // Time off / holiday line: what it is across the time columns, its hours in Total Hours
+        $x = $item['extra'];
+        $bg = TIMESHEET_REPORT_LINE_COLORS[$x['kind']] ?? 'FFFFFF';
+        $plain = fn($t) => htmlspecialchars(strtr($t, ['—' => '-', '–' => '-'])); // core PDF font: no long dashes
+        $text = $plain($x['label']) . ($x['note'] !== '' ? ' <i>- ' . $plain($x['note']) . '</i>' : '');
+        $html .= '<tr style="background-color:#' . $bg . ';">
+                    <td>' . date("m/d/Y", strtotime($x['Date'])) . '</td>
+                    <td>' . htmlspecialchars($x['FirstName'] . ' ' . $x['LastName']) . '</td>
+                    <td colspan="4">' . $text . '</td>
+                    <td style="text-align:right;">' . ($x['hours'] !== null ? number_format($x['hours'], 2) : '--') . '</td>
+                  </tr>';
+        continue;
+    }
+    $r = $item['punch'];
     $date = date("m/d/Y", strtotime($r['Date']));
     $name = htmlspecialchars($r['FirstName'] . ' ' . $r['LastName']);
     $clockIn = formatTime($r['TimeIN']);
@@ -108,14 +128,24 @@ foreach ($rows as $r) {
                 <td>$lunchStart</td>
                 <td>$lunchEnd</td>
                 <td>$clockOut</td>
-                <td style='text-align:right;'>$hours</td>
+                <td style=\"text-align:right;\">$hours</td>
               </tr>";
 }
 
-$html .= "<tr style='font-weight:bold; background-color:#f1f1f1;'>
-            <td colspan='6'><b>Total Hours</b></td>
-            <td style='text-align:right;'><b>" . number_format($totalHours, 2) . "</b></td>
-          </tr>";
+$hasExtras = array_sum($xTotals) > 0;
+// Double-quoted attributes: TCPDF ignores colspan='6'
+$totalRow = fn(string $label, float $h, bool $bold) => '<tr style="background-color:#f1f1f1;">'
+    . '<td colspan="6">' . ($bold ? "<b>$label</b>" : $label) . '</td>'
+    . '<td style="text-align:right;">' . ($bold ? '<b>' . number_format($h, 2) . '</b>' : number_format($h, 2)) . '</td></tr>';
+$html .= $totalRow($hasExtras ? 'Worked Hours' : 'Total Hours', (float) $totalHours, true);
+if ($hasExtras) {
+    foreach (['PTO', 'Sick', 'Holiday'] as $k) {
+        if ($xTotals[$k] > 0) {
+            $html .= $totalRow($k, $xTotals[$k], false);
+        }
+    }
+    $html .= $totalRow('Total Paid Hours', $totalHours + array_sum($xTotals), true);
+}
 
 $html .= '</tbody></table>';
 
