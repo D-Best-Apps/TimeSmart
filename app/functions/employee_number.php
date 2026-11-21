@@ -12,16 +12,21 @@
  */
 function employeeExportNumbers(mysqli $conn): array
 {
+    // Archiving moves the PIN to ArchivedPIN; check that one too.
     try {
-        $res = $conn->query("SELECT ID, EmployeeNumber, PIN FROM users");
+        $res = $conn->query("SELECT ID, EmployeeNumber, PIN, ArchivedPIN FROM users");
     } catch (mysqli_sql_exception $e) {
-        return [];
+        try {
+            $res = $conn->query("SELECT ID, EmployeeNumber, PIN, NULL AS ArchivedPIN FROM users");
+        } catch (mysqli_sql_exception $e) {
+            return [];
+        }
     }
     $out = [];
     while ($u = $res->fetch_assoc()) {
-        $num = trim((string) ($u['EmployeeNumber'] ?? ''));
-        $pin = trim((string) ($u['PIN'] ?? ''));
-        $out[(int) $u['ID']] = ($num !== '' && $num !== $pin) ? $num : '';
+        $num  = trim((string) ($u['EmployeeNumber'] ?? ''));
+        $pins = [trim((string) ($u['PIN'] ?? '')), trim((string) ($u['ArchivedPIN'] ?? ''))];
+        $out[(int) $u['ID']] = ($num !== '' && !in_array($num, $pins, true)) ? $num : '';
     }
     return $out;
 }
