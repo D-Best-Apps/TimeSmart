@@ -2,6 +2,7 @@
 session_start();
 require_once '../auth/db.php';
 require_once __DIR__ . '/../functions/hours.php';
+require_once __DIR__ . '/../functions/holiday_pay.php'; // applyReportOvertime()
 require_once __DIR__ . '/../functions/pay_rules.php'; // punchRoundingActive()
 
 if (!isset($_SESSION['admin'])) {
@@ -76,20 +77,11 @@ while ($row = $result->fetch_assoc()) {
         $byEmployee[$empId]['weeks'][$weekStart] = 0;
     }
     $byEmployee[$empId]['weeks'][$weekStart] += $hours;
+    $byEmployee[$empId]['days'][$row['Date']] = ($byEmployee[$empId]['days'][$row['Date']] ?? 0) + $hours;
 }
 
-// Compute OT, period totals
-foreach ($byEmployee as $empId => &$data) {
-    ksort($data['weeks']);
-    $data['totalHours'] = 0;
-    $data['totalOT'] = 0;
-    foreach ($data['weeks'] as $week => $hours) {
-        $ot = max(0, $hours - overtimeWeeklyHours());
-        $data['totalHours'] += $hours;
-        $data['totalOT'] += $ot;
-    }
-}
-unset($data);
+// Overtime by the same rules as Payroll Totals (daily limit, holiday hours when they count)
+applyReportOvertime($conn, $byEmployee, $startDate, $endDate);
 
 $grandTotalHours = 0;
 $grandTotalOT = 0;
@@ -158,7 +150,7 @@ require_once 'header.php';
 
         <h2>Overtime Report (<?= date('m/d/Y', strtotime($startDate)) ?> to <?= date('m/d/Y', strtotime($endDate)) ?>)</h2>
         <p style="color:#555; font-size:0.9em; margin-top:-10px;">
-            Work weeks run <?= htmlspecialchars(workWeekLabel()) ?>. Overtime = hours over <?= overtimeWeeklyHours() ?> per week. Hours are counted only for days within the selected range.
+            Work weeks run <?= htmlspecialchars(workWeekLabel()) ?>. Overtime = <?= htmlspecialchars(overtimeRuleText($conn)) ?>. Hours are counted only for days within the selected range.
         </p>
         <table>
             <thead>
@@ -180,7 +172,7 @@ require_once 'header.php';
                     <?php endif; ?>
                     <?php $isFirstEmployee = false; ?>
                     <?php foreach ($data['weeks'] as $weekStart => $hours): ?>
-                        <?php $ot = max(0, $hours - overtimeWeeklyHours()); ?>
+                        <?php $ot = ($data['weekOT'][$weekStart] ?? 0); ?>
                         <tr<?= $ot > 0 ? ' style="background-color:#fff3cd;"' : '' ?>>
                             <td><?= htmlspecialchars($data['name']) ?></td>
                             <td><?= date('m/d/Y', strtotime($weekStart)) ?></td>

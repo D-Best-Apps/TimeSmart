@@ -18,6 +18,7 @@ require_once __DIR__ . '/../functions/hours.php';
 require_once __DIR__ . '/../functions/pay_rules.php';
 require_once __DIR__ . '/../functions/time_off_hours.php';
 require_once __DIR__ . '/../functions/holiday_pay.php';
+require_once __DIR__ . '/../functions/employee_number.php'; // employeeExportNumbers()
 require_once __DIR__ . '/../functions/payroll_totals.php'; // payrollTotals(), saved closes
 
 require_once __DIR__ . '/../functions/csrf.php';
@@ -96,8 +97,8 @@ if ($showHoliday) {
     $cols['holiday'] = 'Holiday';
 }
 $cols['total'] = 'Total';
-$headers = array_merge(['Employee'], array_values($cols));
-$lastCol = chr(ord('A') + count($cols)); // spreadsheet column of Total
+$headers = array_merge(['Employee', 'Employee #'], array_values($cols));
+$lastCol = chr(ord('A') + count($cols) + 1); // spreadsheet column of Total
 
 $format = $_GET['format'] ?? '';
 if ($format === 'csv') {
@@ -105,7 +106,8 @@ if ($format === 'csv') {
     header('Content-Disposition: attachment; filename="payroll_totals_' . $start . '_to_' . $end . '.csv"');
     $out = fopen('php://output', 'w');
     fputcsv($out, $headers);
-    $csvRow = fn(string $label, array $r) => array_merge([$label], array_map(fn($k) => number_format($r[$k], 2, '.', ''), array_keys($cols)));
+    $empNums = employeeExportNumbers($conn);
+    $csvRow = fn(string $label, array $r) => array_merge([$label, isset($r['id']) ? ($empNums[$r['id']] ?? '') : ''], array_map(fn($k) => number_format($r[$k], 2, '.', ''), array_keys($cols)));
     foreach ($rows as $r) {
         fputcsv($out, $csvRow($r['name'], $r));
     }
@@ -122,15 +124,18 @@ if ($format === 'xlsx') {
     $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(13);
     $sheet->fromArray($headers, null, 'A3');
     $sheet->getStyle("A3:{$lastCol}3")->getFont()->setBold(true);
-    $xlsRow = fn(string $label, array $r) => array_merge([$label], array_map(fn($k) => round($r[$k], 2), array_keys($cols)));
+    $empNums = employeeExportNumbers($conn);
+    $xlsRow = fn(string $label, array $r) => array_merge([$label, ''], array_map(fn($k) => round($r[$k], 2), array_keys($cols)));
     $n = 4;
     foreach ($rows as $r) {
         $sheet->fromArray($xlsRow($r['name'], $r), null, "A{$n}");
+        // as text, so a number like 00123 keeps its zeros
+        $sheet->setCellValueExplicit("B{$n}", $empNums[$r['id']] ?? '', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
         $n++;
     }
     $sheet->fromArray($xlsRow('TOTAL', $grand), null, "A{$n}");
     $sheet->getStyle("A{$n}:{$lastCol}{$n}")->getFont()->setBold(true);
-    $sheet->getStyle("B4:{$lastCol}{$n}")->getNumberFormat()->setFormatCode('0.00');
+    $sheet->getStyle("C4:{$lastCol}{$n}")->getNumberFormat()->setFormatCode('0.00');
     foreach (range('A', $lastCol) as $col) {
         $sheet->getColumnDimension($col)->setAutoSize(true);
     }
@@ -263,7 +268,7 @@ require_once 'header.php';
         </tfoot>
     </table>
     <p class="muted" style="color:var(--muted-text); font-size:.85rem; margin-top:.75rem;">
-        Decimal hours. Overtime is hours over <?= overtimeWeeklyHours() ?> per <?= htmlspecialchars(workWeekLabel()) ?> week.
+        Decimal hours. Overtime is <?= htmlspecialchars(overtimeRuleText($conn)) ?> (<?= htmlspecialchars(workWeekLabel()) ?> weeks).
         Worked hours are paid hours after shift rounding and lunch rules. PTO and sick are approved time off and don't count toward overtime.
         <?php if ($showHoliday): ?>Holiday is holiday pay (<a href="holidays.php">Settings → Holidays</a>); <?= holidayPayPolicy($conn)['countsOT'] ? 'it counts toward the overtime threshold, so worked hours in a holiday week reach overtime sooner' : "it doesn't count toward overtime either" ?>. Hover a holiday figure for the days.<?php endif; ?>
     </p>

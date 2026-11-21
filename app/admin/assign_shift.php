@@ -14,6 +14,7 @@ require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('manage_users');
 
 require_once __DIR__ . '/../functions/csrf.php';
+require_once __DIR__ . '/../functions/time_off_hours.php'; // freezeTimeOffShifts()
 require_csrf('manage_users.php');
 
 $return  = (string) ($_POST['return'] ?? '');
@@ -37,6 +38,7 @@ if ($shiftID > 0) {
 
 $updated = 0;
 if ($userIDs) {
+    freezeTimeOffShifts($conn, $userIDs); // past time off keeps the shift it was taken under
     $stmt = $conn->prepare("UPDATE users SET ShiftID = ? WHERE ID = ?");
     foreach ($userIDs as $uid) {
         $stmt->bind_param("ii", $shiftID, $uid);

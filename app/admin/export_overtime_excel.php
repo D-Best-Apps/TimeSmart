@@ -12,6 +12,7 @@ require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('export_reports');
 require_once '../vendor/autoload.php';
 require_once __DIR__ . '/../functions/hours.php';
+require_once __DIR__ . '/../functions/holiday_pay.php'; // applyReportOvertime()
 require_once __DIR__ . '/../functions/pay_rules.php'; // punchRoundingActive()
 
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -70,18 +71,11 @@ while ($row = $result->fetch_assoc()) {
         $byEmployee[$empId]['weeks'][$weekStart] = 0;
     }
     $byEmployee[$empId]['weeks'][$weekStart] += $hours;
+    $byEmployee[$empId]['days'][$row['Date']] = ($byEmployee[$empId]['days'][$row['Date']] ?? 0) + $hours;
 }
 
-foreach ($byEmployee as $empId => &$data) {
-    ksort($data['weeks']);
-    $data['totalHours'] = 0;
-    $data['totalOT'] = 0;
-    foreach ($data['weeks'] as $hours) {
-        $data['totalHours'] += $hours;
-        $data['totalOT'] += max(0, $hours - overtimeWeeklyHours());
-    }
-}
-unset($data);
+// Overtime by the same rules as Payroll Totals (daily limit, holiday hours when they count)
+applyReportOvertime($conn, $byEmployee, $startDate, $endDate);
 
 $grandTotalHours = 0;
 $grandTotalOT = 0;
@@ -108,7 +102,7 @@ foreach (range('A', 'F') as $col) {
 $rowNum = 2;
 foreach ($byEmployee as $data) {
     foreach ($data['weeks'] as $weekStart => $hours) {
-        $ot = max(0, $hours - overtimeWeeklyHours());
+        $ot = ($data['weekOT'][$weekStart] ?? 0);
         $sheet->setCellValue("A{$rowNum}", $data['name']);
         $sheet->setCellValue("B{$rowNum}", date('m/d/Y', strtotime($weekStart)));
         $sheet->setCellValue("C{$rowNum}", $hours);

@@ -349,7 +349,7 @@ Stored in `settings` table:
 | `OvertimeDailyHours` | decimal | Daily overtime threshold, 0 = off. Engine support only — not on the Pay Rules page yet | 0 |
 | `DefaultRoundIncrement` | int | Round every punch of employees **without** a shift to this many minutes, 0 = off | 0 |
 | `DefaultRoundMode` | `nearest` / `up` / `down` | Direction for `DefaultRoundIncrement` | nearest |
-| `TimeOffDayHoursMode` | `fixed` / `shift` | What a full day of time off pays: `fixed` = `TimeOffDayHours` on Mon–Fri; `shift` = the employee's shift hours less lunch, charged on the shift's days (a week off on a Mon–Thu 10-hour shift is 4 × 10). Employees without a shift use `TimeOffDayHours` | fixed |
+| `TimeOffDayHoursMode` | `fixed` / `shift` | What a full day of time off pays: `fixed` = `TimeOffDayHours` on Mon–Fri; `shift` = the employee's shift hours less lunch, charged on the shift's days (a week off on a Mon–Thu 10-hour shift is 4 × 10). Employees without a shift use `TimeOffDayHours`. Changing an employee's shift leaves their time off dated before today on the old shift (`time_off_requests.ShiftID`) | fixed |
 | `TimeOffDayHours` | decimal | Hours for a full day of time off (`fixed`, and employees without a shift) | 8 |
 | `TimeOffSickEnabled` | boolean | Offer the Sick category when requesting/recording time off. Off for companies without separate sick time; past Sick entries are unchanged | 1 |
 | `PayrollLockedThrough` | date | Punches dated on/before this day can't be edited, approved or recalculated. Set by **Close payroll** on Payroll Totals, which also saves that period's totals (`payroll_closes`, `payroll_close_lines`): Payroll Totals then shows the saved figures for the period and marks employees whose current figures differ (e.g. after a holiday change); `&live=1` shows the current ones. Moved back or cleared on Pay Rules | empty |
@@ -403,7 +403,8 @@ Labor Day, Thanksgiving and Christmas Day.
   Excel, CSV), the Home board's Hours Summary and timesheets. Holiday hours count in the total;
   by default not toward overtime, or with `HolidayPayCountsOT` = 1 toward the weekly threshold
   (a 10-hour holiday means overtime after 30 worked hours that week; the holiday hours stay in
-  the Holiday column). Working on a holiday is paid on top. Each holiday can be switched Paid/Unpaid.
+  the Holiday column; Payroll Totals, Home, the Overtime and Summary reports and their exports, and
+  the admin timesheets all use this rule, plus the daily limit). Working on a holiday is paid on top. Each holiday can be switched Paid/Unpaid.
   Settings: `HolidayPayEnabled`, `HolidayPayMode` (`shift` = the employee's scheduled shift hours
   less lunch, `fixed` = `HolidayPayFixedHours`, also used for employees without a shift; for a
   punched-lunch shift the lunch is the shift's **Expected lunch**, 0 = none),
@@ -442,7 +443,8 @@ be. Approved time off and company holidays are listed on the admin and employee 
 `users.EmployeeNumber` (Add/Edit User, optional, unique) is the company's own employee number.
 Once any employee has one, the Home board's Who's In panel shows an **Emp #** column, to every
 admin, in place of the badge column. It is not a clock-in credential; PINs and badge IDs are
-never shown on the board.
+never shown on the board. Payroll Totals Excel and CSV files carry it in an **Employee #** column, left
+blank for anyone whose number is the same as their PIN.
 
 ### Notification Recipients
 

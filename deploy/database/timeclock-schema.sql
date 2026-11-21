@@ -103,6 +103,7 @@ CREATE TABLE `time_off_requests` (
   `StartTime` time DEFAULT NULL,
   `EndTime` time DEFAULT NULL,
   `Hours` decimal(5,2) DEFAULT NULL,
+  `ShiftID` int(11) DEFAULT NULL,
   `Notes` varchar(500) DEFAULT NULL,
   `Reason` varchar(500) DEFAULT NULL,
   `Status` enum('Pending','Approved','Rejected','Withdrawn','Cancelled') NOT NULL DEFAULT 'Pending',

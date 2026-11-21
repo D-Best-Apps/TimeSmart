@@ -214,8 +214,10 @@ function timeOffHoursInPeriod(array $request, string $periodStart, string $perio
  */
 function fetchApprovedTimeOff(mysqli $conn, string $periodStart, string $periodEnd, ?int $employeeID = null): array
 {
+    // ShiftID: the shift the entry was frozen to (0 = none), else the employee's current one
     $sql = "
-        SELECT tor.*, u.FirstName, u.LastName, u.ShiftID
+        SELECT tor.*, u.FirstName, u.LastName,
+               CASE WHEN tor.ShiftID IS NULL THEN u.ShiftID WHEN tor.ShiftID = 0 THEN NULL ELSE tor.ShiftID END AS ShiftID
           FROM time_off_requests tor
           JOIN users u ON u.ID = tor.EmployeeID
          WHERE tor.Status = 'Approved'
@@ -230,10 +232,41 @@ function fetchApprovedTimeOff(mysqli $conn, string $periodStart, string $periodE
     }
     $sql .= " ORDER BY tor.EmployeeID, tor.StartDate";
 
-    $stmt = $conn->prepare($sql);
+    try {
+        $stmt = $conn->prepare($sql);
+    } catch (mysqli_sql_exception $e) {
+        // time_off_requests.ShiftID not migrated yet: the current shift, as before
+        $stmt = $conn->prepare(preg_replace('/CASE WHEN .*? END AS ShiftID/s', 'u.ShiftID', $sql));
+    }
     $stmt->bind_param($types, ...$params);
     $stmt->execute();
     return $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+}
+
+/**
+ * Call BEFORE changing employees' shifts (users.ShiftID): their time off dated before
+ * today that still follows the current shift is frozen to it, so the change only
+ * affects time off from today on. Without the column (not migrated) it does nothing.
+ * @param int[] $employeeIDs
+ */
+function freezeTimeOffShifts(mysqli $conn, array $employeeIDs): void
+{
+    $today = date('Y-m-d');
+    try {
+        $st = $conn->prepare("
+            UPDATE time_off_requests tor
+              JOIN users u ON u.ID = tor.EmployeeID
+               SET tor.ShiftID = COALESCE(u.ShiftID, 0)
+             WHERE tor.EmployeeID = ? AND tor.ShiftID IS NULL AND tor.StartDate < ?
+        ");
+        foreach ($employeeIDs as $eid) {
+            $eid = (int) $eid;
+            $st->bind_param("is", $eid, $today);
+            $st->execute();
+        }
+    } catch (mysqli_sql_exception $e) {
+        error_log('freezeTimeOffShifts: ' . $e->getMessage());
+    }
 }
 
 /**

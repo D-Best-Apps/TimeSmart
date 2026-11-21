@@ -15,6 +15,7 @@ if (!isset($_SESSION['admin'])) {
 require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('edit_timesheets');
 require_once __DIR__ . '/../functions/hours.php';
+require_once __DIR__ . '/../functions/holiday_pay.php'; // holidayOvertimeCreditByEmployee()
 
 // Get parameters from URL
 $employeeID = isset($_GET['emp']) ? $_GET['emp'] : null;
@@ -55,23 +56,18 @@ function punchPaidHours(array $punch): string {
     return number_format((float) ($punch['TotalHours'] ?? 0), 2);
 }
 
-        $totalWeeklyHours = 0;
-        $overtimeHours = 0;
-        $standardWorkWeek = overtimeWeeklyHours(); // Admin > Pay Rules
-
-        // Fetch all punches for the given date range to calculate total hours and overtime
-        $stmtTotal = $conn->prepare("SELECT TotalHours FROM timepunches WHERE EmployeeID = ? AND Date BETWEEN ? AND ?");
+        // Total and overtime for the range, by the same rules as Payroll Totals
+        // (weekly and daily limits, holiday hours toward the week when that's on)
+        $stmtTotal = $conn->prepare("SELECT Date, SUM(GREATEST(COALESCE(TotalHours, 0), 0)) AS Hours FROM timepunches WHERE EmployeeID = ? AND Date BETWEEN ? AND ? GROUP BY Date");
         $stmtTotal->bind_param("iss", $employeeID, $from, $to);
         $stmtTotal->execute();
-        $resultTotal = $stmtTotal->get_result();
-
-        while ($punchTotal = $resultTotal->fetch_assoc()) {
-            $totalWeeklyHours += (float)($punchTotal['TotalHours'] ?? 0);
+        $tvDaily = [];
+        foreach ($stmtTotal->get_result()->fetch_all(MYSQLI_ASSOC) as $d) {
+            $tvDaily[$d['Date']] = (float) $d['Hours'];
         }
-
-        if ($totalWeeklyHours > $standardWorkWeek) {
-            $overtimeHours = $totalWeeklyHours - $standardWorkWeek;
-        }
+        $tvOT = weeklyOvertime($tvDaily, null, null, holidayOvertimeCreditByEmployee($conn, $from, $to)[(int) $employeeID] ?? []);
+        $totalWeeklyHours = $tvOT['totalHours'];
+        $overtimeHours    = $tvOT['totalOT'];
     ?>
 
     
