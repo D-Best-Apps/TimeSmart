@@ -112,14 +112,16 @@ function timeOffEmployeeShift(array $request): ?array
  *                included (the employee picked specific hours on specific days)
  *   shift        with 'shift' mode, the employee's shift: full days and hours-per-day
  *                requests are charged on its days instead of Mon-Fri
+ *   dayHours     a full day's hours for this employee (0 for a time window)
  * A part day entered as a number of hours (Hours, no times) is charged like a full day,
  * just for that many hours.
- * @return array{hoursPerDay:float,asGiven:bool,shift:?array}
+ * @return array{hoursPerDay:float,asGiven:bool,shift:?array,dayHours:float}
  */
 function timeOffDayPlan(array $request, ?float $defaultDayHours = null): array
 {
     $hasTime = !empty($request['StartTime']) && !empty($request['EndTime']);
     $shift = null;
+    $dayHours = 0.0;
     if ($hasTime) {
         // The window repeats each day; an end before the start (older entries, before
         // multi-day requests were checked) pays nothing rather than negative hours.
@@ -129,13 +131,13 @@ function timeOffDayPlan(array $request, ?float $defaultDayHours = null): array
         if ($defaultDayHours === null && $policy['mode'] === 'shift') {
             $shift = timeOffEmployeeShift($request);
         }
-        $dayHours = $defaultDayHours ?? ($shift && shiftScheduledHours($shift) > 0 ? shiftScheduledHours($shift) : $policy['hours']);
+        $dayHours = (float) ($defaultDayHours ?? ($shift && shiftScheduledHours($shift) > 0 ? shiftScheduledHours($shift) : $policy['hours']));
         $hoursPerDay = (float) ($request['Hours'] ?? 0) > 0 ? (float) $request['Hours'] : (float) $dayHours;
     }
     if (!timeOffIsPaid($request)) {
         $hoursPerDay = 0.0;
     }
-    return ['hoursPerDay' => $hoursPerDay, 'asGiven' => $hasTime, 'shift' => $shift];
+    return ['hoursPerDay' => $hoursPerDay, 'asGiven' => $hasTime, 'shift' => $shift, 'dayHours' => $dayHours];
 }
 
 /** Is $date charged under $plan (timeOffDayPlan())? */
@@ -148,6 +150,76 @@ function timeOffChargedDay(array $plan, string $date): bool
         return shiftRunsOn($plan['shift'], $date) && timeOffHolidayCharged($date);
     }
     return isTimeOffDay($date);
+}
+
+/**
+ * Hours a request pays on $date under $plan (timeOffDayPlan()): hoursPerDay on a charged
+ * day, otherwise 0, except on a paid holiday that pays less than the employee's full day
+ * (a 10-hour shift with 8 holiday hours): there a request covering that day pays the rest
+ * of the day, at most the hours asked for. Only with holiday pay on; a time window is
+ * always taken as given.
+ */
+function timeOffHoursOnDay(array $plan, array $request, string $date): float
+{
+    if (timeOffChargedDay($plan, $date)) {
+        return $plan['hoursPerDay'];
+    }
+    if ($plan['asGiven'] || $plan['hoursPerDay'] <= 0 || isCompanyHoliday($date) === null) {
+        return 0.0;
+    }
+    $works = $plan['shift'] ? shiftRunsOn($plan['shift'], $date) : (int) date('N', strtotime($date)) < 6;
+    if (!$works) {
+        return 0.0;
+    }
+    $holiday = timeOffHolidayHours((int) ($request['EmployeeID'] ?? 0), $date);
+    if ($holiday === null) {
+        return 0.0;
+    }
+    return round(max(0.0, min($plan['hoursPerDay'], $plan['dayHours'] - $holiday)), 2);
+}
+
+/**
+ * The holiday hours an employee is due for the paid holiday on $date: their own Holiday
+ * hours, else the setting (shift hours less lunch, or the fixed hours), or an admin's
+ * hand-set hours for that day. The before/after rule isn't applied: the rest of the day
+ * is the same either way. Null while holiday pay is off, or without a database.
+ */
+function timeOffHolidayHours(int $employeeId, string $date): ?float
+{
+    static $policy = null, $users = [], $adjusted = [];
+    $conn = ($GLOBALS['conn'] ?? null) instanceof mysqli ? $GLOBALS['conn'] : null;
+    if ($conn === null || $employeeId <= 0) {
+        return null;
+    }
+    require_once __DIR__ . '/holiday_pay.php';
+    $policy ??= holidayPayPolicy($conn);
+    if (!$policy['enabled']) {
+        return null;
+    }
+    $key = $employeeId . '|' . $date;
+    if (!array_key_exists($key, $adjusted)) {
+        $adjusted[$key] = holidayPayAdjustments($conn, $date, $date)[$employeeId][$date]['hours'] ?? null;
+    }
+    if ($adjusted[$key] !== null) {
+        return (float) $adjusted[$key];
+    }
+    if (!array_key_exists($employeeId, $users)) {
+        try {
+            $st = $conn->prepare("SELECT ID, ShiftID, HolidayHours FROM users WHERE ID = ?");
+        } catch (mysqli_sql_exception $e) {
+            $st = $conn->prepare("SELECT ID, ShiftID, NULL AS HolidayHours FROM users WHERE ID = ?");
+        }
+        $st->bind_param("i", $employeeId);
+        $st->execute();
+        $users[$employeeId] = $st->get_result()->fetch_assoc();
+        $st->close();
+    }
+    $u = $users[$employeeId];
+    if (!$u) {
+        return null;
+    }
+    $shift = $u['ShiftID'] !== null ? (listShifts($conn, true)[(int) $u['ShiftID']] ?? null) : null;
+    return holidayHoursFor($u, $shift, $policy);
 }
 
 /** A part day entered as hours, or a time window (not a full day)? */
@@ -178,7 +250,9 @@ function timeOffDescribe(array $request, bool $short = true): string
  * because the office is closed and no PTO is consumed. A Thu-to-the-following-Tue
  * request is 3 days of PTO, not 6.
  * Exception: with holiday pay on, an unpaid holiday is charged like a workday
- * (timeOffHolidayCharged()), so PTO can cover a closure day the company doesn't pay.
+ * (timeOffHolidayCharged()), so PTO can cover a closure day the company doesn't pay,
+ * and a paid holiday shorter than the employee's day is charged for the rest of the
+ * day (timeOffHoursOnDay()).
  *
  * Partial-day requests with times (StartTime + EndTime) count the time delta for every
  * day in the range as given, weekends included. Partial days entered as hours (Hours)
@@ -198,13 +272,11 @@ function timeOffHoursInPeriod(array $request, string $periodStart, string $perio
         return 0.0;
     }
     $plan = timeOffDayPlan($request, $defaultDayHours);
-    $days = 0;
+    $hours = 0.0;
     for ($d = new DateTime($reqStart), $fin = new DateTime($reqEnd); $d <= $fin; $d->modify('+1 day')) {
-        if (timeOffChargedDay($plan, $d->format('Y-m-d'))) {
-            $days++;
-        }
+        $hours += timeOffHoursOnDay($plan, $request, $d->format('Y-m-d'));
     }
-    return $days * $plan['hoursPerDay'];
+    return $hours;
 }
 
 /**
@@ -480,15 +552,18 @@ function expandTimeOffToDays(array $request, string $periodStart, string $period
     $d = new DateTime($reqStart);
     $end = new DateTime($reqEnd);
     while ($d <= $end) {
-        // Full days (and hours-per-day) only land on charged days; time windows are taken as given.
-        if (!timeOffChargedDay($plan, $d->format('Y-m-d'))) {
+        // Full days (and hours-per-day) only land on charged days, plus the rest of a short
+        // paid holiday; time windows are taken as given.
+        $date = $d->format('Y-m-d');
+        $dayHours = timeOffHoursOnDay($plan, $request, $date);
+        if (!timeOffChargedDay($plan, $date) && $dayHours <= 0) {
             $d->modify('+1 day');
             continue;
         }
         $rows[] = [
-            'Date'      => $d->format('Y-m-d'),
+            'Date'      => $date,
             'Category'  => $request['Category'],
-            'Hours'     => $plan['hoursPerDay'],
+            'Hours'     => $dayHours,
             'StartTime' => $hasTime ? $request['StartTime'] : null,
             'EndTime'   => $hasTime ? $request['EndTime']   : null,
             'PartHours' => !$hasTime && (float) ($request['Hours'] ?? 0) > 0 ? (float) $request['Hours'] : null,

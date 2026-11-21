@@ -399,6 +399,12 @@ Labor Day, Thanksgiving and Christmas Day.
 - On a holiday, full-day time off uses no PTO/Sick hours and the admin Home board doesn't flag
   no-shows or late arrivals. Exception: while holiday pay is on, a holiday switched to Unpaid is
   charged to full-day PTO like a workday, so employees can cover the closure day with PTO.
+  And when a paid holiday pays less than the employee's full day (a 10-hour shift with 8
+  holiday hours), a PTO/Sick request that covers the holiday pays the rest of the day (2 hours),
+  at most the hours asked for. The holiday hours used are the employee's own Holiday hours, the
+  setting, or an admin's hand-set hours for that day. Nothing is charged unless they ask for it.
+- An employee whose dates overlap an absence an admin recorded (excused or unexcused) is told to
+  ask an admin to change that absence to PTO, rather than being sent to withdraw their own request.
 - **Holiday pay** (same page, off by default) adds a Holiday column to Payroll Totals (screen,
   Excel, CSV), the Home board's Hours Summary and timesheets. Holiday hours count in the total;
   by default not toward overtime, or with `HolidayPayCountsOT` = 1 toward the weekly threshold
