@@ -8,6 +8,13 @@ if (!isset($_SESSION['admin'])) {
     exit('Forbidden');
 }
 
+// Lock/unlock and 2FA changes are user management: reports_only admins can't do them.
+require_once __DIR__ . '/../functions/check_permission.php';
+requirePermission('manage_users');
+
+require_once __DIR__ . '/../functions/csrf.php';
+require_csrf('manage_users.php');
+
 $id     = isset($_POST['id']) ? (int)$_POST['id'] : 0;
 $action = $_POST['action'] ?? '';
 

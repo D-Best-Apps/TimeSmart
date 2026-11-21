@@ -7,6 +7,13 @@ if (!isset($_SESSION['admin'])) {
     exit("Unauthorized");
 }
 
+// Regenerating backup codes (one user or every user) is user management.
+require_once __DIR__ . '/../functions/check_permission.php';
+requirePermission('manage_users');
+
+require_once __DIR__ . '/../functions/csrf.php';
+require_csrf('manage_users.php');
+
 function generateRecoveryCodes($count = 5) {
     $codes = [];
     for ($i = 0; $i < $count; $i++) {
