@@ -10,6 +10,9 @@ if (isset($_GET['status'])) {
         case 'submitted':
             $statusMessage = '<div class="alert alert-success">Your time-off request has been submitted for approval.</div>';
             break;
+        case 'overlap_absence':
+            $statusMessage = '<div class="alert alert-danger">An admin has already recorded an absence for some of these dates. To be paid for them, ask an admin to change that absence to PTO. Nothing was submitted.</div>';
+            break;
         case 'overlap':
             $statusMessage = '<div class="alert alert-danger">You already have a pending or approved request that overlaps these dates. Withdraw or wait for the existing request before resubmitting.</div>';
             break;

@@ -102,17 +102,22 @@ if ($hasStartTime && $hasEndTime) {
 }
 
 // 7. Overlap with existing Pending/Approved requests
+// An absence an admin recorded (excused or unexcused) gets its own message: the
+// employee can't change it, but an admin can turn it into PTO or Sick.
 $overlapStmt = $conn->prepare("
-    SELECT ID FROM time_off_requests
+    SELECT Category FROM time_off_requests
     WHERE EmployeeID = ?
       AND Status IN ('Pending','Approved')
       AND NOT (EndDate < ? OR StartDate > ?)
+    ORDER BY Category IN ('Unpaid','Unexcused') DESC
     LIMIT 1
 ");
 $overlapStmt->bind_param("iss", $sessionEmpID, $startDate, $endDate);
 $overlapStmt->execute();
-if ($overlapStmt->get_result()->num_rows > 0) {
-    header('Location: time_off.php?status=overlap');
+$overlap = $overlapStmt->get_result()->fetch_assoc();
+if ($overlap) {
+    $absence = in_array($overlap['Category'], TIME_OFF_UNPAID, true);
+    header('Location: time_off.php?status=' . ($absence ? 'overlap_absence' : 'overlap'));
     exit;
 }
 
