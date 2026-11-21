@@ -82,7 +82,7 @@ function vpTimeOffAndHolidays(mysqli $conn, int $empID, string $start, string $e
 
 date_default_timezone_set('America/Chicago');
 
-$employeeList = $conn->query("SELECT ID, FirstName, LastName FROM users ORDER BY LastName");
+$employeeList = $conn->query("SELECT ID, FirstName, CONCAT(LastName, IF(ArchivedAt IS NULL, '', ' (archived)')) AS LastName FROM users ORDER BY ArchivedAt IS NOT NULL, LastName, FirstName"); // archived marked, listed last
 
 $from = $_GET['from'] ?? payPeriodStart(date('Y-m-d')); // current work week
 $to = $_GET['to'] ?? payPeriodEnd(date('Y-m-d'));

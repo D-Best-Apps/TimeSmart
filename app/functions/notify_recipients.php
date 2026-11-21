@@ -32,6 +32,7 @@ function notificationRecipients(mysqli $conn, string $type): array {
     $sql = "SELECT Email FROM users
              WHERE `{$column}` = 1
                AND Role IN ('super_admin', 'reports_only')
+               AND ArchivedAt IS NULL
                AND Email IS NOT NULL AND Email <> ''";
     if ($res = $conn->query($sql)) {
         while ($row = $res->fetch_assoc()) {
@@ -71,7 +72,7 @@ function notificationAdminUsers(mysqli $conn): array {
     }
     $sql = "SELECT ID, FirstName, LastName, Email, Role, " . implode(', ', $cols) . "
               FROM users
-             WHERE Role IN ('super_admin', 'reports_only')
+             WHERE Role IN ('super_admin', 'reports_only') AND ArchivedAt IS NULL
              ORDER BY Role DESC, LastName, FirstName";
 
     $users = [];

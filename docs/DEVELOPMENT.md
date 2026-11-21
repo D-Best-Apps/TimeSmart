@@ -34,7 +34,9 @@ This file provides detailed code architecture and development patterns for devel
 6. **login_logs** - Security audit log with EmployeeID, IP, Timestamp
 7. **settings** - Key-value configuration (e.g., EnforceGPS flag)
 8. **Offices** - Office locations for multi-location support
-9. **user_archive** - Archive table for deleted/deactivated user records
+9. **user-archive** - No longer used: archived employees stay in `users` (see Archiving Employees).
+   Installs from before migration `2026_11_24_soft_archive_users` keep the old table; its rows were
+   copied into `users` as archived.
 
 See `deploy/database/timeclock-schema.sql` for complete table definitions.
 
@@ -184,6 +186,29 @@ $totalHours = round($totalSeconds / 3600, 2);
 2. Query `timepunches` with JOIN to `users`
 3. Apply rounding rules if specified
 4. Export as HTML, Excel (`phpoffice/phpspreadsheet`), or PDF (TCPDF)
+
+### Archiving Employees
+Archive (**Manage Users → Actions → Archive**, `admin/archive_user.php`) sets `users.ArchivedAt`
+and nothing else is deleted: punches, time off, holiday-pay adjustments, edit requests, punch
+history and the sign-in log all stay, so reports and payroll for dates the employee worked don't
+change. Helpers and notes: `app/functions/archived_users.php`.
+- **Can't sign in or punch:** login, 2FA, kiosk, quick clock and the public board's password punch
+  all require `ArchivedAt IS NULL`. The badge ID and PIN move to `ArchivedBadgeID`/`ArchivedPIN`
+  so the unique values can go to someone else. A session that was open when the employee was
+  archived ends on the next page (`endSessionIfArchived()`, called from the user/admin headers,
+  `requirePermission()` and the employee POST handlers).
+- **Left out of active lists:** Manage Users, Manage Admins, Badges, the public board, Who's In,
+  notification recipients, name autocomplete and the name-based cron scripts. New queries that
+  list *current* employees need `WHERE ArchivedAt IS NULL`.
+- **Kept in history:** report pickers list archived employees last, marked "(archived)". Home
+  and Attendance include them only up to the archive date (no no-shows after it); Missed Days skips
+  pay periods after it; holiday pay stops for holidays after it. Payroll Totals is unchanged.
+- **Unarchive** (`admin/unarchive_user.php`, from **View Archived Users**) clears `ArchivedAt` and
+  puts the badge ID and PIN back unless someone else has been given them meanwhile.
+- **Delete permanently** (`admin/permanently_delete_user.php`) is only offered for archived
+  employees. It lists what will go (punch count and dates, time off, any punches in closed payroll)
+  and needs the employee's name typed; it deletes every record of theirs. Totals saved when
+  payroll was closed (`payroll_close_lines`) are kept.
 
 ---
 

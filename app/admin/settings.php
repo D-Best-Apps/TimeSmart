@@ -201,7 +201,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Notification opt-ins: one checkbox per admin, per notification type.
     // Absent checkbox = opted out, so every eligible admin is rewritten each save.
     $eligibleIds = [];
-    if ($res = $conn->query("SELECT ID FROM users WHERE Role IN ('super_admin', 'reports_only')")) {
+    if ($res = $conn->query("SELECT ID FROM users WHERE Role IN ('super_admin', 'reports_only') AND ArchivedAt IS NULL")) {
         while ($row = $res->fetch_assoc()) {
             $eligibleIds[] = (int) $row['ID'];
         }

@@ -51,10 +51,14 @@ CREATE TABLE `users` (
   `ScheduledStartTime` time DEFAULT NULL,
   `ShiftID` int(11) DEFAULT NULL,
   `HolidayHours` decimal(5,2) DEFAULT NULL,
+  `ArchivedAt` datetime DEFAULT NULL,
+  `ArchivedBadgeID` varchar(50) DEFAULT NULL,
+  `ArchivedPIN` varchar(6) DEFAULT NULL,
   PRIMARY KEY (`ID`),
   UNIQUE KEY `BadgeID` (`BadgeID`),
   UNIQUE KEY `PIN` (`PIN`),
-  UNIQUE KEY `EmployeeNumber` (`EmployeeNumber`)
+  UNIQUE KEY `EmployeeNumber` (`EmployeeNumber`),
+  KEY `ArchivedAt` (`ArchivedAt`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE `admins` (
@@ -211,30 +215,6 @@ CREATE TABLE `Offices` (
   `OfficeName` varchar(255) NOT NULL,
   `AllowedIPs` text DEFAULT NULL,
   `DefaultShiftID` int(11) DEFAULT NULL,
-  PRIMARY KEY (`ID`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
-CREATE TABLE `user-archive` (
-  `ID` int(11) NOT NULL,
-  `LastName` varchar(255) NOT NULL,
-  `Email` varchar(255) DEFAULT NULL,
-  `FirstName` varchar(255) NOT NULL,
-  `Pass` varchar(255) DEFAULT NULL,
-  `BadgeID` varchar(50) DEFAULT NULL,
-  `PIN` varchar(6) DEFAULT NULL,
-  `ProfilePhoto` varchar(255) DEFAULT NULL,
-  `ClockStatus` varchar(255) DEFAULT NULL,
-  `Office` varchar(100) DEFAULT NULL,
-  `TwoFASecret` varchar(255) DEFAULT NULL,
-  `TwoFAEnabled` tinyint(1) DEFAULT 0,
-  `RecoveryCodeHash` varchar(255) DEFAULT NULL,
-  `AdminOverride2FA` tinyint(1) DEFAULT 1,
-  `JobTitle` varchar(100) DEFAULT NULL,
-  `PhoneNumber` varchar(20) DEFAULT NULL,
-  `ThemePref` varchar(10) DEFAULT 'light',
-  `TwoFARecoveryCode` text DEFAULT NULL,
-  `LockOut` TINYINT(1) NOT NULL DEFAULT 0,
-  `ArchivedAt` datetime NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`ID`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 

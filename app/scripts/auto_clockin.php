@@ -64,7 +64,7 @@ function autoClockInEmployee($conn) {
     $stmt = $conn->prepare("
         SELECT ID, FirstName, LastName, ClockStatus
         FROM users
-        WHERE FirstName = ? AND LastName = ?
+        WHERE FirstName = ? AND LastName = ? AND ArchivedAt IS NULL
         LIMIT 1
     ");
 

@@ -35,7 +35,7 @@ if ($punchRounding) {
 $separatePages = isset($_GET['separate_pages']) ? 1 : 0;
 
 // Fetch employees for dropdown
-$employeeList = $conn->query("SELECT ID, FirstName, LastName FROM users ORDER BY LastName");
+$employeeList = $conn->query("SELECT ID, FirstName, CONCAT(LastName, IF(ArchivedAt IS NULL, '', ' (archived)')) AS LastName FROM users ORDER BY ArchivedAt IS NOT NULL, LastName, FirstName"); // archived marked, listed last
 
 // Build SQL query
 $sql = "

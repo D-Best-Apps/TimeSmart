@@ -120,7 +120,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt = $conn->prepare("
                     SELECT ID, FirstName, LastName, Email, Pass, TwoFAEnabled, LockOut, Role
                     FROM users
-                    WHERE FirstName = ? AND LastName = ?
+                    WHERE FirstName = ? AND LastName = ? AND ArchivedAt IS NULL
                     LIMIT 1
                 ");
                 if ($stmt) {
@@ -144,7 +144,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt = $conn->prepare("
                         SELECT ID, FirstName, LastName, Email, Pass, TwoFAEnabled, LockOut, Role
                           FROM users
-                         WHERE FirstName LIKE ? AND LastName LIKE ?
+                         WHERE FirstName LIKE ? AND LastName LIKE ? AND ArchivedAt IS NULL
                          LIMIT 2
                     ");
                     if ($stmt) {

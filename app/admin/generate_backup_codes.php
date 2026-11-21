@@ -6,6 +6,8 @@ if (!isset($_SESSION['admin'])) {
     http_response_code(403);
     exit("Unauthorized");
 }
+require_once __DIR__ . '/../functions/archived_users.php';
+endSessionIfArchived($conn); // archived since signing in: sign out
 
 require_once __DIR__ . '/../functions/csrf.php';
 require_csrf(csrf_error_url());
@@ -32,7 +34,7 @@ if (isset($_POST['mode'])) {
     }
 
     if ($mode === 'all') {
-        $users = $conn->query("SELECT ID FROM users");
+        $users = $conn->query("SELECT ID FROM users WHERE ArchivedAt IS NULL");
         while ($user = $users->fetch_assoc()) {
             $codes = json_encode(generateRecoveryCodes());
             $stmt = $conn->prepare("UPDATE users SET TwoFARecoveryCode = ? WHERE ID = ?");

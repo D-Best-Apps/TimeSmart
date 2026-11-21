@@ -34,7 +34,7 @@ if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
     exit(1);
 }
 
-$admins = (int) $conn->query("SELECT COUNT(*) FROM users WHERE Role = 'super_admin'")->fetch_column();
+$admins = (int) $conn->query("SELECT COUNT(*) FROM users WHERE Role = 'super_admin' AND ArchivedAt IS NULL")->fetch_column();
 if ($admins > 0) {
     fwrite(STDERR, "✗ A super admin already exists; promote others on Manage Admins.\n");
     exit(1);

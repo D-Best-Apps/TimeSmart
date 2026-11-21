@@ -17,6 +17,8 @@ if (!isset($_SESSION['admin'])) {
     header("Location: login.php");
     exit;
 }
+require_once __DIR__ . '/../functions/archived_users.php';
+endSessionIfArchived($conn); // archived since signing in: sign out
 
 // Get pending approvals count for badge (real timesheet edits + time-off requests)
 require_once __DIR__ . '/../functions/pending_count.php';

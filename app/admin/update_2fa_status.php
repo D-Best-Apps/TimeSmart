@@ -7,6 +7,8 @@ if (!isset($_SESSION['admin'])) {
     http_response_code(403);
     exit('Forbidden');
 }
+require_once __DIR__ . '/../functions/archived_users.php';
+endSessionIfArchived($conn); // archived since signing in: sign out
 
 require_once __DIR__ . '/../functions/csrf.php';
 require_csrf(csrf_error_url());

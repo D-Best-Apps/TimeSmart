@@ -48,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $employees = $conn->query("
     SELECT ID, FirstName, LastName, Email
       FROM users
-     WHERE Role = 'employee'
+     WHERE Role = 'employee' AND ArchivedAt IS NULL
      ORDER BY LastName, FirstName
 ")->fetch_all(MYSQLI_ASSOC);
 

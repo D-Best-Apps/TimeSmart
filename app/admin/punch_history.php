@@ -178,7 +178,7 @@ function describeDeletedPunch(?string $json): string {
     return $bits ? htmlspecialchars(implode(', ', $bits)) : '<span class="ph-empty">empty punch</span>';
 }
 
-$employeeList = $conn->query("SELECT ID, FirstName, LastName FROM users ORDER BY LastName, FirstName");
+$employeeList = $conn->query("SELECT ID, FirstName, CONCAT(LastName, IF(ArchivedAt IS NULL, '', ' (archived)')) AS LastName FROM users ORDER BY ArchivedAt IS NOT NULL, LastName, FirstName"); // archived marked, listed last
 $editorList   = $conn->query("SELECT DISTINCT ChangedBy FROM punch_changelog WHERE ChangedBy IS NOT NULL AND ChangedBy <> '' ORDER BY ChangedBy");
 
 /** Preserve the current filters across links. */
