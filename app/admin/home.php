@@ -18,6 +18,7 @@ require_once __DIR__ . '/../functions/pay_rules.php';
 require_once __DIR__ . '/../functions/holidays.php';
 require_once __DIR__ . '/../functions/time_off_hours.php';
 require_once __DIR__ . '/../functions/holiday_pay.php';
+require_once __DIR__ . '/../functions/employee_number.php'; // employeeExportNumbers()
 requirePermission('view_dashboard');
 
 $canEdit = checkPermission('edit_timesheets');
@@ -88,7 +89,12 @@ $nameOf = fn(array $u): string => $u['LastName'] . ', ' . $u['FirstName'] . ($u[
 $stmt->close();
 $empIDs = array_keys($employees);
 // The company's own employee # (Edit User) replaces the badge column once anyone has one:
-// it identifies people without being something you can clock in with, so every admin sees it
+// it identifies people without being something you can clock in with, so every admin sees it.
+// A number that is also the person's PIN is shown blank, as in the exports.
+$empNumbers = employeeExportNumbers($conn);
+foreach ($employees as $id => $u) {
+    $employees[$id]['EmployeeNumber'] = $empNumbers[$id] ?? '';
+}
 $showEmpNumbers = (bool) array_filter(array_column($employees, 'EmployeeNumber'), fn($v) => $v !== null && $v !== '');
 if ($showEmpNumbers) {
     $showBadges = false;
