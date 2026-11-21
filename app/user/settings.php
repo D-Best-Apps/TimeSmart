@@ -3,11 +3,17 @@ require_once 'header.php';
 require_once __DIR__ . '/../functions/password_policy.php';
 require_once __DIR__ . '/../functions/profile_photo.php';
 require_once __DIR__ . '/../functions/pin_policy.php';
+require_once __DIR__ . '/../functions/csrf.php';
 
 $msg = "";
 $errors = [];
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+// header.php has already sent the page head, so a stale token is reported inline
+// rather than with require_csrf()'s redirect.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !csrf_valid()) {
+    error_log('CSRF rejection: ' . ($_SERVER['REQUEST_URI'] ?? '?') . ' from ' . ($_SERVER['REMOTE_ADDR'] ?? '?'));
+    $errors[] = "The page had been open too long, so nothing was saved. Re-enter your changes and save again.";
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $firstName = trim($_POST['FirstName']);
     $lastName = trim($_POST['LastName']);
     $email = trim($_POST['Email']);
@@ -114,6 +120,7 @@ $logs = $logStmt->get_result();
         </div>
 
         <form method="POST" enctype="multipart/form-data">
+        <?= csrf_field() ?>
         <div class="tab-content" id="profile">
                 <div><label>First Name</label><input type="text" name="FirstName" value="<?= htmlspecialchars($user['FirstName'] ?? '') ?>" required></div>
                 <div><label>Last Name</label><input type="text" name="LastName" value="<?= htmlspecialchars($user['LastName'] ?? '') ?>" required></div>

@@ -11,6 +11,7 @@ if (!isset($_SESSION['admin'])) {
 // Permission check
 require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('manage_users');
+require_once __DIR__ . '/../functions/csrf.php';
 
 $archived_users_result = $conn->query("SELECT ID, FirstName, LastName, Email, ArchivedAt FROM `user-archive` ORDER BY ArchivedAt DESC");
 $archived_users_data = [];
@@ -44,10 +45,12 @@ require_once 'header.php';
                 <td><?= htmlspecialchars($user['ArchivedAt']) ?></td>
                 <td>
                     <form action="unarchive_user.php" method="POST" style="display:inline;">
+                        <?= csrf_field() ?>
                         <input type="hidden" name="ID" value="<?= (int)$user['ID'] ?>">
                         <button type="submit" class="btn primary small">Unarchive</button>
                     </form>
                     <form action="permanently_delete_user.php" method="POST" style="display:inline;">
+                        <?= csrf_field() ?>
                         <input type="hidden" name="ID" value="<?= (int)$user['ID'] ?>">
                         <button type="submit" class="btn danger small" onclick="return confirm('Are you sure you want to permanently delete this user? This action cannot be undone.')">Delete Permanently</button>
                     </form>

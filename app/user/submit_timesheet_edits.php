@@ -14,6 +14,9 @@ if (!isset($_SESSION['EmployeeID'])) {
     exit;
 }
 
+require_once __DIR__ . '/../functions/csrf.php';
+require_csrf('timesheet.php?status=csrf');
+
 $sessionEmpID = $_SESSION['EmployeeID'];
 $postEmpID = $_POST['EmployeeID'] ?? null;
 $entries = $_POST['entries'] ?? [];

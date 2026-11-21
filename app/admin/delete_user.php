@@ -11,6 +11,8 @@ if (!isset($_SESSION['admin'])) {
 // Permission check
 require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('manage_users');
+require_once __DIR__ . '/../functions/csrf.php';
+require_csrf(csrf_error_url());
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ID'])) {
     $id = (int)$_POST['ID'];

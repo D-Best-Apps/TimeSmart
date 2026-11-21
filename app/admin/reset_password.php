@@ -27,6 +27,13 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
+require_once __DIR__ . '/../functions/csrf.php';
+if (!csrf_valid()) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'error' => 'This page had been open too long. Reload it and try again.']);
+    exit;
+}
+
 $id = (int) ($_POST['id'] ?? 0);
 if ($id === 0) {
     http_response_code(400);

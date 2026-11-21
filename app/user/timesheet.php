@@ -2,6 +2,7 @@
 require_once 'header.php';
 require_once __DIR__ . '/../functions/time_off_hours.php';
 require_once __DIR__ . '/../functions/holiday_pay.php'; // holiday hours (when holiday pay is on)
+require_once __DIR__ . '/../functions/csrf.php';
 
 // Display status messages
 $statusMessage = '';
@@ -12,6 +13,8 @@ if (isset($_GET['status'])) {
         $statusMessage = '<div class="alert alert-success">Your note was saved. (Notes don\'t change your hours, so they\'re saved right away — no approval needed.)</div>';
     } elseif ($_GET['status'] === 'nochange') {
         $statusMessage = '<div class="alert alert-info">No changes were submitted.</div>';
+    } elseif ($_GET['status'] === 'csrf') {
+        $statusMessage = '<div class="alert alert-danger">The page had been open too long, so nothing was sent. Re-enter your changes and submit again.</div>';
     }
 }
 if (!empty($_GET['locked'])) {
@@ -198,6 +201,7 @@ function tsFmtRange(string $s, string $e): string {
     </form>
 
     <form method="POST" action="submit_timesheet_edits.php" id="editForm">
+      <?= csrf_field() ?>
       <input type="hidden" name="EmployeeID" value="<?= $empID ?>">
 
       <div class="card">

@@ -76,7 +76,15 @@ session_set_cookie_params([
 ### CSRF Protection
 - Token: `bin2hex(random_bytes(32))` stored in `$_SESSION['csrf']`
 - Validation: `hash_equals($_SESSION['csrf'], $_POST['csrf'])`
-- Embedded in all POST forms
+- Helpers in `functions/csrf.php`:
+  - `<?= csrf_field() ?>` inside every form that changes data
+  - `require_csrf($redirect)` at the top of the handler, before any write. Pass the page
+    to send a rejected post back to (with a message), or `csrf_error_url()` for the shared
+    error page. GETs pass through, so a handler must only change data on POST.
+  - fetch/XHR callers send the token as an `X-CSRF-Token` header (see `js/manage_users.js`);
+    JSON endpoints check `csrf_valid()` and answer with a JSON error instead
+- Read-only POSTs (report exports, the shift "Try a punch" preview) carry no token
+- Login and 2FA pages keep their own copies of the helpers on the same session key
 
 ### Password Hashing
 - bcrypt with `password_hash($pass, PASSWORD_BCRYPT, ['cost' => 14])`
