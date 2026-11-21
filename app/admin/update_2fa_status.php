@@ -10,6 +10,10 @@ if (!isset($_SESSION['admin'])) {
 require_once __DIR__ . '/../functions/archived_users.php';
 endSessionIfArchived($conn); // archived since signing in: sign out
 
+// Lock/unlock and 2FA changes are user management: reports_only admins can't do them.
+require_once __DIR__ . '/../functions/check_permission.php';
+requirePermission('manage_users');
+
 require_once __DIR__ . '/../functions/csrf.php';
 require_csrf(csrf_error_url());
 

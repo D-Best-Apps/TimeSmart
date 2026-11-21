@@ -9,6 +9,10 @@ if (!isset($_SESSION['admin'])) {
 require_once __DIR__ . '/../functions/archived_users.php';
 endSessionIfArchived($conn); // archived since signing in: sign out
 
+// Regenerating backup codes (one user or every user) is user management.
+require_once __DIR__ . '/../functions/check_permission.php';
+requirePermission('manage_users');
+
 require_once __DIR__ . '/../functions/csrf.php';
 require_csrf(csrf_error_url());
 
