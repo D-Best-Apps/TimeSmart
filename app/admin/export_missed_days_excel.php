@@ -12,6 +12,7 @@ require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('export_reports');
 require_once '../vendor/autoload.php';
 require_once __DIR__ . '/../functions/hours.php';
+require_once __DIR__ . '/../functions/employee_number.php'; // EmployeeNumberColumn
 
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -87,6 +88,7 @@ foreach ($employeeListData as $emp) {
         $missedDays = max(0, 5 - $daysWorked);
         
         $reportData[] = [
+            'id' => (int) $empID,
             'employee' => $empName,
             'period_start' => $periodStart,
             'period_end' => $periodEnd,
@@ -99,8 +101,10 @@ foreach ($employeeListData as $emp) {
 
 // Calculate per-employee totals
 $employeeTotals = [];
+$idByName = [];
 foreach ($reportData as $row) {
     $empName = $row['employee'];
+    $idByName[$empName] = $row['id'];
     if (!isset($employeeTotals[$empName])) {
         $employeeTotals[$empName] = 0;
     }
@@ -112,6 +116,7 @@ ksort($employeeTotals);
 $spreadsheet = new Spreadsheet();
 $sheet = $spreadsheet->getActiveSheet();
 $sheet->setTitle('Missed Days Report');
+$empNoCol = new EmployeeNumberColumn($conn);
 
 $rowNum = 1;
 
@@ -127,6 +132,7 @@ $rowNum++;
 // Summary headers
 $summaryHeaders = ['Employee', 'Total Missed Days'];
 $sheet->fromArray($summaryHeaders, null, "A{$rowNum}");
+$empNoCol->header($sheet, $rowNum);
 $sheet->getStyle("A{$rowNum}:B{$rowNum}")->applyFromArray([
     'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '0078D7']],
     'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
@@ -137,6 +143,7 @@ $rowNum++;
 // Summary data
 foreach ($employeeTotals as $empName => $totalMissed) {
     $sheet->setCellValue("A{$rowNum}", $empName);
+    $empNoCol->row($sheet, $rowNum, $idByName[$empName]);
     $sheet->setCellValue("B{$rowNum}", $totalMissed);
     $rowNum++;
 }
@@ -156,6 +163,7 @@ $rowNum++;
 // Detail headers
 $headers = ['Employee', 'Pay Period Start', 'Pay Period End', 'Hours Worked', 'Days Worked', 'Missed Days'];
 $sheet->fromArray($headers, null, "A{$rowNum}");
+$empNoCol->header($sheet, $rowNum);
 $sheet->getStyle("A{$rowNum}:F{$rowNum}")->applyFromArray([
     'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '0078D7']],
     'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
@@ -166,6 +174,7 @@ $rowNum++;
 // Detail data rows
 foreach ($reportData as $row) {
     $sheet->setCellValue("A{$rowNum}", $row['employee']);
+    $empNoCol->row($sheet, $rowNum, $row['id']);
     $sheet->setCellValue("B{$rowNum}", date('m/d/Y', strtotime($row['period_start'])));
     $sheet->setCellValue("C{$rowNum}", date('m/d/Y', strtotime($row['period_end'])));
     $sheet->setCellValue("D{$rowNum}", number_format($row['hours_worked'], 2));
@@ -178,6 +187,8 @@ foreach ($reportData as $row) {
 foreach (range('A', 'F') as $col) {
     $sheet->getColumnDimension($col)->setAutoSize(true);
 }
+
+$empNoCol->apply('A');
 
 // Output Excel file
 $rangeFormatted = date('m-d-Y', strtotime($startDate)) . '_to_' . date('m-d-Y', strtotime($endDate));

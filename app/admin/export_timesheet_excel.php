@@ -7,6 +7,7 @@ session_start();
 require_once '../auth/db.php';
 require_once '../vendor/autoload.php';
 require_once __DIR__ . '/../functions/check_permission.php';
+require_once __DIR__ . '/../functions/employee_number.php'; // EmployeeNumberColumn
 
 // Check admin authentication
 if (!isset($_SESSION['admin'])) {
@@ -64,6 +65,8 @@ $sheet->setTitle('Timesheet Report');
 // Headers
 $headers = ['Date', 'Employee', 'Clock In', 'Lunch Start', 'Lunch End', 'Clock Out', 'Total Hours'];
 $sheet->fromArray($headers, null, 'A1');
+$empNoCol = new EmployeeNumberColumn($conn);
+$empNoCol->header($sheet, 1);
 
 // Style header row
 $sheet->getStyle('A1:G1')->applyFromArray([
@@ -89,6 +92,7 @@ $totalHours = 0;
 while ($row = $result->fetch_assoc()) {
     $sheet->setCellValue("A{$rowNum}", date('m/d/Y', strtotime($row['Date'])));
     $sheet->setCellValue("B{$rowNum}", $row['FirstName'] . ' ' . $row['LastName']);
+    $empNoCol->row($sheet, $rowNum, (int) $row['EmployeeID']);
     $sheet->setCellValue("C{$rowNum}", formatTime($row['TimeIN']));
     $sheet->setCellValue("D{$rowNum}", formatTime($row['LunchStart']));
     $sheet->setCellValue("E{$rowNum}", formatTime($row['LunchEnd']));
@@ -107,6 +111,8 @@ $sheet->getStyle("F{$rowNum}:G{$rowNum}")->getFont()->setBold(true);
 // === OUTPUT FILE ===
 $rangeFormatted = date('m-d', strtotime($startDate)) . '_' . date('m-d', strtotime($endDate));
 $filename = "Timesheet_Report_{$rangeFormatted}.xlsx";
+
+$empNoCol->apply('B');
 
 header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 header("Content-Disposition: attachment; filename=\"$filename\"");

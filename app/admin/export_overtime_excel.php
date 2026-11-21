@@ -13,6 +13,7 @@ requirePermission('export_reports');
 require_once '../vendor/autoload.php';
 require_once __DIR__ . '/../functions/hours.php';
 require_once __DIR__ . '/../functions/holiday_pay.php'; // applyReportOvertime()
+require_once __DIR__ . '/../functions/employee_number.php'; // EmployeeNumberColumn
 require_once __DIR__ . '/../functions/pay_rules.php'; // punchRoundingActive()
 
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -90,6 +91,8 @@ $sheet->setTitle('Overtime');
 
 $headers = ['Employee', 'Week (' . explode('–', workWeekLabel(true))[0] . ' start)', 'Total Hours', 'Total (H:MM)', 'Overtime', 'OT (H:MM)'];
 $sheet->fromArray($headers, null, 'A1');
+$empNoCol = new EmployeeNumberColumn($conn);
+$empNoCol->header($sheet, 1);
 $sheet->getStyle('A1:F1')->applyFromArray([
     'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '0078D7']],
     'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
@@ -100,10 +103,11 @@ foreach (range('A', 'F') as $col) {
 }
 
 $rowNum = 2;
-foreach ($byEmployee as $data) {
+foreach ($byEmployee as $empId => $data) {
     foreach ($data['weeks'] as $weekStart => $hours) {
         $ot = ($data['weekOT'][$weekStart] ?? 0);
         $sheet->setCellValue("A{$rowNum}", $data['name']);
+        $empNoCol->row($sheet, $rowNum, (int) $empId);
         $sheet->setCellValue("B{$rowNum}", date('m/d/Y', strtotime($weekStart)));
         $sheet->setCellValue("C{$rowNum}", $hours);
         $sheet->setCellValueExplicit("D{$rowNum}", decimalToHM($hours), DataType::TYPE_STRING);
@@ -117,6 +121,7 @@ foreach ($byEmployee as $data) {
         $rowNum++;
     }
     $sheet->setCellValue("A{$rowNum}", $data['name'] . ' — Period Total');
+    $empNoCol->row($sheet, $rowNum, (int) $empId);
     $sheet->setCellValue("C{$rowNum}", $data['totalHours']);
     $sheet->setCellValueExplicit("D{$rowNum}", decimalToHM($data['totalHours']), DataType::TYPE_STRING);
     $sheet->setCellValue("E{$rowNum}", $data['totalOT']);
@@ -142,6 +147,8 @@ if (!empty($byEmployee)) {
 
 $rangeLabel = date('m-d', strtotime($startDate)) . '_' . date('m-d', strtotime($endDate));
 $filename = "Overtime_{$rangeLabel}.xlsx";
+
+$empNoCol->apply('A');
 
 header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 header("Content-Disposition: attachment; filename=\"$filename\"");

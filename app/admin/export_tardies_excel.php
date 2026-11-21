@@ -12,6 +12,7 @@ require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('export_reports');
 require_once '../vendor/autoload.php';
 require_once __DIR__ . '/../functions/hours.php';
+require_once __DIR__ . '/../functions/employee_number.php'; // EmployeeNumberColumn
 
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -136,6 +137,7 @@ foreach ($employeePayPeriods as $empID => $empData) {
         $totalTardies = $period['tardies_under_5'] + $period['tardies_5_plus'];
         
         $reportData[] = [
+            'id' => (int) $empID,
             'employee' => $empData['name'],
             'scheduled_time' => $empData['scheduledTime'],
             'period_start' => $period['start'],
@@ -150,6 +152,7 @@ foreach ($employeePayPeriods as $empID => $empData) {
     }
     
     $employeeTotals[$empData['name']] = [
+        'id' => (int) $empID,
         'under_5' => $empTotalUnder5,
         '5_plus' => $empTotal5Plus,
         'total' => $empTotalUnder5 + $empTotal5Plus
@@ -164,6 +167,8 @@ $sheet->setTitle('Tardies Report');
 // Headers for detail section
 $headers = ['Employee', 'Scheduled Time', 'Pay Period Start', 'Pay Period End', 'Tardies <5min', 'Tardies ≥5min', 'Total Tardies'];
 $sheet->fromArray($headers, null, 'A1');
+$empNoCol = new EmployeeNumberColumn($conn);
+$empNoCol->header($sheet, 1);
 
 $sheet->getStyle('A1:G1')->applyFromArray([
     'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'FFC107']],
@@ -179,6 +184,7 @@ foreach (range('A', 'G') as $col) {
 $rowNum = 2;
 foreach ($reportData as $row) {
     $sheet->setCellValue("A{$rowNum}", $row['employee']);
+    $empNoCol->row($sheet, $rowNum, $row['id']);
     $sheet->setCellValue("B{$rowNum}", date('g:i A', strtotime($row['scheduled_time'])));
     $sheet->setCellValue("C{$rowNum}", date('m/d/Y', strtotime($row['period_start'])));
     $sheet->setCellValue("D{$rowNum}", date('m/d/Y', strtotime($row['period_end'])));
@@ -202,6 +208,7 @@ $rowNum++;
 
 $summaryHeaders = ['Employee', 'Total <5min', 'Total ≥5min', 'Total All'];
 $sheet->fromArray($summaryHeaders, null, "A{$rowNum}");
+$empNoCol->header($sheet, $rowNum);
 $sheet->getStyle("A{$rowNum}:D{$rowNum}")->applyFromArray([
     'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '0078D7']],
     'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
@@ -214,6 +221,7 @@ $grandTotal5Plus = 0;
 
 foreach ($employeeTotals as $empName => $totals) {
     $sheet->setCellValue("A{$rowNum}", $empName);
+    $empNoCol->row($sheet, $rowNum, $totals['id']);
     $sheet->setCellValue("B{$rowNum}", $totals['under_5']);
     $sheet->setCellValue("C{$rowNum}", $totals['5_plus']);
     $sheet->setCellValue("D{$rowNum}", $totals['total']);
@@ -229,6 +237,8 @@ $sheet->setCellValue("B{$rowNum}", $grandTotalUnder5);
 $sheet->setCellValue("C{$rowNum}", $grandTotal5Plus);
 $sheet->setCellValue("D{$rowNum}", $grandTotalUnder5 + $grandTotal5Plus);
 $sheet->getStyle("A{$rowNum}:D{$rowNum}")->getFont()->setBold(true);
+
+$empNoCol->apply('A');
 
 // Output Excel file
 $rangeFormatted = date('m-d-Y', strtotime($startDate)) . '_to_' . date('m-d-Y', strtotime($endDate));

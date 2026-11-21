@@ -12,6 +12,7 @@ require_once __DIR__ . '/../functions/check_permission.php';
 requirePermission('export_reports');
 require_once '../vendor/autoload.php';
 require_once __DIR__ . '/../functions/hours.php';
+require_once __DIR__ . '/../functions/employee_number.php'; // EmployeeNumberColumn
 require_once __DIR__ . '/../functions/pay_rules.php'; // punchRoundingActive()
 
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -64,6 +65,7 @@ $result = getPunches($conn, $startDate, $endDate, $employeeID);
 
 // === CREATE SPREADSHEET ===
 $spreadsheet = new Spreadsheet();
+$empNoCol = new EmployeeNumberColumn($conn);
 // Keep the default sheet for now, we'll handle it below
 
 $currentUser = '';
@@ -86,6 +88,7 @@ while ($row = $result->fetch_assoc()) {
         // Headers
         $headers = ['Employee', 'Date', 'Time In', 'Time Out', 'Lunch Start', 'Lunch End', 'Rounded Hours', 'Hours (H:MM)'];
         $sheet->fromArray($headers, null, 'A1');
+        $empNoCol->header($sheet, 1);
 
         $sheet->getStyle('A1:H1')->applyFromArray([
             'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '0078D7']],
@@ -106,6 +109,7 @@ while ($row = $result->fetch_assoc()) {
         $sheet->setTitle('Summary');
         $headers = ['Employee', 'Date', 'Time In', 'Time Out', 'Lunch Start', 'Lunch End', 'Rounded Hours'];
         $sheet->fromArray($headers, null, 'A1');
+        $empNoCol->header($sheet, 1);
         $sheet->getStyle('A1:G1')->applyFromArray([
             'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '0078D7']],
             'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
@@ -121,6 +125,7 @@ while ($row = $result->fetch_assoc()) {
     $totalHours += $roundedHours;
 
     $sheet->setCellValue("A{$rowNum}", $fullName);
+    $empNoCol->row($sheet, $rowNum, (int) $row['EmployeeID']);
     $sheet->setCellValue("B{$rowNum}", date('m/d/Y', strtotime($row['Date'])));
     $sheet->setCellValue("C{$rowNum}", $row['TimeIN']);
     $sheet->setCellValue("D{$rowNum}", $row['TimeOUT']);
@@ -143,6 +148,8 @@ if ($sheet) {
     $sheet->setCellValueExplicit("H{$rowNum}", decimalToHM($totalHours), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
     $sheet->getStyle("F{$rowNum}:H{$rowNum}")->getFont()->setBold(true);
 }
+
+$empNoCol->apply('A');
 
 // Set active sheet to first
 if ($spreadsheet->getSheetCount() > 0) {
