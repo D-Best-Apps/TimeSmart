@@ -153,14 +153,64 @@ function timeOffChargedDay(array $plan, string $date): bool
 }
 
 /**
+ * Hours an admin set by hand for single days of time-off entries (admin timesheet, Edit;
+ * table time_off_day_hours): [RequestID => [date => [hours, note, by, at]]].
+ * For PTO/Sick the hours are what the day pays (0 = nothing); for an absence, the hours
+ * missed (shown only). Loaded once per request; pass $reload after changing the table.
+ * [] before the migration, or without a database.
+ */
+function timeOffDayHours(bool $reload = false): array
+{
+    static $cache = null;
+    if ($reload) {
+        $cache = null;
+    }
+    if ($cache !== null) {
+        return $cache;
+    }
+    $conn = ($GLOBALS['conn'] ?? null) instanceof mysqli ? $GLOBALS['conn'] : null;
+    if ($conn === null) {
+        return []; // CLI tests without a database
+    }
+    $cache = [];
+    try {
+        $res = $conn->query("SELECT RequestID, Date, Hours, Note, AdjustedBy, AdjustedAt FROM time_off_day_hours");
+        foreach ($res->fetch_all(MYSQLI_ASSOC) as $r) {
+            $cache[(int) $r['RequestID']][$r['Date']] = [
+                'hours' => round((float) $r['Hours'], 2), 'note' => (string) ($r['Note'] ?? ''),
+                'by' => (string) ($r['AdjustedBy'] ?? ''), 'at' => (string) $r['AdjustedAt'],
+            ];
+        }
+    } catch (mysqli_sql_exception $e) {
+        // migration not applied yet
+    }
+    return $cache;
+}
+
+/** The hours set by hand for this entry on $date, or null. */
+function timeOffDayOverride(array $request, string $date): ?array
+{
+    $id = (int) ($request['ID'] ?? 0);
+    if ($id <= 0 || $date < ($request['StartDate'] ?? '') || $date > ($request['EndDate'] ?? '')) {
+        return null;
+    }
+    return timeOffDayHours()[$id][$date] ?? null;
+}
+
+/**
  * Hours a request pays on $date under $plan (timeOffDayPlan()): hoursPerDay on a charged
  * day, otherwise 0, except on a paid holiday that pays less than the employee's full day
  * (a 10-hour shift with 8 holiday hours): there a request covering that day pays the rest
  * of the day, at most the hours asked for. Only with holiday pay on; a time window is
  * always taken as given.
+ * Hours an admin set for that day (timeOffDayHours()) win over all of this, on any day
+ * of the entry; $byHand = false gives the hours by the rules alone.
  */
-function timeOffHoursOnDay(array $plan, array $request, string $date): float
+function timeOffHoursOnDay(array $plan, array $request, string $date, bool $byHand = true): float
 {
+    if ($byHand && ($o = timeOffDayOverride($request, $date)) !== null) {
+        return timeOffIsPaid($request) ? $o['hours'] : 0.0;
+    }
     if (timeOffChargedDay($plan, $date)) {
         return $plan['hoursPerDay'];
     }
@@ -555,10 +605,15 @@ function expandTimeOffToDays(array $request, string $periodStart, string $period
         // Full days (and hours-per-day) only land on charged days, plus the rest of a short
         // paid holiday; time windows are taken as given.
         $date = $d->format('Y-m-d');
+        $byHand = timeOffDayOverride($request, $date);
         $dayHours = timeOffHoursOnDay($plan, $request, $date);
-        if (!timeOffChargedDay($plan, $date) && $dayHours <= 0) {
+        if ($byHand === null && !timeOffChargedDay($plan, $date) && $dayHours <= 0) {
             $d->modify('+1 day');
             continue;
+        }
+        $partHours = !$hasTime && (float) ($request['Hours'] ?? 0) > 0 ? (float) $request['Hours'] : null;
+        if ($byHand !== null && !timeOffIsPaid($request)) {
+            $partHours = $byHand['hours'] > 0 ? $byHand['hours'] : null; // an absence: hours missed
         }
         $rows[] = [
             'Date'      => $date,
@@ -566,8 +621,11 @@ function expandTimeOffToDays(array $request, string $periodStart, string $period
             'Hours'     => $dayHours,
             'StartTime' => $hasTime ? $request['StartTime'] : null,
             'EndTime'   => $hasTime ? $request['EndTime']   : null,
-            'PartHours' => !$hasTime && (float) ($request['Hours'] ?? 0) > 0 ? (float) $request['Hours'] : null,
+            'PartHours' => $partHours,
             'Notes'     => $request['Notes'] ?? null,
+            'RequestID' => (int) ($request['ID'] ?? 0),
+            'RuleHours' => timeOffHoursOnDay($plan, $request, $date, false), // without hours set by hand
+            'ByHand'    => $byHand,                                           // [hours, note, by, at] or null
         ];
         $d->modify('+1 day');
     }

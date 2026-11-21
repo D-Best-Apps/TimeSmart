@@ -276,6 +276,18 @@ CREATE TABLE `holiday_pay_adjustments` (
   CONSTRAINT `holiday_pay_adjustments_employee` FOREIGN KEY (`EmployeeID`) REFERENCES `users` (`ID`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+-- Time-off hours set by hand for one day of an entry (admin timesheet, Edit)
+CREATE TABLE `time_off_day_hours` (
+  `RequestID` int(11) NOT NULL,
+  `Date` date NOT NULL,
+  `Hours` decimal(5,2) NOT NULL,
+  `Note` varchar(255) DEFAULT NULL,
+  `AdjustedBy` varchar(100) DEFAULT NULL,
+  `AdjustedAt` datetime NOT NULL,
+  PRIMARY KEY (`RequestID`, `Date`),
+  CONSTRAINT `time_off_day_hours_request` FOREIGN KEY (`RequestID`) REFERENCES `time_off_requests` (`ID`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 
 -- Payroll totals saved when payroll is closed (Payroll Totals -> Close payroll)
 CREATE TABLE `payroll_closes` (

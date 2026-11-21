@@ -241,7 +241,7 @@ foreach ([$thisYear, $thisYear + 1] as $y) {
 }
 ksort($upcoming);
 
-// Holidays of the last 90 days, for setting holiday hours by hand after the fact
+// Holidays of the last 90 days, to check holiday hours after the fact
 $recent = [];
 $since = date('Y-m-d', strtotime('-90 days'));
 foreach ([$thisYear - 1, $thisYear] as $y) {
@@ -443,7 +443,7 @@ require_once 'header.php';
         <?php if ($shiftHours): ?>
         <p class="hol-muted">Shift hours now: <?= htmlspecialchars(implode(', ', $shiftHours)) ?>.</p>
         <?php endif; ?>
-        <p class="hol-muted">For one employee (a part-timer, say), set Holiday hours on their Edit User page. For one employee on one holiday (half a holiday, or none), use Hours by employee under the holiday lists below.</p>
+        <p class="hol-muted">For one employee (a part-timer, say), set Holiday hours on their Edit User page. For one employee on one holiday (half a holiday, or none), change the hours on the holiday line of their timesheet (Edit Timesheet). Hours by employee, under the holiday lists below, shows who gets what.</p>
 
         <div class="opt-title">Holiday on an employee's day off</div>
         <label class="check"><input type="radio" name="HolidayPayDayOff" value="none" <?= $payPolicy['dayOff'] === 'none' ? 'checked' : '' ?>> No holiday pay</label>

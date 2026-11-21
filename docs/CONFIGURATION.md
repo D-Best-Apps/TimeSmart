@@ -417,10 +417,12 @@ Labor Day, Thanksgiving and Christmas Day.
   `HolidayPayDayOff` (`none`/`pay` when the holiday is on the employee's day off) and
   `HolidayPayRequireAdjacent` (must work the scheduled day before and after; approved time off
   counts). An employee's own **Holiday hours** (`users.HolidayHours`, Edit User; e.g. 8 for a
-  part-timer) replace the mode for them. **Hours by employee** (links under the holiday lists,
-  `admin/holiday_pay_adjust.php`) sets one employee's hours for one holiday by hand — half a
-  holiday, a full one the rules skipped, or 0 — with a note (`holiday_pay_adjustments`); that
-  wins over every rule and shows as "set by hand" on Payroll Totals. Holidays before an employee's first punch are never paid, nor holidays with no punch
+  part-timer) replace the mode for them. One employee's hours for one holiday — half a
+  holiday, a full one the rules skipped, or 0 — are set on their timesheet (**Edit Timesheet**,
+  the hours box on the holiday line, with a note; `holiday_pay_adjustments`); that wins over
+  every rule and shows as "set by hand" on Payroll Totals. **Hours by employee** (links under
+  the holiday lists, `admin/holiday_pay_adjust.php`) lists who gets what for one holiday, each
+  name linking to that week's timesheet. Holidays before an employee's first punch are never paid, nor holidays with no punch
   or approved PTO/Sick in the 14 days before them (company holidays not counted), which leaves
   out people who have left but aren't archived yet and long unpaid leave. Holidays after the day
   an employee was archived aren't paid either. Logic:
@@ -444,6 +446,19 @@ doesn't count as a day worked.
 A part day can be entered as start/end times, or as a number of **hours missed**
 (`time_off_requests.Hours`, no times): those hours are charged on the same days a full day would
 be. Approved time off and company holidays are listed on the admin and employee timesheets.
+
+**Adjusting on the timesheet.** In **Edit Timesheet** (admins who can edit timesheets), each
+time-off and paid-holiday line has an hours box, saved with **Save All Changes**:
+- PTO/Sick: what that one day pays (0 = nothing); the rest of the entry is unchanged
+  (`time_off_day_hours`: entry, date, hours, note). An excused/unexcused absence: the hours
+  missed that day (shown only; absences pay nothing).
+- Holiday: that employee's holiday hours for that day (`holiday_pay_adjustments`).
+- Blank = back to the rules. **Entry ✎** opens the whole entry (dates, type, cancel).
+- **Add time off or an absence** (below the table, or **+ Time off / absence** on an empty
+  day) records one day, saved as approved; Hours blank = a full day. A day the entry wouldn't
+  normally charge (a weekend, off the shift's days) counts when it's picked here.
+Each change is logged in Change History and refused inside a closed payroll. Logic:
+`app/functions/timesheet_time_off.php`.
 
 ### Employee Number
 

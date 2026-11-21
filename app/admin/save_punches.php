@@ -21,6 +21,8 @@ date_default_timezone_set('America/Chicago');
 require_once __DIR__ . '/../functions/hours.php';
 // Shift rounding / auto-lunch: paid hours are recomputed per touched day after the saves.
 require_once __DIR__ . '/../functions/pay_rules.php';
+// Time-off / holiday hours set on the timesheet, and time off added on a day
+require_once __DIR__ . '/../functions/timesheet_time_off.php';
 
 // Validate input
 if (!isset($_POST['employeeID'], $_POST['from'], $_POST['to'])) {
@@ -271,6 +273,9 @@ try {
         }
     }
 
+    // Time off and holidays: hours set on single days, and time off added on one day
+    $newTimeOff = saveTimesheetTimeOff($conn, $employeeID, $from, $to, (string) $_SESSION['admin'], $skipped);
+
     // Re-apply the shift rules to every day that changed, and log the paid-hours result.
     $adminUser = $_SESSION['admin'];
     foreach (array_keys($touchedDates) as $date) {
@@ -287,6 +292,8 @@ try {
     $conn->commit();
     // Keep the In/Lunch/Out flag (Home, public board, kiosk) in step with the edited punches
     reconcileClockStatus($conn, (int) $employeeID);
+    // Time off added here goes on the shared Outlook calendar like any approved request
+    syncTimesheetTimeOff($conn, $newTimeOff);
 
     // Surface validation results to the admin on the next page.
     if (!empty($skipped) || !empty($flagged)) {
